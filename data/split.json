@@ -1,0 +1,10 @@
+{
+  "seed": 20261115,
+  "unit": "thread",
+  "fractions": {
+    "dev": 0.1,
+    "eval": 0.05,
+    "full": 0.85
+  },
+  "decided": "Aadhar, 15 Nov 2026"
+}

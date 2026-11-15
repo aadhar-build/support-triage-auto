@@ -3,3 +3,5 @@ data/raw/
 .env
 __pycache__/
 .venv/
+factory/jobs/
+.worktrees/

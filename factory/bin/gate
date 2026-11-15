@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""The gate: decides whether a job's branch works. No agent can overrule it.
+
+  gate <job-id>           check this round; move the job to review, build or recovery
+  gate <job-id> --final   re-check after syncing with base, before merge (no stage move)
+
+Checks, in order: protected paths untouched, every change inside the spec's
+## Files list, then the main checkout's factory/checks.sh run inside the
+worktree (so a branch can't edit the checks it is judged by).
+Writes round-<n>/checks.md (or final-checks.md) and prints one line ending PASS or FAIL.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import factory as F  # noqa: E402
+
+LOG_TAIL = 120
+
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        print(__doc__.strip())
+        return 2
+    final = "--final" in argv
+    job_id = argv[0]
+    try:
+        root = F.repo_root()
+        cfg = F.load_config(root)
+        d = F.job_dir(root, job_id)
+        job = F.read_job(d)
+        if not final and job["stage"] != "gate":
+            raise F.FactoryError(f"job is in {job['stage']}, not gate")
+        wt = root / job["worktree"]
+        changed = F.changed_files(wt, cfg["base_branch"])
+        problems: list[str] = []
+
+        prot = F.protected_violations(changed, cfg["protected_paths"])
+        if prot:
+            problems.append("Protected paths changed (only the owner may change these): " + ", ".join(prot))
+
+        spec = d / "spec.md"
+        allowed = F.allowed_files(spec.read_text()) if spec.exists() else []
+        if not allowed:
+            problems.append("spec.md has no ## Files list, so scope can't be checked")
+        else:
+            out = F.scope_violations(changed, allowed + cfg.get("always_in_scope", []))
+            if out:
+                problems.append("Changed files not listed in the spec's ## Files: " + ", ".join(out))
+
+        if not changed:
+            problems.append("The branch has no changes against the base")
+
+        checks = root / "factory" / "checks.sh"
+        res = subprocess.run(["bash", str(checks)], cwd=str(wt), capture_output=True, text=True,
+                             timeout=cfg.get("checks_timeout_s", 1200))
+        log = (res.stdout + res.stderr).splitlines()
+        if res.returncode != 0:
+            problems.append(f"checks.sh exited {res.returncode}")
+
+        verdict = "FAIL" if problems else "PASS"
+        lines = [f"GATE: {verdict}", "", "## Summary"]
+        lines += [f"- {p}" for p in problems] or ["- Protected paths untouched, scope respected, checks passed."]
+        lines += [f"- {len(changed)} file(s) changed", "", "## Changed files", ""]
+        lines += [f"- {c}" for c in changed] or ["- (none)"]
+        lines += ["", f"## checks.sh output (last {LOG_TAIL} lines)", "", "```"] + log[-LOG_TAIL:] + ["```", ""]
+
+        if final:
+            (d / "final-checks.md").write_text("\n".join(lines))
+            print(f"{job_id} final gate {verdict}")
+            return 0
+        rd = d / f"round-{job['round']}"
+        rd.mkdir(exist_ok=True)
+        (rd / "checks.md").write_text("\n".join(lines))
+        if verdict == "PASS":
+            F.move(job, "review", "gate passed")
+        else:
+            F.next_round_or_recovery(job, cfg["max_rounds"], "gate failed")
+        F.write_job(d, job)
+        print(f"{job_id} -> {job['stage']}: gate {verdict}")
+        return 0
+    except F.FactoryError as e:
+        print(f"REFUSED: {e}")
+        return 1
+    except subprocess.TimeoutExpired:
+        print(f"REFUSED: checks.sh timed out for {job_id}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

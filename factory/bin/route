@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""Route: risk and surfaces from intake.md -> reviewers and their models, from config.json.
+
+  route <job-id>
+
+Routing lives in one config file, so it changes without touching a prompt.
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import factory as F  # noqa: E402
+
+
+def reviewers_for(cfg: dict, risk: str | None, surfaces: list[str]) -> dict[str, str]:
+    routing = cfg["routing"]
+    if risk not in routing:
+        raise F.FactoryError(f"unknown risk {risk!r}")
+    out = dict(routing[risk])
+    for s in surfaces:
+        out.update(cfg.get("surface_reviewers", {}).get(s, {}))
+    return out
+
+
+def main(argv: list[str]) -> int:
+    if not argv:
+        print(__doc__.strip())
+        return 2
+    try:
+        root = F.repo_root()
+        cfg = F.load_config(root)
+        d = F.job_dir(root, argv[0])
+        job = F.read_job(d)
+        job["reviewers"] = reviewers_for(cfg, job["risk"], job["surfaces"])
+        F.write_job(d, job)
+        print(f"{job['id']} reviewers: " + ", ".join(f"{k}={v}" for k, v in job["reviewers"].items()))
+        return 0
+    except F.FactoryError as e:
+        print(f"REFUSED: {e}")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

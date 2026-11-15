@@ -1,0 +1,58 @@
+{
+  "concurrency": 1,
+  "max_rounds": 2,
+  "base_branch": "main",
+  "merge_method": "squash",
+  "checks_timeout_s": 1200,
+  "labels": {
+    "queue": "factory",
+    "needs_info": "factory:needs-info",
+    "needs_human": "factory:needs-human",
+    "escaped": "factory:escaped"
+  },
+  "models": {
+    "intake": "opus",
+    "spec-writer": "opus",
+    "builder": "opus",
+    "approver": "opus"
+  },
+  "routing": {
+    "low": {
+      "code": "haiku"
+    },
+    "medium": {
+      "code": "sonnet"
+    },
+    "high": {
+      "code": "sonnet"
+    }
+  },
+  "surface_reviewers": {
+    "security": {
+      "security": "opus"
+    },
+    "eval": {
+      "eval": "sonnet"
+    }
+  },
+  "protected_paths": [
+    "factory/",
+    ".claude/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "LICENSE",
+    ".github/",
+    "data/split.json",
+    "evals/thresholds.json",
+    "evals/gold/",
+    "policies/",
+    "scenarios/"
+  ],
+  "always_in_scope": [],
+  "automerge_allowlist": [
+    "docs/*",
+    "*.md",
+    "tests/*",
+    "scripts/download_data.sh"
+  ]
+}
