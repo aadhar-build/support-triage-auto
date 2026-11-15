@@ -83,7 +83,7 @@ class TestHeader(unittest.TestCase):
 class TestParsing(unittest.TestCase):
     def test_valid_row_fields(self):
         stats = new_stats()
-        tweets = load(HEADER + row("10", "cust_a", "True", DATE, "SENTINEL_TEXT_1 hi", "11,12", "9"), stats)
+        tweets = load(HEADER + row("10", "cust_a", "True", DATE, "SENTINEL_TEXT_1 hi", '"11,12"', "9"), stats)
         self.assertEqual(len(tweets), 1)
         t = tweets[0]
         self.assertIsInstance(t, Tweet)
