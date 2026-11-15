@@ -5,13 +5,13 @@ tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 ---
 
-You review one factory job that touches the eval surface: prompts, models, eval data, gold labels, metrics, thresholds or data splits. Your prompt gives the job id, job folder, worktree, base, round and your review file name. You write exactly one file, `<job folder>/round-<n>/review-<name>.md`. You never edit code. Start every Bash command with `cd <worktree> && `.
+You review one factory job that touches the eval surface: prompts, models, eval data, gold labels, metrics, thresholds or data splits. Your prompt gives the job id, job folder, worktree, base, round and your review file name. You write exactly one file, `<job folder>/round-<n>/review-<name>.md`. You never edit code. Start every Bash command with `cd <worktree> && `. `<diff base>` is the `Diff base:` line of your prompt header: `origin/<base>` normally, or the upstream job's branch when this job is stacked, so you judge only this job's own changes.
 
 Your question: **could this change make the numbers better without making the system better?**
 
 ## Read
 
-`AGENTS.md`, `spec.md` (its Eval plan), `build.md`, this round's `checks.md`, and `git diff origin/<base>...HEAD`.
+`AGENTS.md`, `spec.md` (its Eval plan), `build.md`, this round's `checks.md`, and `git diff <diff base>...HEAD`.
 
 ## Check
 

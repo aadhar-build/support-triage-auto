@@ -132,14 +132,30 @@ def cmd_intake(root: Path, cfg: dict, args: list[str]) -> str:
 
 
 def cmd_worktree(root: Path, cfg: dict, args: list[str]) -> str:
+    """job worktree <id> [--on <upstream-id>]: stack on a job that isn't merged yet."""
     d, job = _load(root, args[0])
     wt = root / job["worktree"]
     if wt.exists():
         return f"exists {job['worktree']}"
     base = cfg["base_branch"]
-    F.run(["git", "fetch", "--quiet", "origin", base], cwd=root)
-    F.run(["git", "worktree", "add", "-b", job["branch"], str(wt), f"origin/{base}"], cwd=root)
-    return f"worktree {job['worktree']} on {job['branch']}"
+    F.fetch_base(root, base)
+    start = f"origin/{base}"
+    if "--on" in args:
+        up_id = args[args.index("--on") + 1]
+        _, up = _load(root, up_id)
+        if up["stage"] == "merged":
+            raise F.FactoryError(f"{up_id} is already merged; branch from {base} instead")
+        if not up["pr"]:
+            raise F.FactoryError(f"{up_id} has no PR yet; finish its build first")
+        job.update(stacked_on=up_id, stacked_on_branch=up["branch"], stacked_on_pr=up["pr"])
+        start = up["branch"]
+    F.run(["git", "worktree", "add", "-b", job["branch"], str(wt), start], cwd=root)
+    F.write_job(d, job)
+    return f"worktree {job['worktree']} on {job['branch']} from {start}"
+
+
+def _pr_state(root: Path, number: int) -> dict:
+    return F.gh_api(root, "GET", f"pulls/{number}") or {}
 
 
 def cmd_pr(root: Path, cfg: dict, args: list[str]) -> str:
@@ -150,8 +166,14 @@ def cmd_pr(root: Path, cfg: dict, args: list[str]) -> str:
         return f"pushed {job['branch']} to PR #{job['pr']}"
     body = (f"Closes #{job['issue']}\n\nBuilt by the software factory, job `{job['id']}`. "
             "The spec, build notes, gate results and reviews are in the job folder.")
+    pr_base = cfg["base_branch"]
+    if job.get("stacked_on_pr"):
+        pr_base = job["stacked_on_branch"]
+        body += (f"\n\n**Stacked on #{job['stacked_on_pr']}**, so this PR shows only its own changes. "
+                 f"Merge #{job['stacked_on_pr']} first; GitHub then retargets this PR to `{cfg['base_branch']}` "
+                 "when that branch is deleted.")
     pr = F.gh_api(root, "POST", "pulls", {"title": job["title"], "head": job["branch"],
-                                          "base": cfg["base_branch"], "body": body})
+                                          "base": pr_base, "body": body})
     job["pr"] = pr["number"]
     F.write_job(d, job)
     _add_label(root, job["pr"], _label(cfg, "queue"))
@@ -205,7 +227,17 @@ def cmd_merge(root: Path, cfg: dict, args: list[str]) -> str:
         raise F.FactoryError(f"job is in {job['stage']}, not merging")
     wt = root / job["worktree"]
     base = cfg["base_branch"]
-    F.run(["git", "fetch", "--quiet", "origin", base], cwd=wt)
+    if job.get("stacked_on_pr"):
+        up = _pr_state(root, job["stacked_on_pr"])
+        if not up.get("merged"):
+            _escalate(root, cfg, job, f"Approved, but it is stacked on #{job['stacked_on_pr']}, which isn't merged yet. Merge that first, then this one.")
+            F.move(job, "needs-human", f"waiting for stacked PR #{job['stacked_on_pr']}")
+            F.write_job(d, job)
+            return f"{job['id']} -> needs-human (stacked on unmerged #{job['stacked_on_pr']})"
+        job.pop("stacked_on_branch", None)
+        if (_pr_state(root, job["pr"]).get("base") or {}).get("ref") != base:
+            F.gh_api(root, "PATCH", f"pulls/{job['pr']}", {"base": base}, check=False)
+    F.fetch_base(wt, base)
     merged = F.run(["git", "merge", "--no-edit", f"origin/{base}"], cwd=wt, check=False)
     if "CONFLICT" in merged:
         F.run(["git", "merge", "--abort"], cwd=wt, check=False)
@@ -221,7 +253,7 @@ def cmd_merge(root: Path, cfg: dict, args: list[str]) -> str:
         F.move(job, "build", "final gate after syncing with base failed")
         F.write_job(d, job)
         return f"{job['id']} -> build (final gate failed)"
-    changed = F.changed_files(wt, base)
+    changed = F.changed_files(wt, base, job)
     ok, why = F.automerge_ok(changed, cfg["automerge_allowlist"], job["risk"], job["surfaces"])
     if not ok:
         _escalate(root, cfg, job, f"Approved by the factory's approver, but it can't merge without you: {why}. Merge the PR to approve it.")
