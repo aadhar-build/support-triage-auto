@@ -11,6 +11,16 @@ A support-triage system at volume: for each customer-support conversation on X i
 - Deterministic policy checks outside the model, and a human review queue.
 - Evals: a hand-labelled gold set, a calibrated LLM judge, routing accuracy, missed escalations, cost per 1,000 tweets, p95 latency, τ²-bench pass^k, and a failure taxonomy.
 
+## Running the baseline eval
+
+The first triage slice is a rule and keyword cheap tier, a cascade router with fake larger-model and agent tiers, and an aggregate-only eval report. It makes no network or paid model calls.
+
+```
+PYTHONPATH=src python3 -m triage.run_eval --gold path/to/gold.csv --out report.json
+```
+
+The gold CSV has the columns `thread_id,intent,action,should_escalate`. By default it samples 200 threads from the `dev` split (`--sample-size`, `--seed`, `--split`, `--format md`). The default per-tier prices are **placeholders, not real prices**, and the report says so; pass `--price-cheap`, `--price-larger` and `--price-agent` to change them.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:
