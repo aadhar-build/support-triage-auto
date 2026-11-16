@@ -23,8 +23,13 @@ jobs:
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
         run: |
-          pip install --quiet kaggle
-          bash scripts/download_data.sh
+          out="results/${GITHUB_REF_NAME#factory/}"; mkdir -p "$out"
+          # Newer Kaggle tokens (KGAT_...) go in KAGGLE_API_TOKEN.
+          if [[ "${KAGGLE_KEY:-}" == KGAT_* ]]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; fi
+          {
+            echo "username_set=$([ -n "${KAGGLE_USERNAME:-}" ] && echo yes || echo no) key_set=$([ -n "${KAGGLE_KEY:-}" ] && echo yes || echo no)"
+            pip install --quiet kaggle && kaggle --version && bash scripts/download_data.sh
+          } > "$out/download.log" 2>&1
       - name: Profile, threads, split, cheap-tier routing
         env:
           PYTHONPATH: src
@@ -51,6 +56,7 @@ jobs:
             --seed 0 --format md --out "$out/dev_routing_report.md" | tee "$out/run_eval.txt"
           cat "$out"/*.txt "$out"/*.md >> "$GITHUB_STEP_SUMMARY"
       - name: Commit aggregate results
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
