@@ -28,7 +28,7 @@ jobs:
           if [[ "${KAGGLE_KEY:-}" == KGAT_* ]]; then export KAGGLE_API_TOKEN="$KAGGLE_KEY"; fi
           {
             echo "username_set=$([ -n "${KAGGLE_USERNAME:-}" ] && echo yes || echo no) key_set=$([ -n "${KAGGLE_KEY:-}" ] && echo yes || echo no)"
-            pip install --quiet kaggle && kaggle --version && bash scripts/download_data.sh
+            pip install --quiet kaggle six && kaggle --version && bash scripts/download_data.sh
           } > "$out/download.log" 2>&1
       - name: Profile, threads, split, cheap-tier routing
         env:
