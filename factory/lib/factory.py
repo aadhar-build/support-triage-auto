@@ -249,9 +249,26 @@ def run(cmd: list[str], cwd: Path | None = None, check: bool = True, stdin: str 
     return res.stdout
 
 
-def changed_files(worktree: Path, base: str) -> list[str]:
-    run(["git", "fetch", "--quiet", "origin", base], cwd=worktree, check=False)
-    out = run(["git", "diff", "--name-only", f"origin/{base}...HEAD"], cwd=worktree)
+def fetch_base(cwd: Path, base: str) -> None:
+    """Fetch the base into refs/remotes/origin/<base> with an explicit refspec.
+
+    A bare `git fetch origin <base>` only updates FETCH_HEAD when the clone has
+    no fetch refspec (clones of empty repos, some shallow or CI clones), which
+    leaves origin/<base> missing or stale.
+    """
+    run(["git", "fetch", "--quiet", "origin", f"+refs/heads/{base}:refs/remotes/origin/{base}"], cwd=cwd)
+
+
+def start_ref(job: dict, base: str) -> str:
+    """What the job's own changes are measured against: the base, or the job it is stacked on."""
+    return job.get("stacked_on_branch") or f"origin/{base}"
+
+
+def changed_files(worktree: Path, base: str, job: dict | None = None) -> list[str]:
+    """Files this job changed. For a stacked job, the upstream job's changes don't count."""
+    fetch_base(worktree, base)
+    start = start_ref(job or {}, base)
+    out = run(["git", "diff", "--name-only", f"{start}...HEAD"], cwd=worktree)
     return [line for line in out.splitlines() if line.strip()]
 
 

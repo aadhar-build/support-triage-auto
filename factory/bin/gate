@@ -36,7 +36,7 @@ def main(argv: list[str]) -> int:
         if not final and job["stage"] != "gate":
             raise F.FactoryError(f"job is in {job['stage']}, not gate")
         wt = root / job["worktree"]
-        changed = F.changed_files(wt, cfg["base_branch"])
+        changed = F.changed_files(wt, cfg["base_branch"], job)
         problems: list[str] = []
 
         prot = F.protected_violations(changed, cfg["protected_paths"])
