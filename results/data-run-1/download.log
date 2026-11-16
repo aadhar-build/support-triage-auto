@@ -1,11 +1,9 @@
 username_set=yes key_set=yes
-Traceback (most recent call last):
-  File "/opt/hostedtoolcache/Python/3.12.16/x64/bin/kaggle", line 3, in <module>
-    from kaggle.cli import main
-  File "/opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/kaggle/__init__.py", line 3, in <module>
-    from kaggle.api.kaggle_api_extended import KaggleApi
-  File "/opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/kaggle/api/kaggle_api_extended.py", line 266, in <module>
-    from ..models.upload_file import UploadFile
-  File "/opt/hostedtoolcache/Python/3.12.16/x64/lib/python3.12/site-packages/kaggle/models/upload_file.py", line 22, in <module>
-    import six
-ModuleNotFoundError: No module named 'six'
+Kaggle CLI 2.2.5
+downloading thoughtvector/customer-support-on-twitter into /home/runner/work/support-triage-auto/support-triage-auto/data/raw
+Dataset URL: https://www.kaggle.com/datasets/thoughtvector/customer-support-on-twitter
+License(s): CC-BY-NC-SA-4.0
+Downloading customer-support-on-twitter.zip to /home/runner/work/support-triage-auto/support-triage-auto/data/raw
+  0%|          | 0.00/169M [00:00<?, ?B/s]  1%|          | 1.00M/169M [00:00<00:18, 9.58MB/s]  4%|▍         | 7.00M/169M [00:00<00:04, 38.1MB/s]  7%|▋         | 11.0M/169M [00:00<00:05, 30.1MB/s]  9%|▉         | 15.0M/169M [00:00<00:07, 20.3MB/s] 11%|█▏        | 19.0M/169M [00:00<00:06, 22.5MB/s] 15%|█▍        | 25.0M/169M [00:00<00:04, 30.4MB/s] 17%|█▋        | 29.0M/169M [00:01<00:04, 30.3MB/s] 22%|██▏       | 37.0M/169M [00:01<00:03, 38.8MB/s] 27%|██▋       | 45.0M/169M [00:01<00:02, 45.8MB/s] 34%|███▍      | 58.0M/169M [00:01<00:01, 66.9MB/s] 39%|███▉      | 66.0M/169M [00:01<00:01, 60.9MB/s] 44%|████▍     | 75.0M/169M [00:01<00:01, 64.4MB/s] 50%|█████     | 85.0M/169M [00:01<00:01, 73.5MB/s] 58%|█████▊    | 97.0M/169M [00:01<00:00, 85.1MB/s] 63%|██████▎   | 106M/169M [00:02<00:00, 76.6MB/s]  68%|██████▊   | 115M/169M [00:02<00:00, 72.9MB/s] 77%|███████▋  | 130M/169M [00:02<00:00, 93.0MB/s] 83%|████████▎ | 140M/169M [00:02<00:00, 71.9MB/s] 91%|█████████ | 153M/169M [00:02<00:00, 74.8MB/s]100%|██████████| 169M/169M [00:02<00:00, 61.7MB/s]
+
+/home/runner/work/support-triage-auto/support-triage-auto/data/raw/twcs.csv
