@@ -1,0 +1,121 @@
+"""Run the cascade on a seeded sample of one split and write an aggregate-only report.
+
+Usage: python3 -m triage.run_eval --gold GOLD.csv --out REPORT [options]
+
+No network calls and no keys. The only file written is --out. Default prices are
+placeholders, not real prices.
+"""
+
+from __future__ import annotations
+
+import argparse
+import math
+import random
+import sys
+from typing import List, Optional
+
+from triage.cheap_tier import CheapTier
+from triage.evaluate import GoldFileError, load_gold, report_to_json, report_to_markdown, score
+from triage.loader import HeaderError
+from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
+from triage.split import DEFAULT_SPLIT_PATH, SPLIT_NAMES, SplitConfigError, load_split_config, \
+    split_threads
+from triage.threads import build_threads
+from triage.tiers import PLACEHOLDER_PRICES, FakeAgentTier, FakeLargerTier
+
+DEFAULT_DATA = "data/raw/twcs.csv"
+
+
+class _Fail(Exception):
+    pass
+
+
+def _parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="python3 -m triage.run_eval",
+                                description=__doc__.splitlines()[0])
+    p.add_argument("--data", default=DEFAULT_DATA)
+    p.add_argument("--gold", required=True)
+    p.add_argument("--sample-size", type=int, default=200)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--out", required=True)
+    p.add_argument("--format", choices=("json", "md"), default="json")
+    p.add_argument("--split", choices=SPLIT_NAMES, default="dev")
+    p.add_argument("--split-config", default=str(DEFAULT_SPLIT_PATH))
+    p.add_argument("--threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD)
+    p.add_argument("--price-cheap", type=float, default=PLACEHOLDER_PRICES["cheap"])
+    p.add_argument("--price-larger", type=float, default=PLACEHOLDER_PRICES["larger"])
+    p.add_argument("--price-agent", type=float, default=PLACEHOLDER_PRICES["agent"])
+    return p
+
+
+def _run(args) -> str:
+    if args.sample_size < 1:
+        raise _Fail("--sample-size must be at least 1, got %d" % args.sample_size)
+    if not math.isfinite(args.threshold) or not (0.0 <= args.threshold <= 1.0):
+        raise _Fail("--threshold must be in [0, 1], got %r" % args.threshold)
+    prices = {"cheap": args.price_cheap, "larger": args.price_larger, "agent": args.price_agent}
+    for name, price in prices.items():
+        if not math.isfinite(price) or price < 0:
+            raise _Fail("--price-%s must be a finite number >= 0, got %r" % (name, price))
+
+    try:
+        gold = load_gold(args.gold)
+    except FileNotFoundError:
+        raise _Fail("gold file not found: %s" % args.gold)
+    except OSError as e:
+        raise _Fail("cannot read gold file %s: %s" % (args.gold, e.strerror or e))
+    except GoldFileError as e:
+        raise _Fail("bad gold file %s: %s" % (args.gold, e))
+    except UnicodeDecodeError as e:
+        raise _Fail("gold file %s is not valid UTF-8 (byte offset %d)" % (args.gold, e.start))
+
+    try:
+        config = load_split_config(args.split_config)
+    except SplitConfigError as e:
+        raise _Fail("bad split config: %s" % e)
+
+    try:
+        threads, _ = build_threads(args.data)
+    except FileNotFoundError:
+        raise _Fail("data file not found: %s (hint: run scripts/download_data.sh)" % args.data)
+    except OSError as e:
+        raise _Fail("cannot read data file %s: %s" % (args.data, e.strerror or e))
+    except HeaderError as e:
+        raise _Fail("bad header in %s: %s" % (args.data, e))
+    except UnicodeDecodeError as e:
+        raise _Fail("%s is not valid UTF-8 (byte offset %d)" % (args.data, e.start))
+
+    mapping, _ = split_threads(threads, config)
+    kept = sorted((t for t in threads if mapping[t.root_tweet_id] == args.split),
+                  key=lambda t: t.root_tweet_id)
+    sample = random.Random(args.seed).sample(kept, min(args.sample_size, len(kept)))
+
+    routed = route_threads(sample, CheapTier(prices["cheap"]), FakeLargerTier(
+        price_per_call=prices["larger"]), FakeAgentTier(prices["agent"]),
+        threshold=args.threshold)
+    report = score(routed, gold, prices, sample_size=args.sample_size, seed=args.seed,
+                   split=args.split, threshold=args.threshold)
+    text = report_to_json(report) if args.format == "json" else report_to_markdown(report)
+    try:
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError as e:
+        raise _Fail("cannot write %s: %s" % (args.out, e.strerror or e))
+    return ("routed=%d scored=%d without_gold=%d gold_unmatched=%d split=%s"
+            % (report.threads_routed, report.threads_scored, report.threads_without_gold,
+               report.gold_rows_unmatched, args.split))
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parser().parse_args(argv)
+    try:
+        summary = _run(args)
+    except _Fail as e:
+        print("error: %s" % e, file=sys.stderr)
+        return 2
+    print(summary)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
