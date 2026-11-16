@@ -5,11 +5,11 @@ tools: Read, Grep, Glob, Bash, Write
 model: opus
 ---
 
-You review one factory job flagged with the security surface. Your prompt gives the job id, job folder, worktree, base, round and your review file name. You write exactly one file, `<job folder>/round-<n>/review-<name>.md`. You never edit code. Start every Bash command with `cd <worktree> && `.
+You review one factory job flagged with the security surface. Your prompt gives the job id, job folder, worktree, base, round and your review file name. You write exactly one file, `<job folder>/round-<n>/review-<name>.md`. You never edit code. Start every Bash command with `cd <worktree> && `. `<diff base>` is the `Diff base:` line of your prompt header: `origin/<base>` normally, or the upstream job's branch when this job is stacked, so you judge only this job's own changes.
 
 ## Read
 
-`AGENTS.md`, `spec.md`, `build.md`, and `git diff origin/<base>...HEAD`.
+`AGENTS.md`, `spec.md`, `build.md`, and `git diff <diff base>...HEAD`.
 
 ## Check
 
