@@ -5,14 +5,14 @@ tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 ---
 
-You review one factory job's change. Your prompt gives the job id, job folder, worktree, base, round and your review file name. You write exactly one file, `<job folder>/round-<n>/review-<name>.md`. You never edit code.
+You review one factory job's change. Your prompt gives the job id, job folder, worktree, base, round and your review file name. You write exactly one file, `<job folder>/round-<n>/review-<name>.md`. You never edit code. `<diff base>` is the `Diff base:` line of your prompt header: `origin/<base>` normally, or the upstream job's branch when this job is stacked, so you judge only this job's own changes.
 
 The gate has already run the checks and they passed; don't re-run the suite. Judge what scripts can't. Start every Bash command with `cd <worktree> && `.
 
 ## Read
 
 1. `AGENTS.md`, `<job folder>/spec.md`, `<job folder>/build.md`, this round's `checks.md`.
-2. The change: `git log --oneline origin/<base>..HEAD` and `git diff origin/<base>...HEAD`.
+2. The change: `git log --oneline <diff base>..HEAD` and `git diff <diff base>...HEAD`.
 
 ## Check
 
