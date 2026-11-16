@@ -1,0 +1,58 @@
+# First real-data run of the MVP. Runs on push to factory/data-run-* only.
+# Downloads the Kaggle dataset inside the runner (never committed), then writes
+# aggregate-only results to results/<branch>/ and commits them back to the branch.
+# No paid model calls: the MVP's larger and agent tiers are fakes.
+name: real-data-run
+on:
+  push:
+    branches: ["factory/data-run-*"]
+    paths: [".github/workflows/real-data-run.yml", "data/run.env"]
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download dataset
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          pip install --quiet kaggle
+          bash scripts/download_data.sh
+      - name: Profile, threads, split, cheap-tier routing
+        env:
+          PYTHONPATH: src
+        run: |
+          out="results/${GITHUB_REF_NAME#factory/}"
+          mkdir -p "$out"
+          python3 -m triage.profile > "$out/profile.txt"
+          python3 - "$out/threads_split.txt" <<'PY'
+          import sys
+          from collections import Counter
+          from triage.threads import build_threads
+          from triage.split import load_split_config, split_threads, DEFAULT_SPLIT_PATH
+          threads, _ = build_threads("data/raw/twcs.csv")
+          mapping, _ = split_threads(threads, load_split_config(DEFAULT_SPLIT_PATH))
+          c = Counter(mapping.values())
+          n = len(mapping)
+          with open(sys.argv[1], "w") as f:
+              f.write("threads=%d\n" % len(threads))
+              for k in ("dev", "eval", "full"):
+                  f.write("%s=%d (%.2f%%)\n" % (k, c[k], 100.0 * c[k] / max(n, 1)))
+          PY
+          printf 'thread_id,intent,action,should_escalate\n' > /tmp/no_gold.csv
+          python3 -m triage.run_eval --gold /tmp/no_gold.csv --split dev --sample-size 2000 \
+            --seed 0 --format md --out "$out/dev_routing_report.md" | tee "$out/run_eval.txt"
+          cat "$out"/*.txt "$out"/*.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Commit aggregate results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add results/
+          git commit -m "Aggregate results of the real-data run" && git push origin HEAD:"$GITHUB_REF_NAME"
