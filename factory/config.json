@@ -51,7 +51,8 @@
     "scenarios/"
   ],
   "always_in_scope": [],
-  "automerge_allowlist": [
+  "automerge_allowlist": [],
+  "automerge_allowlist_paused": [
     "docs/*",
     "*.md",
     "tests/*",
