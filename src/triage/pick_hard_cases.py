@@ -15,10 +15,19 @@ The signal word lists are defined here and are independent of the cheap tier's k
 
 from __future__ import annotations
 
+import argparse
+import csv
+import json
+import random
 import re
-from typing import Dict, List, Tuple
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional, Set, Tuple
 
-from triage.threads import Thread
+from triage.split import DEFAULT_SPLIT_PATH, load_split_config, split_threads
+from triage.threads import Thread, build_threads
+
+DEFAULT_DATA = "data/raw/twcs.csv"
 
 SIGNALS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("legal", ("lawyer", "lawyers", "attorney", "solicitor", "sue", "suing", "lawsuit",
@@ -67,3 +76,91 @@ def escalation_signals(thread: Thread) -> Tuple[str, ...]:
                 hits.append(name)
                 break
     return tuple(hits)
+
+
+class _Fail(Exception):
+    pass
+
+
+def _parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="python3 -m triage.pick_hard_cases",
+                                description=__doc__.splitlines()[0])
+    p.add_argument("--data", default=DEFAULT_DATA)
+    p.add_argument("--split-config", default=str(DEFAULT_SPLIT_PATH))
+    p.add_argument("--exclude-ids", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--n", type=int, default=100)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--summary-out")
+    return p
+
+
+def _load_exclude_ids(path) -> Set[int]:
+    with open(path, "r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        reader.fieldnames = [h.strip() if h else h for h in reader.fieldnames]
+        return {int(row["thread_id"].strip()) for row in reader}
+
+
+def _turn_record(turn) -> dict:
+    return {"tweet_id": turn.tweet_id, "inbound": turn.inbound,
+            "created_at": turn.created_at.isoformat(), "text": turn.text}
+
+
+def _run(args) -> str:
+    exclude = _load_exclude_ids(args.exclude_ids)
+    config = load_split_config(args.split_config)
+    threads, _ = build_threads(args.data)
+
+    mapping, _ = split_threads(threads, config)
+    eval_threads = [t for t in threads if mapping[t.root_tweet_id] == "eval"]
+    eval_ids = {t.root_tweet_id for t in eval_threads}
+    kept = [t for t in eval_threads if t.root_tweet_id not in exclude]
+
+    candidates = []
+    for t in sorted(kept, key=lambda t: t.root_tweet_id):
+        signals = escalation_signals(t)
+        if signals:
+            candidates.append((t, signals))
+    random.Random(args.seed).shuffle(candidates)
+    candidates.sort(key=lambda c: len(c[1]), reverse=True)
+    picked = candidates[:args.n]
+
+    lines = [json.dumps({"rank": rank, "thread_id": t.root_tweet_id, "signals": list(signals),
+                         "turns": [_turn_record(turn) for turn in t.turns]},
+                        ensure_ascii=False) + "\n"
+             for rank, (t, signals) in enumerate(picked, start=1)]
+    with open(args.out, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    summary = {
+        "threads_considered": len(eval_threads),
+        "threads_excluded_random_sample": len(eval_threads) - len(kept),
+        "exclude_ids_unmatched": len(exclude - eval_ids),
+        "threads_qualifying": len(candidates),
+        "threads_picked": len(picked),
+        "picked_per_signal": {name: sum(1 for _, s in picked if name in s)
+                              for name in SIGNAL_NAMES},
+        "n": args.n,
+        "seed": args.seed,
+    }
+    return json.dumps(summary, sort_keys=True, indent=2) + "\n"
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parser().parse_args(argv)
+    try:
+        summary = _run(args)
+    except _Fail as e:
+        print("error: %s" % e, file=sys.stderr)
+        return 2
+    if args.summary_out:
+        with open(args.summary_out, "w", encoding="utf-8") as f:
+            f.write(summary)
+    else:
+        sys.stdout.write(summary)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
