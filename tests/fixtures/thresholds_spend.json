@@ -1,0 +1,8 @@
+{
+  "version": "test-fixture",
+  "guardrails": {
+    "api_spend_usd_per_month": {
+      "max": 200.0
+    }
+  }
+}
