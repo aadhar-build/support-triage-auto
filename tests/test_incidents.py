@@ -95,6 +95,19 @@ def example(hours_list):
     return threads
 
 
+BURST_AT = hours(200)
+MIN = timedelta(minutes=1)
+
+
+def owner_fixture(*parts):
+    """Directory thread at hour 0 (BrandA and BrandB known, 170h of history covered
+    before the burst at hour 200) plus the given thread lists."""
+    threads = [directory(hours(0))]
+    for p in parts:
+        threads += p
+    return threads
+
+
 class TestFindIncidents(unittest.TestCase):
     def test_worked_example_no_double_membership(self):
         r = find(example(EXAMPLE_A), cfg())
@@ -137,6 +150,142 @@ class TestFindIncidents(unittest.TestCase):
         literal = find(example(EXAMPLE_A + (5.0, 5.1, 5.2)), cfg())
         self.assertEqual(len(literal.incidents), 1)
         memberships_ok(self, literal)
+
+
+    def test_60_burst_one_incident_all_members(self):
+        a = burst(BASE + 1000, BURST_AT, 60)
+        r = find(owner_fixture(a), owner_cfg())
+        self.assertEqual(len(r.incidents), 1)
+        inc = r.incidents[0]
+        self.assertEqual(inc.members, 60)
+        self.assertEqual(list(inc.member_ids), [t.root_tweet_id for t in a])
+        self.assertEqual(inc.opened_at, BURST_AT + 29 * MIN)  # the 30th thread's time
+        self.assertEqual(inc.start, BURST_AT)
+        self.assertEqual(inc.end, BURST_AT + 59 * MIN)
+        self.assertEqual(inc.minutes_to_open, 29.0)
+        self.assertEqual(r.outage_threads, 60)
+        self.assertEqual(r.unattributed_outage_threads, 0)
+        memberships_ok(self, r)
+
+    def test_ordinary_traffic_no_incident(self):
+        a = burst(BASE + 1000, BURST_AT, 60)
+        # one per hour for 48h before and after, all at least 3h clear of the burst
+        before = burst(BASE + 2000, hours(149), 48, step=timedelta(hours=1))
+        after = burst(BASE + 3000, hours(204), 48, step=timedelta(hours=1))
+        r = find(owner_fixture(before, a, after), owner_cfg())
+        self.assertEqual(len(r.incidents), 1)
+        self.assertEqual(r.incidents[0].members, 60)
+        ordinary = {t.root_tweet_id for t in before + after}
+        self.assertFalse(ordinary & set(r.memberships))
+        alone = find(owner_fixture(before, after), owner_cfg())
+        self.assertEqual(alone.incidents, ())
+        self.assertEqual(alone.outage_threads, 96)
+
+    def test_two_brands_two_incidents(self):
+        a = burst(BASE + 1000, BURST_AT, 60)
+        b = burst(BASE + 4000, BURST_AT + timedelta(seconds=30), 40, text=OUTAGE_B)
+        r = find(owner_fixture(a, b), owner_cfg())
+        self.assertEqual(len(r.incidents), 2)
+        by_brand = {i.brand: set(i.member_ids) for i in r.incidents}
+        self.assertEqual(by_brand, {"BrandA": {t.root_tweet_id for t in a},
+                                    "BrandB": {t.root_tweet_id for t in b}})
+        self.assertEqual([i.id for i in r.incidents], ["inc-0001", "inc-0002"])
+        memberships_ok(self, r)
+
+    def test_long_surge_merges(self):
+        surge = burst(BASE + 1000, BURST_AT, 120, step=timedelta(seconds=150))  # ~5h
+        r = find(owner_fixture(surge), owner_cfg())
+        self.assertEqual(len(r.incidents), 1)
+        self.assertEqual(r.incidents[0].members, 120)
+        self.assertEqual(r.incidents[0].reopens, 0)
+
+    def test_multi_brand_thread_one_incident(self):
+        a = burst(BASE + 1000, BURST_AT, 60)
+        b = burst(BASE + 4000, BURST_AT + timedelta(seconds=30), 40, text=OUTAGE_B)
+        both = make_thread(BASE + 5000, BURST_AT + timedelta(minutes=35, seconds=10),
+                           "@BrandA @BrandB app is down again")
+        r = find(owner_fixture(a, b, [both]), owner_cfg())
+        self.assertEqual(len(r.incidents), 2)
+        holders = [i.id for i in r.incidents if BASE + 5000 in i.member_ids]
+        self.assertEqual(len(holders), 1)
+        self.assertEqual(r.memberships[BASE + 5000], holders[0])
+        memberships_ok(self, r)
+
+    def test_reply_attribution_only_from_reply_time(self):
+        mentioned = burst(BASE + 1000, BURST_AT, 29)
+        start30 = BURST_AT + 30 * MIN
+
+        def thirtieth(delay):
+            return make_thread(BASE + 1100, start30, "app is down again",
+                               replies=[("BrandA", start30 + delay)])
+
+        late = find(owner_fixture(mentioned, [thirtieth(timedelta(hours=3))]), owner_cfg())
+        self.assertEqual(late.incidents, ())
+        self.assertEqual(late.unattributed_outage_threads, 1)
+        soon = find(owner_fixture(mentioned, [thirtieth(timedelta(hours=1))]), owner_cfg())
+        self.assertEqual(len(soon.incidents), 1)
+        self.assertEqual(soon.incidents[0].opened_at, start30 + timedelta(hours=1))
+        self.assertEqual(soon.incidents[0].members, 30)
+        self.assertEqual(soon.unattributed_outage_threads, 0)
+
+    def test_brand_unknown_until_first_reply(self):
+        c = burst(BASE + 1000, BURST_AT, 30, text="@BrandC app is down again")
+
+        def first_reply(when):
+            return make_thread(BASE + 6000, hours(1), "hello there",
+                               replies=[("BrandC", when)])
+
+        soon = find(owner_fixture(c, [first_reply(BURST_AT + 40 * MIN)]), owner_cfg())
+        self.assertEqual(len(soon.incidents), 1)
+        self.assertEqual(soon.incidents[0].brand, "BrandC")
+        self.assertEqual(soon.incidents[0].opened_at, BURST_AT + 40 * MIN)
+        late = find(owner_fixture(c, [first_reply(hours(203))]), owner_cfg())
+        self.assertEqual(late.incidents, ())
+        self.assertEqual(late.unattributed_outage_threads, 30)
+        # a lower-case mention enters the directory's spelling
+        lower = burst(BASE + 1000, BURST_AT, 30, text="@branda app is down again")
+        r = find(owner_fixture(lower), owner_cfg())
+        self.assertEqual([i.brand for i in r.incidents], ["BrandA"])
+
+    def test_label_first_turn_only(self):
+        t = make_thread(BASE + 1000, BURST_AT, "hello")
+        t = Thread(root_tweet_id=t.root_tweet_id, brand_ids=(), brand_replied=False,
+                   turns=t.turns + (Turn(BASE + 1001, "cust_x", True, BURST_AT + MIN,
+                                         "@BrandA app is down"),))
+        self.assertEqual(CheapTier().label(t).intent, "outage_technical")  # uncut thread
+        r = find(owner_fixture([t]), owner_cfg())
+        self.assertEqual(r.outage_threads, 0)
+
+    def test_warm_up_never_zero_history(self):
+        a = burst(BASE + 1000, hours(10), 60)
+        r = find(owner_fixture(a), owner_cfg())
+        self.assertEqual(r.incidents, ())
+        self.assertEqual(r.warm_up_outage_threads, 60)
+        self.assertEqual(r.warm_up_events_at_min_burst, 31)
+
+    def test_members_tagged_one_reply_slot(self):
+        a = burst(BASE + 1000, BURST_AT, 60)
+        r = find(owner_fixture(a), owner_cfg())
+        inc = r.incidents[0]
+        self.assertEqual(inc.status_reply, STATUS)
+        for t in a:
+            self.assertEqual(r.memberships[t.root_tweet_id], inc.id)
+        for name in ("reason_codes", "reason", "reasons", "topic_id"):
+            self.assertFalse(hasattr(inc, name), name)
+
+    def test_top_terms_strip_handles(self):
+        r = find(owner_fixture(burst(BASE + 1000, BURST_AT, 60)), owner_cfg())
+        terms = r.incidents[0].top_terms
+        for term in ("again", "app", "down"):
+            self.assertIn(term, terms)
+        self.assertNotIn("branda", terms)
+        self.assertNotIn("is", terms)
+        self.assertLessEqual(len(terms), 5)
+
+    def test_numbers_come_from_config(self):
+        a = burst(BASE + 1000, BURST_AT, 60)
+        self.assertEqual(find(owner_fixture(a), cfg(2, 61, 3.0, 168)).incidents, ())
+        self.assertEqual(len(find(owner_fixture(a), cfg(2, 60, 3.0, 168)).incidents), 1)
 
 
 class TestLoadIncidentConfig(unittest.TestCase):
