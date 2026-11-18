@@ -9,7 +9,9 @@ Standard library only.
 
 from __future__ import annotations
 
+import json
 import math
+import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
@@ -195,6 +197,97 @@ class DriftResult:
     reference: Reference
     weeks: Tuple[WeekResult, ...]
     callouts: Tuple[CallOut, ...]
+
+
+_WEEK_RE = re.compile(r"(\d{4})-W(\d{2})", re.ASCII)
+
+
+def _is_number(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _parse_week(label) -> Optional[date]:
+    """Monday of a 'YYYY-Www' ISO week, or None if the label is not a real ISO week."""
+    if not isinstance(label, str):
+        return None
+    m = _WEEK_RE.fullmatch(label)
+    if not m:
+        return None
+    try:
+        return date.fromisocalendar(int(m.group(1)), int(m.group(2)), 1)
+    except ValueError:
+        return None
+
+
+def load_drift_config(path) -> DriftConfig:
+    """Read and validate a drift config in the shape of evals/drift.json. Only `version`
+    and `drift` are read. Any problem raises DriftConfigError naming the file; there is
+    no default config and no fallback value."""
+    def fail(problem: str):
+        return DriftConfigError("drift config %s: %s" % (path, problem))
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        raise fail("file not found") from None
+    except (OSError, UnicodeDecodeError) as e:
+        raise fail("cannot read file: %s" % e) from None
+    except json.JSONDecodeError as e:
+        raise fail("not valid JSON: %s" % e) from None
+    if not isinstance(data, dict):
+        raise fail("top level must be a JSON object")
+    version = data.get("version")
+    version = version if isinstance(version, str) else None
+    section = data.get("drift")
+    if not isinstance(section, dict):
+        raise fail("'drift' is missing or is not an object")
+
+    reference = section.get("reference")
+    if not isinstance(reference, dict):
+        raise fail("'drift.reference' is missing or is not an object")
+    mondays = {}
+    for key in ("start_week", "end_week"):
+        if key not in reference:
+            raise fail("'drift.reference.%s' is missing" % key)
+        monday = _parse_week(reference[key])
+        if monday is None:
+            raise fail("'drift.reference.%s' must be a real ISO week 'YYYY-Www', got %r"
+                       % (key, reference[key]))
+        mondays[key] = monday
+    if mondays["start_week"] > mondays["end_week"]:
+        raise fail("start_week %s is after end_week %s"
+                   % (reference["start_week"], reference["end_week"]))
+
+    ints = {}
+    for key, low in (("min_volume", 1), ("samples_per_callout", 0)):
+        if key not in section:
+            raise fail("'drift.%s' is missing" % key)
+        v = section[key]
+        if not isinstance(v, int) or isinstance(v, bool) or v < low:
+            raise fail("'drift.%s' must be an int of at least %d, got %r" % (key, low, v))
+        ints[key] = v
+
+    raw = section.get("thresholds")
+    if not isinstance(raw, dict):
+        raise fail("'drift.thresholds' is missing or is not an object")
+    thresholds: Dict[str, float] = {}
+    for key in SIGNAL_ORDER:
+        if key not in raw:
+            raise fail("'drift.thresholds.%s' is missing" % key)
+        v = raw[key]
+        if not _is_number(v) or not math.isfinite(v) or v <= 0:
+            raise fail("'drift.thresholds.%s' must be a finite number above 0, got %r"
+                       % (key, v))
+        if key == "volume" and v <= 1.0:
+            raise fail("'drift.thresholds.volume' is a ratio and must be above 1.0, got %r"
+                       % (v,))
+        thresholds[key] = v
+
+    return DriftConfig(path=str(path), version=version,
+                       start_week=reference["start_week"], end_week=reference["end_week"],
+                       min_volume=ints["min_volume"],
+                       samples_per_callout=ints["samples_per_callout"], thresholds=thresholds)
 
 
 def _week_monday(label: str) -> date:

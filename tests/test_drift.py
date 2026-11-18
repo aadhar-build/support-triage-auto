@@ -4,12 +4,19 @@ Every thread and tweet here is made up by hand. Nothing reads data/raw/, the rea
 data/split.json or the owner's evals/drift.json (except the opt-in conformance test).
 """
 
+import copy
+import json
+from pathlib import Path
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 
 import triage.drift as drift
 from triage.cheap_tier import CheapTier
 from triage.threads import Thread, Turn
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+FIXTURE_CONFIG = FIXTURES / "drift_config.json"
 
 INTENTS7 = ("delivery", "billing", "account_access", "outage_technical", "complaint", "praise",
             "other")
@@ -236,6 +243,85 @@ class TestCheckDrift(unittest.TestCase):
         # reference weeks outside the span
         with self.assertRaises(drift.DriftDataError):
             run([(0, 3), (0, 5), (0, 3)], cfg("2016-W30", "2016-W31"))
+
+
+class TestLoadDriftConfig(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+        self.owner = json.loads(FIXTURE_CONFIG.read_text(encoding="utf-8"))
+
+    def write(self, name, text):
+        path = self.dir / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def variant(self, edit):
+        data = copy.deepcopy(self.owner)
+        edit(data)
+        return json.dumps(data)
+
+    def test_errors(self):
+        def set_(keys, value):
+            def edit(d):
+                for k in keys[:-1]:
+                    d = d[k]
+                d[keys[-1]] = value
+            return edit
+
+        def drop(keys):
+            def edit(d):
+                for k in keys[:-1]:
+                    d = d[k]
+                del d[keys[-1]]
+            return edit
+
+        cases = [
+            ("missing file", None),
+            ("invalid json", "{not json"),
+            ("top level not object", "[1, 2]"),
+            ("no drift section", self.variant(drop(["drift"]))),
+            ("malformed week", self.variant(set_(["drift", "reference", "start_week"],
+                                                 "2016-11"))),
+            ("week 53 in a 52-week year", self.variant(
+                set_(["drift", "reference", "end_week"], "2017-W53"))),
+            ("missing week", self.variant(drop(["drift", "reference", "end_week"]))),
+            ("start after end", self.variant(set_(["drift", "reference", "start_week"],
+                                                  "2016-W13"))),
+            ("missing threshold key", self.variant(drop(["drift", "thresholds",
+                                                         "other_share"]))),
+            ("non-positive threshold", self.variant(
+                set_(["drift", "thresholds", "mean_confidence"], 0))),
+            ("bool threshold", self.variant(set_(["drift", "thresholds", "intent_psi"], True))),
+            ("volume of 1.0", self.variant(set_(["drift", "thresholds", "volume"], 1.0))),
+            ("min_volume of 0", self.variant(set_(["drift", "min_volume"], 0))),
+            ("bool min_volume", self.variant(set_(["drift", "min_volume"], True))),
+            ("negative samples", self.variant(set_(["drift", "samples_per_callout"], -1))),
+            ("missing samples", self.variant(drop(["drift", "samples_per_callout"]))),
+            ("NaN threshold", self.variant(set_(["drift", "thresholds", "intent_psi"],
+                                                float("nan")))),
+        ]
+        for i, (name, text) in enumerate(cases):
+            with self.subTest(name):
+                path = self.dir / ("missing_%d.json" % i) if text is None \
+                    else self.write("case_%d.json" % i, text)
+                with self.assertRaises(drift.DriftConfigError) as ctx:
+                    drift.load_drift_config(path)
+                self.assertIsInstance(ctx.exception, ValueError)
+                self.assertIn(str(path), str(ctx.exception))
+
+    def test_accepts_owner_shape_with_incidents(self):
+        self.assertIn("incidents", self.owner)
+        self.assertIn("threshold_notes", self.owner["drift"])
+        config = drift.load_drift_config(FIXTURE_CONFIG)
+        self.assertEqual(config.version, "fixture-v1")
+        self.assertEqual((config.start_week, config.end_week), ("2016-W11", "2016-W12"))
+        self.assertEqual(config.min_volume, 3)
+        self.assertEqual(config.samples_per_callout, 2)
+        self.assertEqual(config.thresholds, {"intent_psi": 0.2, "volume": 2.0,
+                                             "mean_confidence": 0.05,
+                                             "escalated_share": 0.03, "other_share": 0.05})
 
 
 class TestReplay(unittest.TestCase):

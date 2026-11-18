@@ -1,0 +1,41 @@
+{
+  "version": "fixture-v1",
+  "status": "Made-up test config in the shape of the owner's evals/drift.json. Not real thresholds.",
+  "drift": {
+    "reference": {
+      "start_week": "2016-W11",
+      "end_week": "2016-W12",
+      "note": "Made-up test weeks."
+    },
+    "min_volume": 3,
+    "samples_per_callout": 2,
+    "thresholds": {
+      "intent_psi": 0.2,
+      "volume": 2.0,
+      "mean_confidence": 0.05,
+      "escalated_share": 0.03,
+      "other_share": 0.05
+    },
+    "threshold_notes": {
+      "intent_psi": "test note",
+      "volume": "test note",
+      "mean_confidence": "test note",
+      "escalated_share": "test note",
+      "other_share": "test note"
+    }
+  },
+  "incidents": {
+    "window_hours": 2,
+    "min_burst": 30,
+    "baseline_factor": 3.0,
+    "baseline_lookback_hours": 168,
+    "label": "outage_technical",
+    "notes": {
+      "window_hours": "test note",
+      "min_burst": "test note",
+      "baseline_factor": "test note",
+      "baseline_lookback_hours": "test note",
+      "label": "test note"
+    }
+  }
+}
