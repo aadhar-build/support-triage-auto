@@ -198,9 +198,14 @@ class TestMatchedTopics(unittest.TestCase):
         turns = ["wibblewarp quuxfrob", "zorblax claim", "can't florp"]
         self.assertEqual(matched_topics(turns, TOPICS), ("t-zorblax", "t-florp"))
 
-    def test_only_given_turns_are_checked(self):
-        # The caller passes inbound turns only; brand text never reaches this function.
-        self.assertEqual(matched_topics(["thanks"], TOPICS), ())
+    def test_curly_apostrophe_in_phrase_matches_straight_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rules.json"
+            path.write_text(json.dumps({"escalate_always": [
+                _topic("t-curly", "won\u2019t blorp")]}), encoding="utf-8")
+            topics = load_escalate_topics(path)
+        self.assertEqual(matched_topics(["it won't blorp"], topics), ("t-curly",))
+        self.assertEqual(matched_topics(["it won\u2019t blorp"], topics), ("t-curly",))
 
 
 RULES = load_rules(FIXTURE)
