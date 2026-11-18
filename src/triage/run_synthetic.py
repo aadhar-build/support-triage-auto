@@ -7,7 +7,9 @@ Writes DIR/synthetic_report.json, DIR/synthetic_report.md and DIR/metrics.json (
 `triage.metrics`, stamped with --run-at, default now in UTC). Reports and stdout hold only
 case ids, titles, labels, tier names, confidences, rule ids and counts, never turn, draft or
 brand text. No network calls. Stdout and the reports' summary give rules_loaded, the number of
-policy rules read from --rules. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
+policy rules read from --rules, and topics_loaded, the number of always-escalate topics read
+from the same file (a missing or empty topic list is bad input). Each case records the ids of
+the topics that forced it to escalate in topic_id. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
 bad input.
 With --trace PATH it also writes one audit trace record per case (split "synthetic",
 thread_id = 1-based case position) to PATH outside the repository, before any report; if the
@@ -26,7 +28,8 @@ from typing import List, Optional
 
 from triage import metrics as metrics_mod
 from triage.cheap_tier import CheapTier
-from triage.policy_check import RulesError, check, load_rules
+from triage.policy_check import RulesError, check, load_escalate_topics, load_rules, \
+    rules_version
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
 from triage.threads import Thread, Turn
 from triage.tiers import ACTIONS, INTENTS, FakeAgentTier, FakeLargerTier
@@ -44,7 +47,7 @@ SYNTHETIC_TIME = datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 SUMMARY_KEYS = ("cases_run", "passed", "failed", "must_pass_cases", "must_pass_failures",
                 "missed_escalations", "false_escalations", "policy_violations",
-                "policy_mismatches", "rules_loaded")
+                "policy_mismatches", "rules_loaded", "topics_loaded")
 
 
 class _Fail(Exception):
@@ -176,10 +179,10 @@ def _thread(position: int, c: dict) -> Thread:
                   brand_replied=any(not t.inbound for t in turns))
 
 
-def _route(cases: list) -> list:
+def _route(cases: list, topics) -> list:
     threads = [_thread(i, c) for i, c in enumerate(cases, start=1)]
     return route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
-                         threshold=DEFAULT_CONFIDENCE_THRESHOLD, topics=())
+                         threshold=DEFAULT_CONFIDENCE_THRESHOLD, topics=topics)
 
 
 def _results(cases: list, rules, routed: list) -> list:
@@ -203,12 +206,12 @@ def _results(cases: list, rules, routed: list) -> list:
             "expected_violations": expected_violations,
             "actual_violations": actual_violations,
             "tiers": list(r.tiers), "confidence": r.labels.confidence,
-            "reason_codes": list(r.reason_codes),
+            "reason_codes": list(r.reason_codes), "topic_id": list(r.topic_id),
         })
     return results
 
 
-def _summary(results: list, rules_loaded: int) -> dict:
+def _summary(results: list, rules_loaded: int, topics_loaded: int) -> dict:
     drafts = [r for r in results if r["actual_violations"] is not None]
     return {
         "cases_run": len(results),
@@ -224,6 +227,7 @@ def _summary(results: list, rules_loaded: int) -> dict:
         "policy_mismatches": sum(r["expected_violations"] != r["actual_violations"]
                                  for r in drafts),
         "rules_loaded": rules_loaded,
+        "topics_loaded": topics_loaded,
     }
 
 
@@ -284,10 +288,10 @@ def _metrics_text(cases_path, results: list, run_at: str) -> str:
     return metrics_mod.to_json(m)
 
 
-def _trace(path, routed: list) -> int:
+def _trace(path, routed: list, rules_ver: Optional[str]) -> int:
     commit, dirty = code_version(REPO_ROOT)
-    # Synthetic runs sample nothing (seed 0); no rules version yet and no drift config.
-    run = RunInfo(code_version=commit, code_dirty=dirty, rules_version=None,
+    # Synthetic runs sample nothing (seed 0) and use no drift config.
+    run = RunInfo(code_version=commit, code_dirty=dirty, rules_version=rules_ver,
                   drift_config_version=None, threshold=DEFAULT_CONFIDENCE_THRESHOLD,
                   split="synthetic", seed=0)
     return write_trace(path, (build_record(r, run) for r in routed))
@@ -300,15 +304,17 @@ def _run(args) -> tuple:
     cases = load_cases(args.cases)
     try:
         rules = load_rules(args.rules)
+        topics = load_escalate_topics(args.rules)
+        rules_ver = rules_version(args.rules) if args.trace is not None else None
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
-    routed = _route(cases)
+    routed = _route(cases, topics)
     results = _results(cases, rules, routed)
-    summary = _summary(results, len(rules))
+    summary = _summary(results, len(rules), len(topics))
     metrics_text = _metrics_text(args.cases, results, run_at)
     trace_records = None
     if args.trace is not None:
-        trace_records = _trace(args.trace, routed)
+        trace_records = _trace(args.trace, routed, rules_ver)
     _write(Path(args.out), results, summary, metrics_text)
     return summary, trace_records
 
@@ -320,9 +326,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except (_Fail, TraceError) as e:
         print("error: %s" % " ".join(str(e).split()), file=sys.stderr)
         return 2
-    line = ("cases=%d passed=%d failed=%d must_pass_failures=%d rules_loaded=%d"
+    line = ("cases=%d passed=%d failed=%d must_pass_failures=%d rules_loaded=%d topics_loaded=%d"
             % (summary["cases_run"], summary["passed"], summary["failed"],
-               summary["must_pass_failures"], summary["rules_loaded"]))
+               summary["must_pass_failures"], summary["rules_loaded"], summary["topics_loaded"]))
     if trace_records is not None:
         line += " trace_records=%d" % trace_records
     print(line)

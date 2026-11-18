@@ -24,7 +24,8 @@ from triage.run_synthetic import JSON_NAME, SUMMARY_KEYS, CasesError, load_cases
 from triage.tiers import ACTIONS
 
 CASE_KEYS = ("id", "title", "must_pass", "passed", "expected", "actual",
-             "expected_violations", "actual_violations", "tiers", "confidence", "reason_codes")
+             "expected_violations", "actual_violations", "tiers", "confidence", "reason_codes",
+             "topic_id")
 
 
 class ReportError(Exception):
@@ -60,6 +61,8 @@ def _check_report_case(index, c) -> None:
         raise ReportError("%s: 'confidence' is not a number" % where)
     if not _is_str_list(c["reason_codes"]):
         raise ReportError("%s: 'reason_codes' is not a list of strings" % where)
+    if not _is_str_list(c["topic_id"]):
+        raise ReportError("%s: 'topic_id' is not a list of strings" % where)
 
 
 def load_run(run_dir) -> tuple:
