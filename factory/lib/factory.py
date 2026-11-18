@@ -205,6 +205,137 @@ def allowed_files(spec_text: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------
+# Scorecard: per-job metrics from job.json, grouped by factory version
+# --------------------------------------------------------------------------
+
+BASE_VERSION = "v1"
+
+
+def _ts(at: str) -> _dt.datetime:
+    return _dt.datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ")
+
+
+def job_metrics(job: dict) -> dict:
+    """What one job's history says: timings, gate, escalation, merge path."""
+    h = job["history"]
+    stages = [e["stage"] for e in h]
+    created = _ts(h[0]["at"])
+    ready = None
+    for i, e in enumerate(h):
+        if e["stage"] == "needs-human" or (e["stage"] == "merged" and i and h[i - 1]["stage"] == "merging"):
+            ready = _ts(e["at"])
+            break
+    merged = next((_ts(e["at"]) for e in h if e["stage"] == "merged"), None)
+    first_pass = None
+    if "gate" in stages:
+        i = stages.index("gate")
+        first_pass = i + 1 < len(stages) and stages[i + 1] == "review"
+    escalated = None
+    if any(e["note"] == "approver escalated" for e in h):
+        escalated = True
+    elif "merging" in stages:
+        escalated = False
+    return {
+        "merged": merged is not None,
+        "rejected": job["stage"] == "rejected",
+        "agent_minutes": round((ready - created).total_seconds() / 60, 2) if ready else None,
+        "lead_hours": round((merged - created).total_seconds() / 3600, 2) if merged else None,
+        "merged_at": merged,
+        "first_pass_gate": first_pass,
+        "rounds": job.get("round", 0),
+        "escalated": escalated,
+        "auto_merged": merged is not None and "merging" in stages and stages[stages.index("merged") - 1] == "merging",
+        "accepted_as_built": not job.get("owner_changes", False),
+        "escaped": bool(job.get("escaped", False)),
+        "owner_minutes": job.get("owner_minutes"),
+        "cost_usd": job.get("cost_usd"),
+    }
+
+
+def _median(values: list):
+    vals = sorted(v for v in values if v is not None)
+    if not vals:
+        return None
+    mid = len(vals) // 2
+    return vals[mid] if len(vals) % 2 else round((vals[mid - 1] + vals[mid]) / 2, 2)
+
+
+def _count(ms: list[dict], key: str) -> tuple[int, int]:
+    known = [m[key] for m in ms if m[key] is not None]
+    return sum(1 for v in known if v), len(known)
+
+
+def scorecard(jobs: list[dict]) -> dict[str, dict]:
+    """One card per factory version. Pairs are (count, out of)."""
+    groups: dict[str, list[dict]] = {}
+    for job in jobs:
+        groups.setdefault(job.get("factory_version", BASE_VERSION), []).append(job_metrics(job))
+    cards = {}
+    for version, ms in groups.items():
+        merged = [m for m in ms if m["merged"]]
+        weeks = 1.0
+        if len(merged) > 1:
+            span = max(m["merged_at"] for m in merged) - min(m["merged_at"] for m in merged)
+            weeks = max(1.0, span.total_seconds() / (7 * 86400))
+        cards[version] = {
+            "version": version,
+            "jobs": len(ms),
+            "merged": len(merged),
+            "rejected": sum(1 for m in ms if m["rejected"]),
+            "merges_per_week": round(len(merged) / weeks, 2),
+            "agent_minutes_median": _median([m["agent_minutes"] for m in ms]),
+            "lead_hours_median": _median([m["lead_hours"] for m in merged]),
+            "first_pass_gate": _count(ms, "first_pass_gate"),
+            "rounds_mean": round(sum(m["rounds"] for m in merged) / len(merged), 2) if merged else None,
+            "escalated": _count(ms, "escalated"),
+            "auto_merged": (sum(1 for m in merged if m["auto_merged"]), len(merged)),
+            "accepted_as_built": (sum(1 for m in merged if m["accepted_as_built"]), len(merged)),
+            "change_fail": (sum(1 for m in merged if m["escaped"]), len(merged)),
+            "owner_minutes_median": _median([m["owner_minutes"] for m in merged]),
+            "cost_usd_median": _median([m["cost_usd"] for m in merged]),
+        }
+    return cards
+
+
+SCORECARD_ROWS = [
+    ("Jobs", "jobs"), ("Merged", "merged"), ("Merges per week", "merges_per_week"),
+    ("Agent time to a merge-ready PR, median minutes", "agent_minutes_median"),
+    ("Lead time, job created to merged, median hours", "lead_hours_median"),
+    ("First-pass gate", "first_pass_gate"), ("Rounds per merged job", "rounds_mean"),
+    ("Escalated by the approver", "escalated"), ("Auto-merged", "auto_merged"),
+    ("Accepted as built", "accepted_as_built"), ("Change fail rate", "change_fail"),
+    ("Owner minutes per merged PR, median", "owner_minutes_median"),
+    ("Cost per merged PR, median USD", "cost_usd_median"),
+]
+SMALL_SAMPLE = 10
+
+
+def _cell(value) -> str:
+    if value is None:
+        return "not measured"
+    if isinstance(value, (list, tuple)):
+        k, n = value
+        return f"{k} of {n} ({round(100 * k / n)}%)" if n else "none yet"
+    return str(value)
+
+
+def render_scorecard(cards: dict[str, dict], baseline: dict | None) -> str:
+    """Markdown: the frozen baseline, then every other version's card beside it."""
+    base_version = (baseline or {}).get("version", BASE_VERSION)
+    others = [v for v in sorted(cards) if v != base_version]
+    head = ["Metric", f"{base_version} baseline (frozen)"] + [f"{v} (n = {cards[v]['jobs']})" for v in others]
+    lines = ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
+    for label, key in SCORECARD_ROWS:
+        row = [label, _cell((baseline or {}).get(key))] + [_cell(cards[v].get(key)) for v in others]
+        lines.append("| " + " | ".join(row) + " |")
+    small = [v for v in others if cards[v]["jobs"] < SMALL_SAMPLE]
+    if small or (baseline and baseline.get("jobs", 0) < SMALL_SAMPLE):
+        lines += ["", f"Fewer than {SMALL_SAMPLE} jobs in a column, so the comparison is directional only. "
+                  "Report every rate with its count."]
+    return "\n".join(lines) + "\n"
+
+
+# --------------------------------------------------------------------------
 # Text the factory posts on GitHub (after tstack's file-pr and
 # leaving-pr-comments skills: problem first, one attribution note)
 # --------------------------------------------------------------------------

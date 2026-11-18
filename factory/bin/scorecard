@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+"""The factory scorecard: every job in factory/jobs/, grouped by factory version,
+beside the frozen baseline named in config.json ("baseline").
+
+  scorecard            markdown table to stdout
+  scorecard --json     the cards as JSON (to freeze a new baseline)
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+import factory as F  # noqa: E402
+
+
+def main(argv: list[str]) -> int:
+    root = F.repo_root()
+    cfg = F.load_config(root)
+    jobs = [F.read_job(p.parent) for p in sorted(F.jobs_dir(root).glob("*/job.json"))]
+    cards = F.scorecard(jobs)
+    if "--json" in argv:
+        print(json.dumps(cards, indent=2, default=str))
+        return 0
+    baseline = None
+    if cfg.get("baseline") and (root / cfg["baseline"]).exists():
+        baseline = json.loads((root / cfg["baseline"]).read_text())
+    print(F.render_scorecard(cards, baseline), end="")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

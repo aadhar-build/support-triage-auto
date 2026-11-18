@@ -35,6 +35,7 @@ Work reaches the factory as an issue. For anything bigger than a small fix, the 
 - `/factory run`: every open issue labelled `factory` (`factory/bin/job queue`), plus every unfinished job in `factory/jobs/`, `concurrency` at a time. Resume each job from its stage.
 - `/factory run <n>`: just issue `n`.
 - `/factory status`: `factory/bin/job list`, plus anything waiting on a human.
+- `/factory scorecard`: `factory/bin/scorecard`, this factory version's jobs beside the frozen baseline in `factory/baseline-v1.json`. When the owner says how many minutes a PR took them, what it cost, that they asked for changes, or that a merged change broke, record it with `job record <id> owner_minutes|cost_usd|owner_changes|escaped <value>`.
 - `/factory <anything else>`: answer from the job files, or record feedback (below).
 
 ## The pipeline for one job
