@@ -35,6 +35,8 @@ class Violation:
 
 
 CURLY_APOSTROPHE = "\u2019"
+# A maximal run of digits joined by nothing, one space or one dash.
+CARD_RUN = re.compile(r"[0-9](?:[ -]?[0-9])*")
 
 
 def load_rules(path):
@@ -105,7 +107,7 @@ def check(draft, customer_turns, rules):
         if rule.type == "banned_phrase":
             spans = _phrase_spans(draft, rule.phrases)
         else:
-            spans = set()
+            spans = _pii_spans(draft, customer_turns, rule.detect)
         hits.update((start, end, rule.id) for start, end in spans)
     return [Violation(rule_id, start, end, draft[start:end])
             for start, end, rule_id in sorted(hits)]
@@ -126,3 +128,35 @@ def _phrase_spans(draft, phrases):
         for match in re.finditer(pattern, text, re.IGNORECASE):
             spans.add(match.span())
     return spans
+
+
+def _pii_spans(draft, customer_turns, detect):
+    spans = set()
+    if "card_number" in detect:
+        spans |= _card_spans(draft)
+    return spans
+
+
+def _card_spans(text):
+    spans = set()
+    for match in CARD_RUN.finditer(text):
+        start, end = match.span()
+        if start > 0 and text[start - 1].isalnum():
+            continue
+        if end < len(text) and text[end].isalnum():
+            continue
+        digits = [int(ch) for ch in match.group() if ch.isdigit()]
+        if 13 <= len(digits) <= 19 and _luhn_ok(digits):
+            spans.add((start, end))
+    return spans
+
+
+def _luhn_ok(digits):
+    total = 0
+    for i, digit in enumerate(reversed(digits)):
+        if i % 2 == 1:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        total += digit
+    return total % 10 == 0

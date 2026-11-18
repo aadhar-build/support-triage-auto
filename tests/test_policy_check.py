@@ -110,5 +110,48 @@ class TestBannedPhrase(unittest.TestCase):
                          [Violation("t-promise", 2, 15, "full\n  refund")])
 
 
+CARD_ONLY = (Rule("t-card", "pii_echo", (), ("card_number",)),)
+
+
+class TestCardNumber(unittest.TestCase):
+    def assertFlaggedWhole(self, number):
+        draft = "Card " + number + " on file"
+        self.assertEqual(check(draft, [], CARD_ONLY),
+                         [Violation("t-card", 5, 5 + len(number), number)], number)
+
+    def test_luhn_valid_flagged_plain_spaced_dashed(self):
+        for number in ("4111111111111111", "4111 1111 1111 1111", "4111-1111-1111-1111",
+                       "378282246310005", "4000 0000 0000 0000 006"):
+            with self.subTest(number):
+                self.assertFlaggedWhole(number)
+        self.assertEqual(check("Card 4111 1111 1111 1111 on file", [], CARD_ONLY),
+                         [Violation("t-card", 5, 24, "4111 1111 1111 1111")])
+
+    def test_flagged_whether_or_not_customer_posted_it(self):
+        draft = "Is 4111111111111111 yours?"
+        expected = [Violation("t-card", 3, 19, "4111111111111111")]
+        self.assertEqual(check(draft, [], CARD_ONLY), expected)
+        self.assertEqual(check(draft, ["my card is 4111111111111111"], CARD_ONLY), expected)
+
+    def test_length_bounds(self):
+        self.assertFlaggedWhole("4222222222222")              # 13 digits
+        self.assertFlaggedWhole("4000 0000 0000 0000 006")    # 19 digits
+        for number in ("400000000002", "40000000000000000002"):  # 12 and 20, Luhn-valid
+            with self.subTest(number):
+                self.assertEqual(check("Card " + number + " on file", [], CARD_ONLY), [])
+
+    def test_luhn_invalid_not_flagged(self):
+        for number in ("4111 1111 1111 1112", "4000 0000 0000 0000 007", "4111111111111112"):
+            with self.subTest(number):
+                self.assertEqual(check("Card " + number + " on file", [], CARD_ONLY), [])
+
+    def test_run_ends_at_double_space_or_other_separator(self):
+        self.assertEqual(check("Ref 4111  1111 1111 1111", [], CARD_ONLY), [])
+        self.assertEqual(check("Ref 4111/1111/1111/1111", [], CARD_ONLY), [])
+
+    def test_letter_touching_run_not_flagged(self):
+        self.assertEqual(check("Order A4111111111111111", [], CARD_ONLY), [])
+
+
 if __name__ == "__main__":
     unittest.main()
