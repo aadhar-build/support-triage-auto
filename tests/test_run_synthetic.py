@@ -78,7 +78,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
                                  case("hacked", *HACKED)])
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0 rules_loaded=3\n")
+        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
         self.assertTrue((self.out / "synthetic_report.md").is_file())
         raw = (self.out / "synthetic_report.json").read_text(encoding="utf-8")
         self.assertTrue(raw.endswith("}\n"))
@@ -88,6 +88,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
             "cases_run": 3, "passed": 3, "failed": 0, "must_pass_cases": 3,
             "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
             "policy_violations": 0, "policy_mismatches": 0, "rules_loaded": 3,
+            "topics_loaded": 2,
         })
         self.assertEqual([c["id"] for c in report["cases"]], ["parcel", "praise", "hacked"])
         self.assertEqual(report["cases"][2], {
@@ -96,7 +97,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
             "actual": {"intent": "other", "action": "escalate", "escalate": True},
             "expected_violations": None, "actual_violations": None,
             "tiers": ["cheap", "larger"], "confidence": 1.0,
-            "reason_codes": ["high_risk_to_larger"],
+            "reason_codes": ["high_risk_to_larger"], "topic_id": [],
         })
         self.assertEqual(report["cases"][0]["actual"],
                          {"intent": "delivery", "action": "ask", "escalate": False})
@@ -115,7 +116,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
         proc = self.run_cli(self.write_cases([case("parcel", *PARCEL)]), rules=one_rule)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout,
-                         "cases=1 passed=1 failed=0 must_pass_failures=0 rules_loaded=1\n")
+                         "cases=1 passed=1 failed=0 must_pass_failures=0 rules_loaded=1 topics_loaded=2\n")
         self.assertEqual(self.report_json()["summary"]["rules_loaded"], 1)
         self.assertIn("| rules_loaded | 1 |", self.report_md())
 
@@ -124,7 +125,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
                                  case("hacked", *HACKED), case("locked", *LOCKED)])
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3\n")
+        self.assertEqual(proc.stdout, "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
         got = {c["id"]: (c["tiers"], c["confidence"]) for c in self.report_json()["cases"]}
         self.assertEqual(got, {
             "parcel": (["cheap", "agent"], 0.6),
@@ -169,7 +170,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertIn("billing", row)
         self.assertIn("delivery", row)
         self.assertTrue(row.endswith("| FAIL |"))
-        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0 rules_loaded=3\n")
+        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
 
     def _failing_case(self, must_pass):
         return self.write_cases([
@@ -180,7 +181,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
     def test_must_pass_failure_exits_1(self):
         proc = self.run_cli(self._failing_case(must_pass=True))
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1 rules_loaded=3\n")
+        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1 rules_loaded=3 topics_loaded=2\n")
         self.assertEqual(self.report_json()["summary"]["must_pass_failures"], 1)
         self.assertTrue((self.out / "synthetic_report.md").is_file())
 
@@ -249,13 +250,14 @@ class TestRunSynthetic(RunSyntheticTestBase):
     def test_empty_cases_list(self):
         proc = self.run_cli(self.write_cases([]))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0 rules_loaded=3\n")
+        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
         report = self.report_json()
         self.assertEqual(report["cases"], [])
         self.assertEqual(report["summary"], {
             "cases_run": 0, "passed": 0, "failed": 0, "must_pass_cases": 0,
             "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
             "policy_violations": 0, "policy_mismatches": 0, "rules_loaded": 3,
+            "topics_loaded": 2,
         })
         self.assertTrue((self.out / "synthetic_report.md").is_file())
 
@@ -361,9 +363,9 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout,
                          "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3"
-                         " trace_records=4\n")
+                         " topics_loaded=2 trace_records=4\n")
         self.assertEqual(plain.stdout,
-                         "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3\n")
+                         "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
         records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
         self.assertEqual([r["thread_id"] for r in records], [1, 2, 3, 4])
         report = self.report_json()["cases"]
@@ -372,7 +374,9 @@ class TestRunSynthetic(RunSyntheticTestBase):
             self.assertEqual(record["split"], "synthetic")
             self.assertEqual(record["seed"], 0)
             self.assertEqual(record["threshold"], 0.5)
-            self.assertIsNone(record["rules_version"])
+            self.assertEqual(record["rules_version"], "test-fixture")
+            self.assertEqual(record["trace_schema"], 2)
+            self.assertEqual(record["topic_id"], rc["topic_id"])
             self.assertIsNone(record["drift_config_version"])
             self.assertEqual(record["final"]["intent"], rc["actual"]["intent"])
             self.assertEqual(record["final"]["action"], rc["actual"]["action"])
@@ -434,6 +438,91 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertNotIn("policies/" + "rules.json", source)
         self.assertIn('"--cases", str(cases_path)', source)
         self.assertIn('"--rules", str(rules or self.rules)', source)
+
+
+QUUX = ("thanks, love it, quuxfrob", "praise", "escalate", True)
+
+
+class TestEscalateAlwaysTopics(RunSyntheticTestBase):
+    ALT_RULES = REPO_ROOT / "tests" / "fixtures" / "policy_rules_alt_topics.json"
+
+    def rules_with(self, topics, name):
+        rules = json.loads(FIXTURE_RULES.read_text(encoding="utf-8"))
+        if topics is None:
+            del rules["escalate_always"]
+        else:
+            rules["escalate_always"] = topics
+        path = self.dir / name
+        path.write_text(json.dumps(rules), encoding="utf-8")
+        return path
+
+    def test_topics_come_from_rules_file(self):
+        path = self.write_cases([case("quux", *QUUX)])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "cases=1 passed=1 failed=0 must_pass_failures=0"
+                                      " rules_loaded=3 topics_loaded=2\n")
+        forced = self.report_json()["cases"][0]
+        self.assertEqual(forced["actual"], {"intent": "praise", "action": "escalate",
+                                            "escalate": True})
+        self.assertEqual(forced["topic_id"], ["t-zorblax"])
+        self.assertIn("escalate_always", forced["reason_codes"])
+        self.assertEqual(forced["tiers"], ["cheap", "agent"])
+        self.assertNotIn("quuxfrob", (self.out / "synthetic_report.json").read_text("utf-8"))
+
+        alt_out = self.dir / "alt"
+        proc = self.run_cli(path, rules=self.ALT_RULES, out=alt_out)
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertTrue(proc.stdout.endswith(" topics_loaded=1\n"), proc.stdout)
+        alt = json.loads((alt_out / "synthetic_report.json").read_text(encoding="utf-8"))
+        self.assertEqual(alt["cases"][0]["actual"]["action"], "answer")
+        self.assertEqual(alt["cases"][0]["topic_id"], [])
+        self.assertEqual(alt["summary"]["topics_loaded"], 1)
+
+    def test_empty_or_missing_topics_exit_2(self):
+        path = self.write_cases([case("parcel", *PARCEL)])
+        for name, topics in (("empty", []), ("missing", None)):
+            with self.subTest(name):
+                out = self.dir / ("out-" + name)
+                proc = self.run_cli(path, rules=self.rules_with(topics, name + ".json"), out=out)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertTrue(proc.stderr.startswith("error: bad rules file: "), proc.stderr)
+                self.assertIn("escalate_always", proc.stderr)
+                self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertFalse(out.exists())
+
+    def test_trace_records_rules_version_and_topic_id(self):
+        from triage.trace import validate_record
+        path = self.write_cases([case("parcel", *PARCEL), case("quux", *QUUX)])
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli(path, extra=("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+        for record in records:
+            validate_record(record)
+            self.assertEqual(record["trace_schema"], 2)
+            self.assertEqual(record["rules_version"], "test-fixture")
+        self.assertEqual([r["topic_id"] for r in records], [[], ["t-zorblax"]])
+        self.assertEqual(records[1]["reason_codes"], ["escalate_always"])
+
+    def test_metrics_has_no_topic_fields(self):
+        path = self.write_cases([case("parcel", *PARCEL), case("quux", *QUUX)])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        banned = {"topic_id", "topics_loaded", "reason", "reasons", "reason_codes"}
+
+        def keys(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    yield k
+                    yield from keys(v)
+            elif isinstance(node, list):
+                for v in node:
+                    yield from keys(v)
+
+        metrics = json.loads((self.out / "metrics.json").read_text(encoding="utf-8"))
+        self.assertFalse(banned & set(keys(metrics)))
 
 
 if __name__ == "__main__":

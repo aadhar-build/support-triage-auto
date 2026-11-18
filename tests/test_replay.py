@@ -96,6 +96,30 @@ class TestSuccess(ReplayTestBase):
         for case_id in CASE_IDS:
             self.assertIn(case_id, page)
 
+    def test_forced_case_replays(self):
+        data = json.loads(self.cases.read_text(encoding="utf-8"))
+        data["cases"].append({
+            "id": "rp-forced", "title": "Made-up praise naming a fixture topic phrase",
+            "turns": [{"inbound": True, "text": "thanks, love it, quuxfrob"}],
+            "expected": {"intent": "praise", "action": "escalate", "should_escalate": True},
+            "must_pass": True})
+        cases = self.dir / "forced-cases.json"
+        cases.write_text(json.dumps(data), encoding="utf-8")
+        run_dir, trace = self.dir / "forced-run", self.dir / "forced-trace.jsonl"
+        code, stdout, stderr = run_main(run_synthetic, [
+            "--cases", str(cases), "--rules", str(FIXTURE_RULES),
+            "--out", str(run_dir), "--run-at", "2026-11-18T10:00:00Z",
+            "--trace", str(trace)])
+        self.assertEqual(code, 0, stderr)
+        self.assertIn(" topics_loaded=2 ", stdout)
+        code, stdout, stderr = self.replay(cases=cases, run=run_dir, trace=trace)
+        self.assertEqual(code, 0, stderr)
+        page = self.out.read_text(encoding="utf-8")
+        forced = section(page, "rp-forced")
+        self.assertIn("<code>escalate_always</code>", forced)
+        self.assertEqual(field(panel(page, "rp-forced", 1), "action")[1], "action: escalate")
+        self.assertNotIn("escalate_always", section(page, "rp-answer"))
+
 
 class TestRefuse(ReplayTestBase):
     def test_eval_split_trace(self):
@@ -238,6 +262,30 @@ class TestEndToEnd(ReplayTestBase):
         page = self.out.read_text(encoding="utf-8")
         for case_id in CASE_IDS:
             self.assertIn(case_id, page)
+
+    def test_forced_case_replays(self):
+        data = json.loads(self.cases.read_text(encoding="utf-8"))
+        data["cases"].append({
+            "id": "rp-forced", "title": "Made-up praise naming a fixture topic phrase",
+            "turns": [{"inbound": True, "text": "thanks, love it, quuxfrob"}],
+            "expected": {"intent": "praise", "action": "escalate", "should_escalate": True},
+            "must_pass": True})
+        cases = self.dir / "forced-cases.json"
+        cases.write_text(json.dumps(data), encoding="utf-8")
+        run_dir, trace = self.dir / "forced-run", self.dir / "forced-trace.jsonl"
+        code, stdout, stderr = run_main(run_synthetic, [
+            "--cases", str(cases), "--rules", str(FIXTURE_RULES),
+            "--out", str(run_dir), "--run-at", "2026-11-18T10:00:00Z",
+            "--trace", str(trace)])
+        self.assertEqual(code, 0, stderr)
+        self.assertIn(" topics_loaded=2 ", stdout)
+        code, stdout, stderr = self.replay(cases=cases, run=run_dir, trace=trace)
+        self.assertEqual(code, 0, stderr)
+        page = self.out.read_text(encoding="utf-8")
+        forced = section(page, "rp-forced")
+        self.assertIn("<code>escalate_always</code>", forced)
+        self.assertEqual(field(panel(page, "rp-forced", 1), "action")[1], "action: escalate")
+        self.assertNotIn("escalate_always", section(page, "rp-answer"))
 
 
 def fixture_inputs():

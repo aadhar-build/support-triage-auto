@@ -6,6 +6,9 @@ No network calls and no keys. The only file written is --out, plus the audit tra
 --trace PATH is given (one JSON line per routed thread, outside the repository; it is
 written before the report), plus gold-kind `triage.metrics` when --metrics-out PATH is given
 (with a required --cohort; written last). Default prices are placeholders, not real prices.
+The always-escalate topics come from --rules (default policies/rules.json), loaded before any
+data; a missing or empty topic list exits 2. Stdout ends with topics_loaded=<n> (before
+trace_records=<n> when a trace is written).
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from triage import metrics as metrics_mod
 from triage.cheap_tier import CheapTier
 from triage.evaluate import GoldFileError, load_gold, report_to_json, report_to_markdown, score
 from triage.loader import HeaderError
+from triage.policy_check import RulesError, load_escalate_topics, rules_version
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
 from triage.split import DEFAULT_SPLIT_PATH, SPLIT_NAMES, SplitConfigError, load_split_config, \
     split_threads
@@ -31,6 +35,7 @@ from triage.trace import REPO_ROOT, RunInfo, TraceError, build_record, check_tra
     code_version, write_trace
 
 DEFAULT_DATA = "data/raw/twcs.csv"
+DEFAULT_RULES_PATH = REPO_ROOT / "policies" / "rules.json"
 
 
 class _Fail(Exception):
@@ -48,6 +53,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("json", "md"), default="json")
     p.add_argument("--split", choices=SPLIT_NAMES, default="dev")
     p.add_argument("--split-config", default=str(DEFAULT_SPLIT_PATH))
+    p.add_argument("--rules", default=str(DEFAULT_RULES_PATH),
+                   help="rules file whose escalate_always topics force escalation")
     p.add_argument("--threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD)
     p.add_argument("--price-cheap", type=float, default=PLACEHOLDER_PRICES["cheap"])
     p.add_argument("--price-larger", type=float, default=PLACEHOLDER_PRICES["larger"])
@@ -107,6 +114,11 @@ def _run(args) -> str:
     run_at = _resolve_run_at(args.run_at)
     if args.trace is not None:
         check_trace_path(args.trace)
+    try:
+        topics = load_escalate_topics(args.rules)
+        rules_ver = rules_version(args.rules) if args.trace is not None else None
+    except RulesError as e:
+        raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
 
     try:
         gold = load_gold(args.gold)
@@ -144,15 +156,15 @@ def _run(args) -> str:
 
     routed = route_threads(sample, CheapTier(prices["cheap"]), FakeLargerTier(
         price_per_call=prices["larger"]), FakeAgentTier(prices["agent"]),
-        threshold=args.threshold)
+        threshold=args.threshold, topics=topics)
     report = score(routed, gold, prices, sample_size=args.sample_size, seed=args.seed,
                    split=args.split, threshold=args.threshold)
     text = report_to_json(report) if args.format == "json" else report_to_markdown(report)
     trace_records = None
     if args.trace is not None:
         commit, dirty = code_version(REPO_ROOT)
-        # This slice applies no rules file and no drift config, so both versions are null.
-        run = RunInfo(code_version=commit, code_dirty=dirty, rules_version=None,
+        # No drift config is applied, so its version is null.
+        run = RunInfo(code_version=commit, code_dirty=dirty, rules_version=rules_ver,
                       drift_config_version=None, threshold=args.threshold, split=args.split,
                       seed=args.seed)
         trace_records = write_trace(args.trace, (build_record(r, run) for r in routed))
@@ -171,6 +183,7 @@ def _run(args) -> str:
     summary = ("routed=%d scored=%d without_gold=%d gold_unmatched=%d split=%s"
                % (report.threads_routed, report.threads_scored, report.threads_without_gold,
                   report.gold_rows_unmatched, args.split))
+    summary += " topics_loaded=%d" % len(topics)
     if trace_records is not None:
         summary += " trace_records=%d" % trace_records
     return summary

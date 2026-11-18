@@ -2,11 +2,14 @@
 
 import unittest
 from datetime import datetime, timezone
+from pathlib import Path
 
 from triage.cheap_tier import CheapTier
+from triage.policy_check import load_escalate_topics
 from triage.router import (
     CASCADE_CODES,
     CHEAP_CONFIDENT,
+    ESCALATE_ALWAYS,
     DEFAULT_CONFIDENCE_THRESHOLD,
     HIGH_RISK_TO_LARGER,
     LOW_CONFIDENCE_TO_LARGER,
@@ -22,6 +25,7 @@ from triage.threads import Thread, Turn
 from triage.tiers import AgentTier, FakeAgentTier, FakeLargerTier, Labels, LabellingTier
 
 T0 = datetime(2017, 10, 31, 22, 0, 0, tzinfo=timezone.utc)
+TOPICS = load_escalate_topics(Path(__file__).resolve().parent / "fixtures" / "policy_rules.json")
 
 
 def thread(root_id, text="SENTINEL_TEXT"):
@@ -84,7 +88,7 @@ class TestRouteThread(unittest.TestCase):
         cheap = StubCheap(cheap_labels)
         larger = StubLarger(larger_labels if larger_labels is not None else cheap_labels)
         agent = StubAgent(agent_result)
-        r = route_thread(thread(5), cheap, larger, agent, threshold=threshold)
+        r = route_thread(thread(5), cheap, larger, agent, threshold=threshold, topics=())
         return r, cheap, larger, agent
 
     def test_plain(self):
@@ -97,7 +101,7 @@ class TestRouteThread(unittest.TestCase):
     def test_actionable(self):
         t = thread(6, "thanks, love it SENTINEL_TEXT_6")
         agent = FakeAgentTier()
-        r = route_thread(t, CheapTier(), FakeLargerTier(), agent)
+        r = route_thread(t, CheapTier(), FakeLargerTier(), agent, topics=())
         self.assertEqual(r.cheap_labels.action, "answer")
         self.assertEqual(r.cheap_labels.confidence, 0.75)
         self.assertEqual(r.tiers, ("cheap", "agent"))
@@ -135,7 +139,7 @@ class TestRouteThread(unittest.TestCase):
         t = thread(9, "hello there SENTINEL_TEXT_9")
         escalate = L(intent="complaint", urgency="high", action="escalate", confidence=1.0)
         agent = FakeAgentTier()
-        r = route_thread(t, CheapTier(), FakeLargerTier(overrides={9: escalate}), agent)
+        r = route_thread(t, CheapTier(), FakeLargerTier(overrides={9: escalate}), agent, topics=())
         self.assertEqual(r.cheap_labels.action, "ask")
         self.assertEqual(r.tiers, ("cheap", "larger"))
         self.assertEqual(r.labels, escalate)
@@ -158,7 +162,7 @@ class TestRouteThread(unittest.TestCase):
         larger.name = "l2"
         agent = StubAgent()
         agent.name = "a2"
-        r = route_thread(thread(1), cheap, larger, agent)
+        r = route_thread(thread(1), cheap, larger, agent, topics=())
         self.assertEqual(r.tiers, ("c2", "l2", "a2"))
 
 
@@ -166,29 +170,29 @@ class TestRouteThreads(unittest.TestCase):
     def test_order_and_ids(self):
         ids = [30, 10, 20]
         threads = [thread(i, "package SENTINEL_TEXT_%d" % i) for i in ids]
-        out = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier())
+        out = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=())
         self.assertEqual([r.thread_id for r in out], ids)
         for r, t in zip(out, threads):
             self.assertIsInstance(r, RoutedThread)
             self.assertEqual(r.thread_id, t.root_tweet_id)
-        self.assertEqual(route_threads([], CheapTier(), FakeLargerTier(), FakeAgentTier()), [])
+        self.assertEqual(route_threads([], CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=()), [])
 
     def test_bad_threshold(self):
         t = thread(1)
         for bad in (-0.01, 1.01, float("nan")):
             with self.subTest(threshold=bad):
                 with self.assertRaises(ValueError):
-                    route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=bad)
+                    route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=bad, topics=())
                 with self.assertRaises(ValueError):
                     route_threads([t], CheapTier(), FakeLargerTier(), FakeAgentTier(),
-                                  threshold=bad)
-        route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=0.0)
-        route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=1.0)
+                                  threshold=bad, topics=())
+        route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=0.0, topics=())
+        route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=1.0, topics=())
 
 
 def route(text, threshold=DEFAULT_CONFIDENCE_THRESHOLD, larger=None, root_id=11):
     return route_thread(thread(root_id, text), CheapTier(), larger or FakeLargerTier(),
-                        FakeAgentTier(), threshold=threshold)
+                        FakeAgentTier(), threshold=threshold, topics=())
 
 
 class TestReasonCodes(unittest.TestCase):
@@ -255,7 +259,7 @@ class TestSteps(unittest.TestCase):
     def test_agent_step_records_act_result(self):
         final = L(action="escalate")
         cheap = StubCheap(L(action="ask"))
-        r = route_thread(thread(5), cheap, StubLarger(L()), StubAgent(final))
+        r = route_thread(thread(5), cheap, StubLarger(L()), StubAgent(final), topics=())
         self.assertEqual([s.tier for s in r.steps], ["cheap", "agent"])
         self.assertEqual(r.steps[1].labels, final)
 
@@ -290,11 +294,11 @@ class TestSteps(unittest.TestCase):
         for name, (c, l, a) in cases.items():
             with self.subTest(tier=name):
                 with self.assertRaisesRegex(ValueError, name):
-                    route_thread(thread(1), c, l, a)
+                    route_thread(thread(1), c, l, a, topics=())
                 with self.assertRaisesRegex(ValueError, name):
-                    route_threads([thread(1)], c, l, a)
+                    route_threads([thread(1)], c, l, a, topics=())
                 with self.assertRaisesRegex(ValueError, name):
-                    route_threads([], c, l, a)
+                    route_threads([], c, l, a, topics=())
         self.assertEqual(ok[0].calls, 0)
 
     def test_routed_fields_unchanged(self):
@@ -319,7 +323,97 @@ class TestSteps(unittest.TestCase):
 
     def test_defaults_keep_old_constructions(self):
         r = RoutedThread(thread_id=1, labels=L(), cheap_labels=L(), tiers=("cheap",))
-        self.assertEqual((r.steps, r.reason_codes), ((), ()))
+        self.assertEqual((r.steps, r.reason_codes, r.topic_id), ((), (), ()))
+
+
+class RaisingLarger(StubLarger):
+    def label(self, thread):
+        raise AssertionError("the larger tier must not run on a forced thread")
+
+
+class RecordingAgent(StubAgent):
+    def act(self, thread, labels):
+        self.seen = labels
+        return super().act(thread, labels)
+
+
+def brand_thread(root_id, customer_text, brand_text):
+    turns = (Turn(root_id, "cust", True, T0, customer_text),
+             Turn(root_id + 1, "brand", False, T0, brand_text))
+    return Thread(root_tweet_id=root_id, brand_ids=("brand",), turns=turns, brand_replied=True)
+
+
+class TestEscalateAlways(unittest.TestCase):
+    def test_forced_over_confident_cheap(self):
+        cheap = StubCheap(L("praise", "low", "answer", 0.9))
+        r = route_thread(thread(3, "hi, quuxfrob"), cheap, RaisingLarger(L()), StubAgent(),
+                         topics=TOPICS)
+        self.assertEqual(r.labels, Labels("praise", "low", "escalate", 0.9))
+        self.assertEqual(r.cheap_labels, Labels("praise", "low", "answer", 0.9))
+
+    def test_larger_skipped_agent_drafts(self):
+        agent = RecordingAgent()
+        r = route_thread(thread(3, "a zorblax claim"), StubCheap(L("billing", "high", "route", 0.3)),
+                         RaisingLarger(L()), agent, topics=TOPICS)
+        self.assertEqual(r.tiers, ("cheap", "agent"))
+        self.assertEqual(len(r.steps), 2)
+        self.assertEqual(agent.calls, 1)
+        self.assertEqual(agent.seen, Labels("billing", "high", "escalate", 0.3))
+        self.assertEqual(r.labels, Labels("billing", "high", "escalate", 0.3))
+
+    def test_agent_cannot_unforce(self):
+        draft = Labels("delivery", "normal", "answer", 0.99)
+        r = route_thread(thread(3, "quuxfrob"), StubCheap(L("praise", "low", "answer", 0.9)),
+                         RaisingLarger(L()), StubAgent(draft), topics=TOPICS)
+        self.assertEqual(r.labels.action, "escalate")
+        self.assertEqual(r.labels, Labels("praise", "low", "escalate", 0.9))
+        self.assertEqual(r.steps[1], TierStep("agent", "stub", draft))
+
+    def test_reason_code_and_topic_id(self):
+        cheap = StubCheap(L("praise", "low", "answer", 0.9))
+        r = route_thread(thread(3, "quuxfrob"), cheap, RaisingLarger(L()), StubAgent(),
+                         topics=TOPICS)
+        self.assertIn(ESCALATE_ALWAYS, r.reason_codes)
+        self.assertIn(ESCALATE_ALWAYS, REASON_CODES)
+        for code in r.reason_codes:
+            self.assertTrue(is_known_reason_code(code), code)
+        self.assertEqual(r.topic_id, ("t-zorblax",))
+        both = route_thread(thread(4, "can't florp, quuxfrob"), cheap, RaisingLarger(L()),
+                            StubAgent(), topics=TOPICS)
+        self.assertEqual(both.topic_id, ("t-zorblax", "t-florp"))
+        self.assertEqual(both.reason_codes.count(ESCALATE_ALWAYS), 1)
+
+    def test_registry_appends_code(self):
+        self.assertEqual(ESCALATE_ALWAYS, "escalate_always")
+        self.assertEqual(REASON_CODES, CASCADE_CODES + ("escalate_always",))
+
+    def test_brand_turn_never_forces(self):
+        cheap = StubCheap(L("praise", "low", "answer", 0.9))
+        r = route_thread(brand_thread(7, "thanks", "quuxfrob"), cheap, StubLarger(L()),
+                         StubAgent(), topics=TOPICS)
+        self.assertEqual(r.labels.action, "answer")
+        self.assertEqual(r.topic_id, ())
+
+    def test_no_match_is_unchanged(self):
+        for topics in ((), TOPICS):
+            with self.subTest(topics=len(topics)):
+                r = route_thread(thread(5, "thanks, love it"), CheapTier(), FakeLargerTier(),
+                                 FakeAgentTier(), topics=topics)
+                self.assertEqual(r.reason_codes, (CHEAP_CONFIDENT,))
+                self.assertEqual(r.topic_id, ())
+                self.assertEqual(r.labels, L("praise", "low", "answer", 0.75))
+
+    def test_route_threads_forces_too(self):
+        out = route_threads([thread(1, "hello"), thread(2, "quuxfrob")], CheapTier(),
+                            FakeLargerTier(), FakeAgentTier(), topics=TOPICS)
+        self.assertEqual([r.topic_id for r in out], [(), ("t-zorblax",)])
+        self.assertEqual(out[1].labels.action, "escalate")
+
+    def test_topics_is_required_keyword(self):
+        with self.assertRaises(TypeError):
+            route_thread(thread(1), CheapTier(), FakeLargerTier(), FakeAgentTier())
+        with self.assertRaises(TypeError):
+            route_threads([], CheapTier(), FakeLargerTier(), FakeAgentTier())
 
 
 if __name__ == "__main__":

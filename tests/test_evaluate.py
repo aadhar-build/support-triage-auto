@@ -418,7 +418,7 @@ class TestReportOutput(unittest.TestCase):
                           "sorry SENTINEL_TEXT_REPLY"))
             threads.append(Thread(root_tweet_id=tid, brand_ids=("SENTINELBRAND",), turns=turns,
                                   brand_replied=True))
-        routed = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier())
+        routed = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=())
         gold = {ids[0]: g("delivery", "escalate", True), ids[1]: g("praise", "answer", False),
                 987659999: g("other", "ask", False)}
         r = score(routed, gold, PLACEHOLDER_PRICES, sample_size=3, seed=11, split="dev",

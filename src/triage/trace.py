@@ -1,7 +1,8 @@
 """Audit trace: one JSON record per routed thread, written as JSON lines outside the repo.
 
 A record holds the code version and threshold that produced a decision, each tier step
-with its model id and labels, the final labels and the reason codes. It holds the thread's
+with its model id and labels, the final labels, the reason codes and the ids of any
+always-escalate topics that forced the decision (`topic_id`, empty when none did). It holds the thread's
 conversation id (root tweet id) but never tweet text, author ids or brand ids.
 
 Known limits of the code version: it is read from git at run time. `code_dirty` ignores
@@ -20,19 +21,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
-from triage.router import RoutedThread, is_known_reason_code
+from triage.router import ESCALATE_ALWAYS, RoutedThread, is_known_reason_code
 
-TRACE_SCHEMA = 1
+TRACE_SCHEMA = 2
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _GIT_TIMEOUT_SECONDS = 10
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _RECORD_KEYS = ("trace_schema", "thread_id", "code_version", "code_dirty", "rules_version",
                 "drift_config_version", "threshold", "split", "seed", "tiers", "final",
-                "reason_codes")
+                "reason_codes", "topic_id")
 _NULLABLE_KEYS = ("rules_version", "drift_config_version")
 _LABEL_KEYS = ("intent", "urgency", "action", "confidence")
 _TIER_KEYS = ("tier", "model_id") + _LABEL_KEYS
+_TOPIC_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 class TraceError(ValueError):
@@ -96,6 +98,7 @@ def build_record(routed: RoutedThread, run: RunInfo) -> dict:
                   for s in routed.steps],
         "final": _labels(routed.labels),
         "reason_codes": list(routed.reason_codes),
+        "topic_id": list(routed.topic_id),
     }
 
 
@@ -136,6 +139,14 @@ def validate_record(record) -> None:
     for code in codes:
         if not is_known_reason_code(code):
             fail("reason_codes", "holds an unregistered code %r" % (code,))
+    topic_id = record["topic_id"]
+    if not isinstance(topic_id, list) or not all(
+            isinstance(t, str) and _TOPIC_ID_RE.fullmatch(t) for t in topic_id):
+        fail("topic_id", "is not a list of kebab-case topic ids")
+    if ESCALATE_ALWAYS in codes and not topic_id:
+        fail("topic_id", "is empty but reason_codes holds %r" % ESCALATE_ALWAYS)
+    if topic_id and ESCALATE_ALWAYS not in codes:
+        fail("topic_id", "is not empty but reason_codes lacks %r" % ESCALATE_ALWAYS)
 
 
 def _check_out_path(path) -> Path:

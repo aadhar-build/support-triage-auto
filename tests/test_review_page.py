@@ -253,6 +253,33 @@ class TestReviewPage(ReviewTestBase):
                 with self.assertRaises(ReportError):
                     load_run(d)
 
+    def test_load_run_accepts_topic_fields(self):
+        from triage.review_page import load_run
+        cases = standard_cases() + [case("quux", "thanks, quuxfrob", "praise", "escalate", True)]
+        _, run_dir = self.make_run(cases)
+        report = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["topics_loaded"], 2)
+        loaded, _ = load_run(run_dir)
+        self.assertEqual([c["topic_id"] for c in loaded], [[], [], [], [], ["t-zorblax"]])
+        self.assertIn("escalate_always", loaded[4]["reason_codes"])
+
+    def test_load_run_refuses_missing_topic_id(self):
+        from triage.review_page import ReportError, load_run
+        _, run_dir = self.make_run(standard_cases())
+        report = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))
+        for name, mutate in (("missing", lambda r: r["cases"][0].pop("topic_id")),
+                             ("not a list", lambda r: r["cases"][0].__setitem__("topic_id", "x")),
+                             ("non-string", lambda r: r["cases"][0].__setitem__("topic_id", [1])),
+                             ("no topics_loaded", lambda r: r["summary"].pop("topics_loaded"))):
+            with self.subTest(name):
+                bad = json.loads(json.dumps(report))
+                mutate(bad)
+                d = self.dir / ("ti-" + name.replace(" ", "-"))
+                d.mkdir()
+                (d / "synthetic_report.json").write_text(json.dumps(bad), encoding="utf-8")
+                with self.assertRaises(ReportError):
+                    load_run(d)
+
     def test_refuses_non_synthetic_input(self):
         cases_path, run_dir = self.make_run(standard_cases())
         good = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))

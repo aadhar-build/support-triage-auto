@@ -24,7 +24,8 @@
         "cheap",
         "agent"
       ],
-      "title": "Made-up praise with a clean draft"
+      "title": "Made-up praise with a clean draft",
+      "topic_id": []
     },
     {
       "actual": {
@@ -50,7 +51,8 @@
         "cheap",
         "agent"
       ],
-      "title": "Made-up parcel with no draft"
+      "title": "Made-up parcel with no draft",
+      "topic_id": []
     },
     {
       "actual": {
@@ -76,7 +78,8 @@
         "cheap",
         "larger"
       ],
-      "title": "Made-up three-turn login trouble"
+      "title": "Made-up three-turn login trouble",
+      "topic_id": []
     },
     {
       "actual": {
@@ -102,7 +105,8 @@
         "cheap",
         "larger"
       ],
-      "title": "Made-up hacked account"
+      "title": "Made-up hacked account",
+      "topic_id": []
     },
     {
       "actual": {
@@ -132,7 +136,8 @@
         "cheap",
         "agent"
       ],
-      "title": "Made-up praise with a draft that breaks a rule"
+      "title": "Made-up praise with a draft that breaks a rule",
+      "topic_id": []
     }
   ],
   "summary": {
@@ -145,6 +150,7 @@
     "passed": 5,
     "policy_mismatches": 0,
     "policy_violations": 1,
-    "rules_loaded": 3
+    "rules_loaded": 3,
+    "topics_loaded": 2
   }
 }

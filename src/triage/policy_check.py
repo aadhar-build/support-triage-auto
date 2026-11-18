@@ -1,13 +1,16 @@
-"""Check draft public replies against the owner's policy rules file.
+"""Check draft public replies against the owner's policy rules file, and match customer
+turns against the file's always-escalate topics.
 
-The rules come only from the file given to `load_rules`; this module holds no rule ids
-or phrases of its own. Standard library only.
+The rules and topics come only from the file given to `load_rules` and
+`load_escalate_topics`; this module holds no rule ids, topic ids or phrases of its own.
+Standard library only.
 """
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
 
 
 RULE_TYPES = ("banned_phrase", "pii_echo")
@@ -27,6 +30,14 @@ class Rule:
 
 
 @dataclass(frozen=True)
+class Topic:
+    """An always-escalate topic: its id, its phrases and their patterns, compiled once."""
+    id: str
+    phrases: tuple
+    patterns: tuple = field(default=(), repr=False, compare=False)
+
+
+@dataclass(frozen=True)
 class Violation:
     rule_id: str
     start: int
@@ -43,18 +54,11 @@ EMAIL_MASK = "\x00"
 CARD_RUN = re.compile(r"[0-9](?:[ -]?[0-9])*")
 # Optional "+" and "(", then digits joined by at most two of: space - . ( )
 PHONE_RUN = re.compile(r"\+?\(?[0-9](?:[ .()-]{0,2}[0-9])*")
+TOPIC_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
-def load_rules(path):
-    """Read the rules file at `path` and return its public reply rules in file order.
-
-    The result is a non-empty tuple of `Rule` records, so callers get the number of
-    loaded rules as `len(load_rules(path))` (for example, to log or display it).
-
-    Raises RulesError, naming the file and the problem, for any missing or malformed
-    file. An empty `public_reply_rules` list is refused too (fail closed), so a blanked
-    rules file can never make every draft safe to send.
-    """
+def _read_rules_object(path):
+    """Return (path, fail, data) for a rules file whose top level is a JSON object."""
     path = Path(path)
 
     def fail(problem):
@@ -70,6 +74,20 @@ def load_rules(path):
         raise fail("not valid JSON (%s)" % exc) from exc
     if not isinstance(data, dict):
         raise fail("top level must be a JSON object")
+    return path, fail, data
+
+
+def load_rules(path):
+    """Read the rules file at `path` and return its public reply rules in file order.
+
+    The result is a non-empty tuple of `Rule` records, so callers get the number of
+    loaded rules as `len(load_rules(path))` (for example, to log or display it).
+
+    Raises RulesError, naming the file and the problem, for any missing or malformed
+    file. An empty `public_reply_rules` list is refused too (fail closed), so a blanked
+    rules file can never make every draft safe to send.
+    """
+    path, fail, data = _read_rules_object(path)
     raw_rules = data.get("public_reply_rules")
     if not isinstance(raw_rules, list):
         raise fail("'public_reply_rules' is missing or is not a list")
@@ -113,6 +131,64 @@ def load_rules(path):
     return tuple(rules)
 
 
+def load_escalate_topics(path):
+    """Read the rules file at `path` and return its always-escalate topics in file order.
+
+    Each item of `escalate_always` is an object with a kebab-case `id` and a non-empty
+    `phrases` list of non-empty strings; other keys are ignored. Raises RulesError, naming
+    the file and the problem, for a missing, empty or malformed list (fail closed), so a
+    blanked rules file can never switch the rule off.
+    """
+    path, fail, data = _read_rules_object(path)
+    raw_topics = data.get("escalate_always")
+    if not isinstance(raw_topics, list):
+        raise fail("'escalate_always' is missing or is not a list")
+    if not raw_topics:
+        raise fail("'escalate_always' is empty; at least one topic is required")
+    topics = []
+    seen = set()
+    for index, raw in enumerate(raw_topics):
+        if not isinstance(raw, dict):
+            raise fail("topic at index %d is not an object" % index)
+        topic_id = raw.get("id")
+        if not isinstance(topic_id, str) or not topic_id:
+            raise fail("topic at index %d has no 'id' or its 'id' is not a non-empty string"
+                       % index)
+        if not TOPIC_ID.fullmatch(topic_id):
+            raise fail("topic id %r is not kebab-case ([a-z0-9][a-z0-9-]*)" % topic_id)
+        if topic_id in seen:
+            raise fail("duplicate topic id %r" % topic_id)
+        seen.add(topic_id)
+        phrases = raw.get("phrases")
+        if not isinstance(phrases, list) or not phrases:
+            raise fail("topic %r needs a non-empty 'phrases' list" % topic_id)
+        for phrase in phrases:
+            if not isinstance(phrase, str) or not phrase:
+                raise fail("topic %r has a phrase that is not a non-empty string: %r"
+                           % (topic_id, phrase))
+        topics.append(Topic(topic_id, tuple(phrases),
+                            tuple(_phrase_pattern(p) for p in phrases)))
+    return tuple(topics)
+
+
+def rules_version(path) -> Optional[str]:
+    """The rules file's top-level `version` string, or None when it has none."""
+    _, _, data = _read_rules_object(path)
+    version = data.get("version")
+    return version if isinstance(version, str) else None
+
+
+def matched_topics(customer_turns, topics):
+    """Ids of the topics with a phrase hit in any customer turn, in topic order, once each.
+
+    Same matching as banned phrases: whole words, any case, a space matches any run of
+    whitespace, and curly and straight apostrophes are equal.
+    """
+    texts = [turn.replace(CURLY_APOSTROPHE, "'") for turn in customer_turns]
+    return tuple(topic.id for topic in topics
+                 if any(p.search(text) for p in topic.patterns for text in texts))
+
+
 def check(draft, customer_turns, rules):
     """Return every policy violation in `draft`, sorted by (start, end, rule_id)."""
     hits = set()
@@ -136,11 +212,17 @@ def _phrase_spans(draft, phrases):
     text = draft.replace(CURLY_APOSTROPHE, "'")
     spans = set()
     for phrase in phrases:
-        words = phrase.replace(CURLY_APOSTROPHE, "'").split(" ")
-        pattern = r"(?<!\w)" + r"\s+".join(re.escape(w) for w in words) + r"(?!\w)"
-        for match in re.finditer(pattern, text, re.IGNORECASE):
+        for match in _phrase_pattern(phrase).finditer(text):
             spans.add(match.span())
     return spans
+
+
+def _phrase_pattern(phrase):
+    """Whole-word, case-insensitive pattern for a phrase; a space matches any whitespace
+    run. Callers swap curly apostrophes for straight ones in the text they search."""
+    words = phrase.replace(CURLY_APOSTROPHE, "'").split(" ")
+    return re.compile(r"(?<!\w)" + r"\s+".join(re.escape(w) for w in words) + r"(?!\w)",
+                      re.IGNORECASE)
 
 
 def _pii_spans(draft, customer_turns, detect):

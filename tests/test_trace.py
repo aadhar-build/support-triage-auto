@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from triage.cheap_tier import CheapTier
+from triage.policy_check import load_escalate_topics
 from triage.router import route_thread
 from triage.threads import Thread, Turn
 from triage.tiers import FakeAgentTier, FakeLargerTier
@@ -26,7 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 T0 = datetime(2017, 10, 31, 22, 0, 0, tzinfo=timezone.utc)
 RECORD_KEYS = {"trace_schema", "thread_id", "code_version", "code_dirty", "rules_version",
                "drift_config_version", "threshold", "split", "seed", "tiers", "final",
-               "reason_codes"}
+               "reason_codes", "topic_id"}
 TIER_KEYS = {"tier", "model_id", "intent", "urgency", "action", "confidence"}
 FINAL_KEYS = {"intent", "urgency", "action", "confidence"}
 NULLABLE = {"rules_version", "drift_config_version"}
@@ -37,7 +38,16 @@ RUN = RunInfo(code_version="a" * 40, code_dirty=False, rules_version=None,
 def routed(root_id=21, text="hello SENTINEL_TEXT"):
     turn = Turn(root_id, "cust_SENTINEL", True, T0, text)
     t = Thread(root_tweet_id=root_id, brand_ids=(99,), turns=(turn,), brand_replied=False)
-    return route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier())
+    return route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=())
+
+
+TOPICS = load_escalate_topics(Path(__file__).resolve().parent / "fixtures" / "policy_rules.json")
+
+
+def forced(root_id=22):
+    turn = Turn(root_id, "cust_SENTINEL", True, T0, "thanks, quuxfrob")
+    t = Thread(root_tweet_id=root_id, brand_ids=(), turns=(turn,), brand_replied=False)
+    return route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=TOPICS)
 
 
 def record(root_id=21):
@@ -63,6 +73,8 @@ class TestRecord(unittest.TestCase):
                                         "action": "ask", "confidence": 1.0})
         self.assertEqual(set(rec["final"]), FINAL_KEYS)
         self.assertEqual(rec["reason_codes"], ["low_confidence_to_larger"])
+        self.assertEqual(rec["topic_id"], [])
+        self.assertEqual(TRACE_SCHEMA, 2)
         text = json.dumps(rec)
         self.assertNotIn("SENTINEL", text)
         self.assertNotIn("99", text)
@@ -90,7 +102,7 @@ class TestRecord(unittest.TestCase):
             "confidence": lambda r: r["tiers"][1].pop("confidence"),
             "reason_codes": lambda r: r.__setitem__("reason_codes", []),
             "reason_codes ": lambda r: r.__setitem__("reason_codes", ["made_up_code"]),
-            "trace_schema": lambda r: r.__setitem__("trace_schema", 2),
+            "trace_schema": lambda r: r.__setitem__("trace_schema", 1),
         }
         for key, mutate in mutations.items():
             with self.subTest(mutate=key):
@@ -98,6 +110,44 @@ class TestRecord(unittest.TestCase):
                 mutate(rec)
                 with self.assertRaisesRegex(TraceError, key.strip()):
                     validate_record(rec)
+
+    def test_forced_record_validates(self):
+        rec = build_record(forced(), RUN)
+        self.assertEqual(set(rec), RECORD_KEYS)
+        self.assertEqual(rec["topic_id"], ["t-zorblax"])
+        self.assertIn("escalate_always", rec["reason_codes"])
+        self.assertEqual([t["tier"] for t in rec["tiers"]], ["cheap", "agent"])
+        self.assertEqual(rec["final"]["action"], "escalate")
+        self.assertNotIn("quuxfrob", json.dumps(rec))
+        validate_record(rec)
+
+    def test_topic_id_consistency(self):
+        def schema_1(r):
+            r["trace_schema"] = 1
+        cases = {
+            "missing topic_id": (record, lambda r: r.pop("topic_id")),
+            "topic_id not a list": (record, lambda r: r.__setitem__("topic_id", "t-zorblax")),
+            "topic_id not kebab": (lambda: build_record(forced(), RUN),
+                                   lambda r: r.__setitem__("topic_id", ["Not_Kebab"])),
+            "topic_id holds a non-string": (lambda: build_record(forced(), RUN),
+                                            lambda r: r.__setitem__("topic_id", [3])),
+            "escalate_always with empty topic_id": (lambda: build_record(forced(), RUN),
+                                                    lambda r: r.__setitem__("topic_id", [])),
+            "topic_id without escalate_always": (record,
+                                                 lambda r: r.__setitem__("topic_id", ["t-x"])),
+            "schema 1": (record, schema_1),
+        }
+        for name, (make, mutate) in cases.items():
+            with self.subTest(name):
+                rec = make()
+                mutate(rec)
+                with self.assertRaises(TraceError) as cm:
+                    validate_record(rec)
+                self.assertIn("thread 2", str(cm.exception))
+        rec = record()
+        rec["trace_schema"] = 1
+        with self.assertRaisesRegex(TraceError, "'trace_schema' is not 2"):
+            validate_record(rec)
 
     def test_error_message_is_one_line(self):
         rec = record()

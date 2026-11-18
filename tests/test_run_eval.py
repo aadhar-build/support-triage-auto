@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_RULES = REPO_ROOT / "tests" / "fixtures" / "policy_rules.json"
 
 TWCS_HEADER = "tweet_id,author_id,inbound,created_at,text,response_tweet_id,in_response_to_tweet_id\n"
 TWCS_ROWS = [
@@ -54,14 +55,15 @@ class CliTestBase(unittest.TestCase):
         path.write_text(text, encoding="utf-8")
         return path
 
-    def run_cli(self, *extra, data=None, gold=None, split=None, out=None):
+    def run_cli(self, *extra, data=None, gold=None, split=None, out=None, rules=None):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
         args = [sys.executable, "-m", "triage.run_eval",
                 "--data", str(data or self.data),
                 "--gold", str(gold or self.gold),
                 "--split-config", str(split or self.split),
-                "--out", str(out or self.out)]
+                "--out", str(out or self.out),
+                "--rules", str(rules or FIXTURE_RULES)]
         args.extend(extra)
         return subprocess.run(args, env=env, capture_output=True, text=True, timeout=60,
                               cwd=str(self.dir))
@@ -85,6 +87,7 @@ class TestRunEval(CliTestBase):
         # thread 7 is routed (account access), gold says escalate: one missed escalation
         self.assertEqual(data["missed_escalations"], 1)
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
+        self.assertTrue(proc.stdout.endswith(" split=dev topics_loaded=2\n"), proc.stdout)
         for text in (self.out.read_text(encoding="utf-8"), proc.stdout, proc.stderr):
             self.assertNotIn("SENTINEL", text)
 
@@ -148,6 +151,33 @@ class TestRunEval(CliTestBase):
                 self.assertNotIn("Traceback", proc.stderr)
                 self.assertFalse(out.exists())
 
+    def test_bad_topic_list_exits_2_before_data(self):
+        rules = json.loads(FIXTURE_RULES.read_text(encoding="utf-8"))
+        for name, topics in (("empty", []), ("missing", None)):
+            with self.subTest(name):
+                bad = dict(rules)
+                if topics is None:
+                    del bad["escalate_always"]
+                else:
+                    bad["escalate_always"] = topics
+                path = self.write("rules_%s.json" % name, json.dumps(bad))
+                out = self.dir / ("out_rules_%s.json" % name)
+                for data in (None, self.dir / "missing.csv"):
+                    proc = self.run_cli(out=out, rules=path, data=data)
+                    self.assertEqual(proc.returncode, 2, proc.stderr)
+                    self.assertTrue(proc.stderr.startswith("error: bad rules file: "),
+                                    proc.stderr)
+                    self.assertIn("escalate_always", proc.stderr)
+                    self.assertEqual(len(proc.stderr.strip().splitlines()), 1, proc.stderr)
+                    self.assertEqual(proc.stdout, "")
+                    self.assertFalse(out.exists())
+
+    def test_topics_loaded_follows_rules_file(self):
+        alt = REPO_ROOT / "tests" / "fixtures" / "policy_rules_alt_topics.json"
+        proc = self.run_cli(rules=alt)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(proc.stdout.endswith(" topics_loaded=1\n"), proc.stdout)
+
 
 class TestTrace(CliTestBase):
     def test_trace_written(self):
@@ -164,11 +194,37 @@ class TestTrace(CliTestBase):
             validate_record(rec)
             self.assertEqual(rec["threshold"], 0.6)
             self.assertEqual((rec["split"], rec["seed"]), ("dev", 3))
-            self.assertIsNone(rec["rules_version"])
+            self.assertEqual(rec["rules_version"], "test-fixture")
+            self.assertEqual(rec["trace_schema"], 2)
+            self.assertEqual(rec["topic_id"], [])
             self.assertIsNone(rec["drift_config_version"])
             self.assertRegex(rec["code_version"], r"^[0-9a-f]{40}$")
         self.assertEqual(sorted(r["thread_id"] for r in records), [1, 3, 5, 7, 9])
-        self.assertTrue(proc.stdout.strip().endswith(" trace_records=5"), proc.stdout)
+        self.assertTrue(proc.stdout.strip().endswith(" topics_loaded=2 trace_records=5"),
+                        proc.stdout)
+
+    def test_trace_records_rules_version_and_topic_id(self):
+        from triage.trace import validate_record
+        row = '11,cust_SENTINELF,True,Tue Oct 31 22:16:47 +0000 2017,"thanks, quuxfrob SENTINEL_TEXT_11",,'
+        data = self.write("twcs_topic.csv", TWCS_HEADER + "\n".join(TWCS_ROWS + [row]) + "\n")
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli("--trace", str(trace), data=data)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        records = {}
+        for line in trace.read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            validate_record(rec)
+            self.assertEqual(rec["trace_schema"], 2)
+            self.assertEqual(rec["rules_version"], "test-fixture")
+            self.assertIsInstance(rec["topic_id"], list)
+            records[rec["thread_id"]] = rec
+        self.assertEqual(records[11]["topic_id"], ["t-zorblax"])
+        self.assertEqual(records[11]["reason_codes"], ["escalate_always"])
+        self.assertEqual(records[11]["final"]["action"], "escalate")
+        self.assertEqual([t["tier"] for t in records[11]["tiers"]], ["cheap", "agent"])
+        self.assertEqual({k: r["topic_id"] for k, r in records.items() if k != 11},
+                         {1: [], 3: [], 5: [], 7: [], 9: []})
+        self.assertNotIn("quuxfrob", trace.read_text(encoding="utf-8"))
 
     def test_trace_has_no_text_or_author_ids(self):
         trace = self.dir / "t.jsonl"
@@ -261,7 +317,8 @@ class TestTrace(CliTestBase):
         proc = self.run_cli("--trace", str(trace), "--metrics-out", str(m2), "--cohort",
                             "gold_random", out=out2)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertTrue(proc.stdout.strip().endswith(" trace_records=5"), proc.stdout)
+        self.assertTrue(proc.stdout.strip().endswith(" topics_loaded=2 trace_records=5"),
+                        proc.stdout)
         for path in (trace, out2, m2):
             self.assertTrue(path.is_file(), path)
         self.assertEqual(json.loads(m2.read_text(encoding="utf-8"))["cohort"]["name"],

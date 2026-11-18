@@ -1,0 +1,43 @@
+{
+  "version": "test-fixture-alt",
+  "public_reply_rules": [
+    {
+      "id": "t-promise",
+      "type": "banned_phrase",
+      "description": "Made-up test rule: promises.",
+      "phrases": [
+        "we'll refund",
+        "full refund",
+        "compensation"
+      ]
+    },
+    {
+      "id": "t-secret",
+      "type": "banned_phrase",
+      "description": "Made-up test rule: secrets.",
+      "phrases": [
+        "cvv",
+        "your password"
+      ]
+    },
+    {
+      "id": "t-pii",
+      "type": "pii_echo",
+      "description": "Made-up test rule: personal data.",
+      "detect": [
+        "card_number",
+        "email_from_customer",
+        "phone_from_customer"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "t-plinker",
+      "description": "Made-up test topic: a different set.",
+      "phrases": [
+        "plinkerdoo"
+      ]
+    }
+  ]
+}
