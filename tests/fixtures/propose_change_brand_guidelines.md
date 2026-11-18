@@ -1,0 +1,48 @@
+# Made-up brand
+
+Made-up prose for a test brand. Nothing here is real guidance.
+
+```rules
+{
+  "version": "pc-fixture-1",
+  "status": "Made-up test fixture for propose_change.",
+  "public_reply_rules": [
+    {
+      "id": "pc-promise",
+      "type": "banned_phrase",
+      "description": "Made-up rule: sentinel promise.",
+      "phrases": [
+        "zorptastic refund"
+      ]
+    },
+    {
+      "id": "pc-pii",
+      "type": "pii_echo",
+      "description": "Made-up rule: personal data.",
+      "detect": [
+        "card_number",
+        "email_from_customer",
+        "phone_from_customer"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "pc-sentinel",
+      "description": "Made-up topic: sentinel alpha.",
+      "phrases": [
+        "quuxfrob"
+      ]
+    }
+  ],
+  "repeat_contact": {
+    "window_days": 7,
+    "min_conversations": 3,
+    "effect": "escalate",
+    "report_window_hours": 72,
+    "note": "Made-up note."
+  }
+}
+```
+
+More made-up prose.
