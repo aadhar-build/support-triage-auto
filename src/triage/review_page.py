@@ -5,7 +5,8 @@ Usage: python3 -m triage.review_page --cases CASES.json --run DIR --out PAGE.htm
 Reads the made-up cases file and DIR/synthetic_report.json, and writes a page where a
 reviewer can approve, edit, reject or change the action of each case, then download the
 decisions as decisions.json for python3 -m triage.apply_review. Flagged cases (a policy
-violation or action escalate) come first. The page makes no network requests. Only a
+violation or action escalate) come first. A case with a policy violation shows only Edit and
+Reject; a case flagged only by escalate needs a reason before Approve. The page makes no network requests. Only a
 synthetic run is accepted: any other input exits 2 with a one-line error.
 """
 
@@ -121,6 +122,11 @@ def _violations(v) -> str:
 
 def _case_html(c: dict, r: dict) -> str:
     flagged = is_flagged(r)
+    if has_violation(r):
+        verdict = '<button type="button" class="edit" disabled>Edit</button> '
+    else:
+        verdict = ('<button type="button" class="approve"%s>Approve</button> '
+                   % (" disabled" if flagged else ""))
     turns = "".join(
         '<li class="turn %s"><span class="who">%s</span> %s</li>'
         % (who, who, _e(t["text"]))
@@ -150,14 +156,13 @@ def _case_html(c: dict, r: dict) -> str:
         '<div class="controls">'
         '<label>action <select class="action-select" data-original="%s">%s</select></label> '
         '<label>reason <input class="reason" type="text"></label> '
-        '<button type="button" class="approve"%s>Approve</button> '
+        '%s'
         '<button type="button" class="reject">Reject</button> '
         '<span class="status"></span></div>\n'
         '</section>\n'
     ) % (" flagged" if flagged else "", _e(c["id"]), "true" if flagged else "false",
          _e(c["id"]), _e(c["title"]), ' <span class="flag">flagged</span>' if flagged else "",
-         turns, labels, draft, _e(r["actual"]["action"]), options,
-         " disabled" if flagged else "")
+         turns, labels, draft, _e(r["actual"]["action"]), options, verdict)
 
 
 STYLE = """
@@ -190,6 +195,7 @@ SCRIPT = """
     var reason = el.querySelector("input.reason");
     var select = el.querySelector("select.action-select");
     var approve = el.querySelector("button.approve");
+    var edit = el.querySelector("button.edit");
     var reject = el.querySelector("button.reject");
     var status = el.querySelector(".status");
     var original = draft ? draft.defaultValue : null;
@@ -197,8 +203,10 @@ SCRIPT = """
 
     function edited() { return draft !== null && draft.value !== original; }
     function reasonText() { return reason.value.trim(); }
+    function editReady() { return edited() && draft.value.trim() !== ""; }
     function refresh() {
-      if (flagged) { approve.disabled = !(reasonText() !== "" || edited()); }
+      if (approve && flagged) { approve.disabled = !(reasonText() !== "" || edited()); }
+      if (edit) { edit.disabled = !editReady(); }
     }
     function record(d) {
       if (reasonText() !== "") { d.reason = reasonText(); }
@@ -210,15 +218,25 @@ SCRIPT = """
     reason.addEventListener("input", refresh);
     refresh();
 
-    approve.addEventListener("click", function () {
-      if (flagged && reasonText() === "" && !edited()) { return; }
-      if (edited()) {
-        if (draft.value.trim() === "") { status.textContent = "an edited draft cannot be empty"; return; }
+    if (approve) {
+      approve.addEventListener("click", function () {
+        if (flagged && reasonText() === "" && !edited()) { return; }
+        if (edited()) {
+          if (draft.value.trim() === "") { status.textContent = "an edited draft cannot be empty"; return; }
+          record({decision: "edit", draft: draft.value});
+        } else {
+          record({decision: "approve"});
+        }
+      });
+    }
+    if (edit) {
+      // A policy-violation case: only an edited draft or a reject. apply_review checks the
+      // edited draft against the policy rules; this page cannot.
+      edit.addEventListener("click", function () {
+        if (!editReady()) { status.textContent = "change the draft first"; return; }
         record({decision: "edit", draft: draft.value});
-      } else {
-        record({decision: "approve"});
-      }
-    });
+      });
+    }
     reject.addEventListener("click", function () {
       if (reasonText() === "") { status.textContent = "reject needs a reason"; return; }
       record({decision: "reject"});
@@ -250,8 +268,10 @@ def render_page(cases: list, report_cases: list, run_id: str) -> str:
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         "<title>Synthetic run review</title>\n<style>%s</style>\n</head>\n"
         "<body data-run-id=\"%s\">\n<h1>Synthetic run review</h1>\n"
-        "<p>Run <code>%s</code>: %d cases, %d flagged. Flagged cases need an edit or a "
-        "reason before Approve. Decisions stay in this page until you download them.</p>\n"
+        "<p>Run <code>%s</code>: %d cases, %d flagged. A case with a policy violation "
+        "can only be edited or rejected, and apply_review checks the edited draft against "
+        "the policy rules. A case flagged by escalate needs an edit or a reason before "
+        "Approve. Decisions stay in this page until you download them.</p>\n"
         "<p><button type=\"button\" id=\"download\">Download decisions</button></p>\n"
         "%s<script>%s</script>\n</body>\n</html>\n"
     ) % (STYLE, _e(run_id), _e(run_id), len(pairs), flagged, body, SCRIPT)

@@ -27,10 +27,10 @@ After `python3 -m triage.run_synthetic --cases CASES.json --out DIR`, a person c
 
 ```
 PYTHONPATH=src python3 -m triage.review_page --cases CASES.json --run DIR --out review.html
-PYTHONPATH=src python3 -m triage.apply_review --run DIR --decisions decisions.json
+PYTHONPATH=src python3 -m triage.apply_review --run DIR --decisions decisions.json --cases CASES.json [--rules RULES.json]
 ```
 
-`review_page` writes one offline HTML file (no server, no network requests). Flagged cases (a policy violation or action `escalate`) come first, and approving one needs an edited draft or a reason. The reviewer approves, edits, rejects with a reason or changes the action, then downloads `decisions.json`. `apply_review` checks it against the run, merges it by case id into `DIR/review_applied.json` (re-applying is safe; a later file resumes the review) and prints the approved, edited, rejected and undecided counts and any changed actions. Both commands accept only a synthetic run, never real dataset threads.
+`review_page` writes one offline HTML file (no server, no network requests). Flagged cases (a policy violation or action `escalate`) come first. A case with a policy violation can only be edited or rejected, never approved. A case flagged only by `escalate` can be approved with a reason. The reviewer approves, edits, rejects with a reason or changes the action, then downloads `decisions.json`. `apply_review` checks it against the run and its cases file, runs the policy check (`--rules`, default `policies/rules.json`) on every edited draft and refuses any that still break a rule, merges it by case id into `DIR/review_applied.json` (re-applying is safe; a later file resumes the review) and prints the approved, edited, rejected and undecided counts and any changed actions. Both commands accept only a synthetic run, never real dataset threads.
 
 ## Data and attribution
 

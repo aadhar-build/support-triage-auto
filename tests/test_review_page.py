@@ -199,8 +199,16 @@ class TestReviewPage(ReviewTestBase):
                 flagged = case_id in ("hacked", "refund")
                 head = re.match(r"<section [^>]*>", block).group(0)
                 self.assertIn('data-flagged="%s"' % ("true" if flagged else "false"), head)
-                approve = re.search(r'<button [^>]*class="approve"[^>]*>', block).group(0)
-                self.assertEqual("disabled" in approve, flagged, approve)
+                approve = re.search(r'<button [^>]*class="approve"[^>]*>', block)
+                edit = re.search(r'<button [^>]*class="edit"[^>]*>', block)
+                if case_id == "refund":
+                    # feedback-1: a policy-violation case shows only Edit and Reject.
+                    self.assertIsNone(approve, block)
+                    self.assertIsNotNone(edit, block)
+                    self.assertIn("disabled", edit.group(0))
+                else:
+                    self.assertIsNone(edit, block)
+                    self.assertEqual("disabled" in approve.group(0), flagged, approve.group(0))
                 reject = re.search(r'<button [^>]*class="reject"[^>]*>', block).group(0)
                 self.assertNotIn("disabled", reject)
                 self.assertIn('<input class="reason"', block)
