@@ -77,7 +77,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
                                  case("hacked", *HACKED)])
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0\n")
+        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0 rules_loaded=3\n")
         self.assertTrue((self.out / "synthetic_report.md").is_file())
         raw = (self.out / "synthetic_report.json").read_text(encoding="utf-8")
         self.assertTrue(raw.endswith("}\n"))
@@ -86,7 +86,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertEqual(report["summary"], {
             "cases_run": 3, "passed": 3, "failed": 0, "must_pass_cases": 3,
             "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
-            "policy_violations": 0, "policy_mismatches": 0,
+            "policy_violations": 0, "policy_mismatches": 0, "rules_loaded": 3,
         })
         self.assertEqual([c["id"] for c in report["cases"]], ["parcel", "praise", "hacked"])
         self.assertEqual(report["cases"][2], {
@@ -102,6 +102,19 @@ class TestRunSynthetic(RunSyntheticTestBase):
         md = self.report_md()
         self.assertTrue(md.startswith("# Synthetic regression report\n"))
         self.assertIn("| parcel | Title of parcel |", md)
+        self.assertIn("| rules_loaded | 3 |", md)
+
+    def test_rules_loaded_counts_the_rules_file(self):
+        rules = json.loads(FIXTURE_RULES.read_text(encoding="utf-8"))
+        rules["public_reply_rules"] = rules["public_reply_rules"][:1]
+        one_rule = self.dir / "one_rule.json"
+        one_rule.write_text(json.dumps(rules), encoding="utf-8")
+        proc = self.run_cli(self.write_cases([case("parcel", *PARCEL)]), rules=one_rule)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout,
+                         "cases=1 passed=1 failed=0 must_pass_failures=0 rules_loaded=1\n")
+        self.assertEqual(self.report_json()["summary"]["rules_loaded"], 1)
+        self.assertIn("| rules_loaded | 1 |", self.report_md())
 
     def test_label_mismatch_fails_case(self):
         path = self.write_cases([case("parcel", PARCEL[0], "billing", "ask", False,
@@ -118,7 +131,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertIn("billing", row)
         self.assertIn("delivery", row)
         self.assertTrue(row.endswith("| FAIL |"))
-        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0\n")
+        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0 rules_loaded=3\n")
 
     def _failing_case(self, must_pass):
         return self.write_cases([
@@ -129,7 +142,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
     def test_must_pass_failure_exits_1(self):
         proc = self.run_cli(self._failing_case(must_pass=True))
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1\n")
+        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1 rules_loaded=3\n")
         self.assertEqual(self.report_json()["summary"]["must_pass_failures"], 1)
         self.assertTrue((self.out / "synthetic_report.md").is_file())
 
@@ -198,13 +211,13 @@ class TestRunSynthetic(RunSyntheticTestBase):
     def test_empty_cases_list(self):
         proc = self.run_cli(self.write_cases([]))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0\n")
+        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0 rules_loaded=3\n")
         report = self.report_json()
         self.assertEqual(report["cases"], [])
         self.assertEqual(report["summary"], {
             "cases_run": 0, "passed": 0, "failed": 0, "must_pass_cases": 0,
             "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
-            "policy_violations": 0, "policy_mismatches": 0,
+            "policy_violations": 0, "policy_mismatches": 0, "rules_loaded": 3,
         })
         self.assertTrue((self.out / "synthetic_report.md").is_file())
 
