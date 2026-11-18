@@ -1,4 +1,5 @@
 {
+  "owner_name": "Aadhar",
   "concurrency": 1,
   "max_rounds": 2,
   "base_branch": "main",
@@ -8,7 +9,8 @@
     "queue": "factory",
     "needs_info": "factory:needs-info",
     "needs_human": "factory:needs-human",
-    "escaped": "factory:escaped"
+    "escaped": "factory:escaped",
+    "ready_for_agent": "ready-for-agent"
   },
   "models": {
     "intake": "opus",

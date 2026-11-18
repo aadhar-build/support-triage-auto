@@ -15,12 +15,13 @@ Start every Bash command with `cd <worktree> && `. Give Read, Edit and Write abs
 
 1. `AGENTS.md` and rule files in the folders you touch.
 2. `<job folder>/spec.md`: the contract. Only change files listed under `## Files`.
-3. Round 2 or later: the previous round's `round-<n-1>/checks.md` and reviews, and any `feedback-*.md`. Fix what they say first.
+3. `.claude/skills/tdd/SKILL.md`, `tests.md` and `mocking.md` next to it: how to write tests worth keeping. Where it says to confirm seams with the user, use the spec's `## Seams` instead; never wait for a person.
+4. Round 2 or later: the previous round's `round-<n-1>/checks.md` and reviews, and any `feedback-*.md`. Fix what they say first.
 
 ## Build
 
-1. Write the tests from the spec's test plan first. Run them and see them fail.
-2. Write the code until they pass. Keep it small and boring.
+1. Work in vertical slices, as the tdd skill says: take one test from the spec's test plan, write it at its seam, run it and see it fail, then write only enough code to pass it. Repeat for the next test. Don't write all the tests first.
+2. Keep the code small and boring. No test that mocks internals, tests private functions, or recomputes its expected value the way the code does. Tidy up only after every test passes.
 3. Run the repo's checks yourself before you finish: `cd <worktree> && bash <main checkout>/factory/checks.sh`. Don't stop on a red run.
 4. Commit with clear messages. Don't push: the factory pushes.
 

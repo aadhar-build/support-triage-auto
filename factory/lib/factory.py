@@ -204,6 +204,53 @@ def allowed_files(spec_text: str) -> list[str]:
 # --------------------------------------------------------------------------
 
 
+# --------------------------------------------------------------------------
+# Text the factory posts on GitHub (after tstack's file-pr and
+# leaving-pr-comments skills: problem first, one attribution note)
+# --------------------------------------------------------------------------
+
+AGENT_NAME = "Claude Code (software factory)"
+_CRITERION_RE = re.compile(r"^\s*\d+\.\s")
+
+
+def criteria_met(build_text: str) -> tuple[int, int]:
+    """(met, total) from build.md's numbered acceptance-criteria lines."""
+    lines = [ln for ln in section(build_text, "Acceptance criteria").splitlines() if _CRITERION_RE.match(ln)]
+    met = sum(1 for ln in lines if re.search(r"\bmet\b", ln) and not re.search(r"\bnot met\b", ln))
+    return met, len(lines)
+
+
+def pr_body(job: dict, spec_text: str, build_text: str, base_branch: str = "main") -> str:
+    """The PR description: the problem, then the fix, then how it was proved."""
+    parts = []
+    problem = section(spec_text, "Problem statement")
+    if problem:
+        parts.append(problem)
+    fix = section(spec_text, "Summary")
+    if fix:
+        parts.append(fix)
+    met, total = criteria_met(build_text)
+    if total:
+        proof = (f"**How it was proved:** the builder reports {met} of {total} acceptance criteria met, "
+                 "with the test or command for each in `build.md`. The gate and reviews run next.")
+    else:
+        proof = "**How it was proved:** no build notes yet. The gate and reviews run next."
+    parts.append(proof)
+    parts.append(f"Closes #{job['issue']}")
+    if job.get("stacked_on_pr"):
+        parts.append(f"**Stacked on #{job['stacked_on_pr']}**, so this PR shows only its own changes. "
+                     f"Merge #{job['stacked_on_pr']} first; GitHub then retargets this PR to `{base_branch}` "
+                     "when that branch is deleted.")
+    parts.append(f"Created by the software factory in Claude Code, job `{job['id']}`. The spec, build notes, "
+                 "gate results and reviews are in the job folder.")
+    return "\n\n".join(parts)
+
+
+def agent_comment(body: str, owner: str) -> str:
+    """A comment posted for the owner, opened with one attribution note."""
+    return f"> [!NOTE]\n> 🤖 **{AGENT_NAME} responding on behalf of {owner}**\n\n{body.strip()}"
+
+
 def matches(path: str, patterns: list[str]) -> bool:
     """fnmatch, where '*' also crosses folders, plus 'dir/' meaning everything under dir."""
     for p in patterns:

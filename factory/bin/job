@@ -11,7 +11,7 @@ Each command prints one line, so the orchestrator's context stays small.
   job advance <id> <stage>    a legal stage move (refuses illegal ones)
   job intake <id>             act on intake.md: spec | needs-info | rejected
   job worktree <id>           create the job's worktree and branch from origin/<base>
-  job pr <id>                 push the branch; open a PR "Closes #n" on the first round
+  job pr <id>                 push the branch; on the first round open a PR: problem, fix, proof, "Closes #n"
   job tally <id>              read this round's reviews: approve | build | recovery
   job decide <id>             act on decision.md: merging | needs-human
   job merge <id>              sync with base, gate again, merge only if on the allowlist
@@ -91,13 +91,11 @@ def cmd_advance(root: Path, cfg: dict, args: list[str]) -> str:
     return f"{job['id']} -> {job['stage']}"
 
 
-FOOTER = "\n\n---\n_Posted by the software factory._"
-
-
 def _comment(root: Path, number: int, body: str) -> None:
     """Issues and PRs share the issue-comments endpoint."""
     if body.strip():
-        F.gh_api(root, "POST", f"issues/{number}/comments", {"body": body + FOOTER}, check=False)
+        owner = F.load_config(root).get("owner_name") or "the repo owner"
+        F.gh_api(root, "POST", f"issues/{number}/comments", {"body": F.agent_comment(body, owner)}, check=False)
 
 
 def _add_label(root: Path, number: int, label: str) -> None:
@@ -164,14 +162,11 @@ def cmd_pr(root: Path, cfg: dict, args: list[str]) -> str:
     F.run(["git", "push", "--quiet", "-u", "origin", job["branch"]], cwd=wt)
     if job["pr"]:
         return f"pushed {job['branch']} to PR #{job['pr']}"
-    body = (f"Closes #{job['issue']}\n\nBuilt by the software factory, job `{job['id']}`. "
-            "The spec, build notes, gate results and reviews are in the job folder.")
-    pr_base = cfg["base_branch"]
-    if job.get("stacked_on_pr"):
-        pr_base = job["stacked_on_branch"]
-        body += (f"\n\n**Stacked on #{job['stacked_on_pr']}**, so this PR shows only its own changes. "
-                 f"Merge #{job['stacked_on_pr']} first; GitHub then retargets this PR to `{cfg['base_branch']}` "
-                 "when that branch is deleted.")
+    spec = d / "spec.md"
+    build = d / "build.md"
+    body = F.pr_body(job, spec.read_text() if spec.exists() else "",
+                     build.read_text() if build.exists() else "", cfg["base_branch"])
+    pr_base = job["stacked_on_branch"] if job.get("stacked_on_pr") else cfg["base_branch"]
     pr = F.gh_api(root, "POST", "pulls", {"title": job["title"], "head": job["branch"],
                                           "base": pr_base, "body": body})
     job["pr"] = pr["number"]
