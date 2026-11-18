@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import re
-from dataclasses import asdict, dataclass
-from typing import Dict, Mapping, Optional, Sequence
+from dataclasses import asdict, dataclass, field
+from typing import Dict, List, Mapping, Optional, Sequence
 
 from triage.router import RoutedThread
 from triage.tiers import ACTIONS, INTENTS, PLACEHOLDER_PRICES, check_price
@@ -20,6 +21,7 @@ TIER_NAMES = ("cheap", "larger", "agent")
 _TRUE = ("true", "1")
 _FALSE = ("false", "0")
 _ID_RE = re.compile(r"\d+", re.ASCII)
+_Z95 = 1.96
 
 
 class GoldFileError(ValueError):
@@ -54,6 +56,12 @@ class Report:
     seed: Optional[int] = None
     split: Optional[str] = None
     threshold: Optional[float] = None
+    action_accuracy_ci: Optional[List[float]] = None
+    intent_accuracy_ci: Optional[List[float]] = None
+    missed_escalation_rate_ci: Optional[List[float]] = None
+    false_escalation_rate_ci: Optional[List[float]] = None
+    needs_person_share_ci: Optional[List[float]] = None
+    tier_shares_ci: Dict[str, Optional[List[float]]] = field(default_factory=dict)
 
 
 def load_gold(path) -> Dict[int, GoldRow]:
@@ -98,6 +106,20 @@ def _rate(num: int, den: int) -> Optional[float]:
     return num / den if den else None
 
 
+def wilson_interval(successes: int, total: int) -> Optional[List[float]]:
+    """95% Wilson score interval for successes/total as [low, high]; None when total is 0."""
+    if not total:
+        return None
+    p = successes / total
+    z2 = _Z95 * _Z95
+    denom = 1 + z2 / total
+    centre = (p + z2 / (2 * total)) / denom
+    half = _Z95 * math.sqrt(p * (1 - p) / total + z2 / (4 * total * total)) / denom
+    low = 0.0 if successes == 0 else max(0.0, centre - half)
+    high = 1.0 if successes == total else min(1.0, centre + half)
+    return [low, high]
+
+
 def score(routed: Sequence[RoutedThread], gold: Mapping[int, GoldRow],
           prices: Optional[Mapping[str, float]] = None, *, sample_size: Optional[int] = None,
           seed: Optional[int] = None, split: Optional[str] = None,
@@ -126,7 +148,8 @@ def score(routed: Sequence[RoutedThread], gold: Mapping[int, GoldRow],
     false_esc = sum(1 for r, _ in gold_no_esc if r.labels.action == "escalate")
 
     escalated = sum(1 for r in routed if r.labels.action == "escalate")
-    tier_shares = {t: _rate(sum(1 for r in routed if t in r.tiers), n) for t in tier_names}
+    tier_counts = {t: sum(1 for r in routed if t in r.tiers) for t in tier_names}
+    tier_shares = {t: _rate(c, n) for t, c in tier_counts.items()}
     total_cost = sum(prices[t] for r in routed for t in r.tiers)
 
     return Report(
@@ -149,6 +172,12 @@ def score(routed: Sequence[RoutedThread], gold: Mapping[int, GoldRow],
         seed=seed,
         split=split,
         threshold=threshold,
+        action_accuracy_ci=wilson_interval(action_ok, len(scored)),
+        intent_accuracy_ci=wilson_interval(intent_ok, len(scored)),
+        missed_escalation_rate_ci=wilson_interval(missed, len(gold_esc)),
+        false_escalation_rate_ci=wilson_interval(false_esc, len(gold_no_esc)),
+        needs_person_share_ci=wilson_interval(escalated, n),
+        tier_shares_ci={t: wilson_interval(c, n) for t, c in tier_counts.items()},
     )
 
 
