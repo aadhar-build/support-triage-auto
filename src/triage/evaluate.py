@@ -195,6 +195,12 @@ def _fmt(value) -> str:
     return str(value)
 
 
+def _fmt_rate(rate: Optional[float], ci: Optional[List[float]]) -> str:
+    if rate is None or ci is None:
+        return "n/a"
+    return "%.4f (%.4f to %.4f)" % (rate, ci[0], ci[1])
+
+
 def report_to_markdown(report: Report) -> str:
     lines = ["# Triage eval report", ""]
     if report.prices_are_placeholders:
@@ -207,15 +213,19 @@ def report_to_markdown(report: Report) -> str:
         ("threads_routed", report.threads_routed), ("threads_scored", report.threads_scored),
         ("threads_without_gold", report.threads_without_gold),
         ("gold_rows_unmatched", report.gold_rows_unmatched),
-        ("action_accuracy", report.action_accuracy),
-        ("intent_accuracy", report.intent_accuracy),
+        ("action_accuracy", _fmt_rate(report.action_accuracy, report.action_accuracy_ci)),
+        ("intent_accuracy", _fmt_rate(report.intent_accuracy, report.intent_accuracy_ci)),
         ("missed_escalations", report.missed_escalations),
-        ("missed_escalation_rate", report.missed_escalation_rate),
+        ("missed_escalation_rate", _fmt_rate(report.missed_escalation_rate,
+                                             report.missed_escalation_rate_ci)),
         ("false_escalations", report.false_escalations),
-        ("false_escalation_rate", report.false_escalation_rate),
-        ("needs_person_share", report.needs_person_share),
+        ("false_escalation_rate", _fmt_rate(report.false_escalation_rate,
+                                            report.false_escalation_rate_ci)),
+        ("needs_person_share", _fmt_rate(report.needs_person_share,
+                                         report.needs_person_share_ci)),
     ]
-    rows += [("tier_share.%s" % t, v) for t, v in report.tier_shares.items()]
+    rows += [("tier_share.%s" % t, _fmt_rate(v, report.tier_shares_ci.get(t)))
+             for t, v in report.tier_shares.items()]
     rows += [("cost_per_1000_threads", report.cost_per_1000_threads)]
     rows += [("price.%s" % t, v) for t, v in report.prices.items()]
     rows += [("prices_are_placeholders", report.prices_are_placeholders)]
