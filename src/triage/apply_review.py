@@ -26,6 +26,7 @@ from triage.tiers import ACTIONS
 APPLIED_NAME = "review_applied.json"
 DECISIONS = ("approve", "edit", "reject")
 DECISION_KEYS = ("decision", "draft", "reason", "action")
+APPLIED_KEYS = ("decision", "original_action", "action", "draft", "reason")
 
 
 class ApplyError(Exception):
@@ -115,11 +116,28 @@ def _previous_entries(path: Path, report_cases, run_id) -> dict:
     if data.get("run_id") != run_id:
         raise ApplyError("existing review file %s is for another run; move it aside first"
                          % path)
-    ids = {r["id"] for r in report_cases}
-    if not set(data["cases"]) <= ids:
+    by_id = {r["id"]: r for r in report_cases}
+    if not set(data["cases"]) <= set(by_id):
         raise ApplyError("existing review file %s names a case id that is not in the run"
                          % path)
+    for case_id, entry in data["cases"].items():
+        if not _valid_previous(entry, by_id[case_id]["actual"]["action"]):
+            raise ApplyError("existing review file %s has a malformed entry; move it aside "
+                             "first" % path)
     return data["cases"]
+
+
+def _valid_previous(e, original_action) -> bool:
+    """True when e has the shape _entry writes for a case whose system action is given."""
+    if not isinstance(e, dict) or not set(e) <= set(APPLIED_KEYS):
+        return False
+    decision = e.get("decision")
+    return (decision in DECISIONS
+            and e.get("original_action") == original_action
+            and e.get("action") in ACTIONS
+            and (_filled(e.get("draft")) if decision == "edit" else "draft" not in e)
+            and ("reason" not in e or _filled(e["reason"]))
+            and (decision != "reject" or "reason" in e))
 
 
 def _review(report_cases, run_id, cases: dict) -> dict:

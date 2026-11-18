@@ -172,6 +172,34 @@ class TestApplyReview(ApplyTestBase):
         self.assertTrue(proc.stderr.startswith("error:"))
         self.assertEqual(self.applied.read_bytes(), before)
 
+    def test_refuses_malformed_existing_review_file(self):
+        good = {"decision": "approve", "original_action": "ask", "action": "ask"}
+        bad_entries = {
+            "non-object entry": 5,
+            "missing decision": {"original_action": "ask", "action": "ask"},
+            "unknown decision": dict(good, decision="maybe"),
+            "unknown action": dict(good, action="shout"),
+            "missing original_action": {"decision": "approve", "action": "ask"},
+            "original_action not the run's": dict(good, original_action="escalate"),
+            "edit without draft": dict(good, decision="edit"),
+            "non-string reason": dict(good, reason=7),
+            "unknown key": dict(good, note="x"),
+        }
+        for name, entry in bad_entries.items():
+            with self.subTest(name):
+                self.applied.write_text(
+                    json.dumps({"run_id": self.run_id, "cases": {"parcel": entry}}),
+                    encoding="utf-8")
+                before = self.applied.read_bytes()
+                proc = self.apply(self.decisions_file(WORKED))
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                lines = proc.stderr.splitlines()
+                self.assertEqual(len(lines), 1, proc.stderr)
+                self.assertTrue(lines[0].startswith("error:"), lines[0])
+                self.assertNotIn("Traceback", proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertEqual(self.applied.read_bytes(), before)
+
     def test_flagged_approve_needs_reason(self):
         proc = self.apply(self.decisions_file({
             "hacked": {"decision": "approve", "reason": "Escalation is right here"},
