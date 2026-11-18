@@ -398,6 +398,8 @@ class TestClaudeCodeClient(unittest.TestCase):
                 modelUsage={MODEL: {"inputTokens": -1, "outputTokens": 1}})),
             "non-int count": FakeRunner(stdout=out(
                 modelUsage={MODEL: {"inputTokens": 1.5, "outputTokens": 1}})),
+            "undecodable output": FakeRunner(raises=UnicodeDecodeError(
+                "utf-8", b"SENTINEL_STDOUT", 0, 1, "SENTINEL_STDOUT")),
             "bool count": FakeRunner(stdout=out(
                 modelUsage={MODEL: {"inputTokens": True, "outputTokens": 1}})),
         }
@@ -431,7 +433,9 @@ class TestHygiene(TierBase):
                 mock.patch.object(socket.socket, "connect", _forbidden), \
                 mock.patch.object(model_tier, "subprocess", fake_subprocess):
             client = ClaudeCodeClient(MODEL)  # no explicit runner: looks up subprocess.run
-            outputs = [SUCCESS, "not json", json.dumps({"is_error": True})]
+            settled = json.dumps({"is_error": False, "result": GOOD, "modelUsage": {
+                MODEL: {"inputTokens": 100, "outputTokens": 10}}})
+            outputs = [settled, SUCCESS, "not json", json.dumps({"is_error": True})]
             for i, stdout in enumerate(outputs):
                 runner.stdout = stdout
                 tier, _ = self.tier(None, client=client)
@@ -444,7 +448,8 @@ class TestHygiene(TierBase):
                        dict(model="not-priced")):
                 tier, _ = self.tier(None, client=client, **kw)
                 tier.label(thread(30))
-        self.assertGreaterEqual(len(runner.calls), 4)
+        self.assertGreaterEqual(len(runner.calls), 5)
+        self.assertIn("settle", [e["event"] for e in self.events()])
 
 
 if __name__ == "__main__":

@@ -167,6 +167,8 @@ class ClaudeCodeClient(ModelClient):
                 error = "model call failed: timeout"
             except OSError:
                 error = "model call failed: cannot start"
+            except ValueError:  # e.g. undecodable output with text=True
+                error = "model call failed: bad output"
         if error:
             raise ModelCallError(error) from None
         if proc.returncode != 0:

@@ -592,6 +592,7 @@ class TestLarger(CliTestBase):
                                  client=ScriptedClient())
         self.assertEqual(code, 0, err)
         larger_steps = 0
+        forced = []
         for line in trace.read_text(encoding="utf-8").splitlines():
             rec = json.loads(line)
             validate_record(rec)
@@ -601,7 +602,8 @@ class TestLarger(CliTestBase):
                     self.assertEqual(step["model_id"], "fixture-model")
             if "escalate_always" in rec["reason_codes"]:
                 self.assertNotIn("larger", [t["tier"] for t in rec["tiers"]])
-                self.assertEqual(rec["thread_id"], 11)
+                forced.append(rec["thread_id"])
+        self.assertEqual(forced, [11])
         self.assertGreaterEqual(larger_steps, 1)
 
     def test_post_merge_eval_recorded(self):
