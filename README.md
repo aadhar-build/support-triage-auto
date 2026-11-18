@@ -30,6 +30,8 @@ PYTHONPATH=src python3 -m triage.run_eval --gold path/to/gold.csv --out report.j
 
 The gold CSV has the columns `thread_id,intent,action,should_escalate`. By default it samples 200 threads from the `dev` split (`--sample-size`, `--seed`, `--split`, `--format md`). The default per-tier prices are **placeholders, not real prices**, and the report says so; pass `--price-cheap`, `--price-larger` and `--price-agent` to change them.
 
+Add `--trace PATH` to also write an audit trace: one JSON line per routed thread with the git commit (and a `code_dirty` flag), the threshold, split and seed, each tier's model id and labels, the final labels and the reason codes (`cheap_confident`, `low_confidence_to_larger`, `high_risk_to_larger`). It holds conversation ids only, never tweet text, author ids or brand ids. The path must be outside the repository; the run exits 2 and writes nothing if any record is incomplete.
+
 ## Reviewing a synthetic run
 
 After `python3 -m triage.run_synthetic --cases CASES.json --out DIR`, a person can review what the cascade decided for each made-up case:
