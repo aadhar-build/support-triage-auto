@@ -13,7 +13,8 @@ import unittest
 from pathlib import Path
 
 from triage.policy_check import Rule, RulesError, Topic, Violation, check, is_safe_to_send, \
-    load_escalate_topics, load_rules, matched_topics, rules_version
+    load_escalate_topics, load_rules, matched_topics, rules_from_data, rules_version, \
+    topics_from_data
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "policy_rules.json"
@@ -393,6 +394,21 @@ class TestSafeToSend(unittest.TestCase):
 
     def test_true_when_clean(self):
         self.assertTrue(is_safe_to_send("Please DM us your order number.", ["help!"], RULES))
+
+
+class TestFromData(unittest.TestCase):
+    def test_parity_with_path_loaders(self):
+        data = json.loads(FIXTURE.read_text(encoding="utf-8"))
+        self.assertEqual(rules_from_data(data, FIXTURE), load_rules(FIXTURE))
+        self.assertEqual(topics_from_data(data, FIXTURE), load_escalate_topics(FIXTURE))
+        with self.assertRaises(RulesError) as ctx:
+            rules_from_data({"public_reply_rules": []}, "made-up-source")
+        self.assertEqual(str(ctx.exception), "made-up-source: 'public_reply_rules' is empty; "
+                         "at least one rule is required")
+        with self.assertRaises(RulesError) as ctx:
+            topics_from_data({"escalate_always": []}, "made-up-source")
+        self.assertEqual(str(ctx.exception), "made-up-source: 'escalate_always' is empty; "
+                         "at least one topic is required")
 
 
 class TestModuleHygiene(unittest.TestCase):
