@@ -10,9 +10,13 @@ import subprocess
 import sys
 import unittest
 
-from tests.test_review_page import REFUND_DRAFT, PARCEL, ReviewTestBase, case, standard_cases
+from tests.test_review_page import REFUND_DRAFT, PARCEL, REPO_ROOT, ReviewTestBase, case, \
+    standard_cases
 
 NEW_DRAFT = "Sorry, please DM us your order number."
+
+
+TAIL = "brand=none rules_loaded=3 topics_loaded=2 repeat_contact=off\n"
 
 
 class ApplyTestBase(ReviewTestBase):
@@ -33,12 +37,14 @@ class ApplyTestBase(ReviewTestBase):
         path.write_text(raw, encoding="utf-8")
         return path
 
-    def apply(self, decisions_path, run_dir=None, cases_path=None, rules=None):
+    def apply(self, decisions_path, run_dir=None, cases_path=None, rules=None, extra=()):
+        args = [sys.executable, "-m", "triage.apply_review", "--run",
+                str(run_dir or self.run_dir), "--decisions", str(decisions_path),
+                "--cases", str(cases_path or self.cases_path)]
+        if rules is not False:
+            args += ["--rules", str(rules or self.rules)]
         return subprocess.run(
-            [sys.executable, "-m", "triage.apply_review", "--run",
-             str(run_dir or self.run_dir), "--decisions", str(decisions_path),
-             "--cases", str(cases_path or self.cases_path),
-             "--rules", str(rules or self.rules)],
+            args + list(extra),
             cwd=str(self.dir), env=self.env, capture_output=True, text=True, timeout=60)
 
     def assert_refused(self, proc, target, expected):
@@ -66,7 +72,8 @@ class TestApplyReview(ApplyTestBase):
         proc = self.apply(self.decisions_file(WORKED))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "approved=1 edited=1 rejected=1 undecided=1\n"
-                                      "action changed: parcel ask -> escalate\n")
+                                      "action changed: parcel ask -> escalate\n"
+                         + TAIL)
         self.assertEqual(proc.stderr, "")
         self.assertNotIn(NEW_DRAFT, proc.stdout)
         self.assertNotIn("Needs a person", proc.stdout)
@@ -107,7 +114,8 @@ class TestApplyReview(ApplyTestBase):
         proc = self.apply(a)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "approved=1 edited=1 rejected=0 undecided=2\n"
-                                      "action changed: refund ask -> route\n")
+                                      "action changed: refund ask -> route\n"
+                         + TAIL)
         b = self.decisions_file({
             "praise": {"decision": "approve", "action": "ask"},
             "parcel": {"decision": "reject", "reason": "Wrong tone"},
@@ -116,7 +124,8 @@ class TestApplyReview(ApplyTestBase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "approved=1 edited=1 rejected=1 undecided=1\n"
                                       "action changed: praise answer -> ask\n"
-                                      "action changed: refund ask -> route\n")
+                                      "action changed: refund ask -> route\n"
+                         + TAIL)
         self.assertEqual(self.applied_json()["cases"], {
             "praise": {"decision": "approve", "original_action": "answer", "action": "ask"},
             "parcel": {"decision": "reject", "original_action": "ask", "action": "ask",
@@ -220,7 +229,8 @@ class TestApplyReview(ApplyTestBase):
             "praise": {"decision": "approve"},
         }))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "approved=2 edited=0 rejected=0 undecided=2\n")
+        self.assertEqual(proc.stdout, "approved=2 edited=0 rejected=0 undecided=2\n"
+                         + TAIL)
         cases = self.applied_json()["cases"]
         self.assertEqual(cases["hacked"]["reason"], "Escalation is right here")
         self.assertNotIn("reason", cases["praise"])
@@ -297,11 +307,13 @@ class TestViolationCases(ApplyTestBase):
             "refund": {"decision": "edit", "draft": NEW_DRAFT,
                        "reason": "Removed the refund promise"}}))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "approved=0 edited=1 rejected=0 undecided=3\n")
+        self.assertEqual(proc.stdout, "approved=0 edited=1 rejected=0 undecided=3\n"
+                         + TAIL)
         proc = self.apply(self.decisions_file({
             "refund": {"decision": "reject", "reason": "Promise not allowed"}}))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "approved=0 edited=0 rejected=1 undecided=3\n")
+        self.assertEqual(proc.stdout, "approved=0 edited=0 rejected=1 undecided=3\n"
+                         + TAIL)
 
     def test_refuses_existing_entry_that_breaks_the_rule(self):
         legacy = {
@@ -319,6 +331,51 @@ class TestViolationCases(ApplyTestBase):
                 proc = self.apply(self.decisions_file({"praise": {"decision": "approve"}}))
                 self.assert_refused(proc, self.applied, before)
                 self.assertNotIn(REFUND_DRAFT, proc.stderr)
+
+
+FIXTURE_BRANDS = REPO_ROOT / "tests" / "fixtures" / "brands"
+
+
+class TestBrandFlag(ApplyTestBase):
+    def brand_run(self):
+        cases_path = self.write_cases(standard_cases(), name="brand-cases.json")
+        run_dir = self.dir / "brand-run"
+        proc = subprocess.run(
+            [sys.executable, "-m", "triage.run_synthetic", "--cases", str(cases_path),
+             "--out", str(run_dir), "--brand", "beta", "--brands-dir", str(FIXTURE_BRANDS)],
+            cwd=str(self.dir), env=self.env, capture_output=True, text=True, timeout=60)
+        self.assertIn(proc.returncode, (0, 1), proc.stderr)
+        return cases_path, run_dir
+
+    def test_brand_run_applies_with_brand_rules(self):
+        cases_path, run_dir = self.brand_run()
+        proc = self.apply(self.decisions_file({"praise": {"decision": "approve"}},
+                                              run_id=hashlib.sha256(
+                                                  (run_dir / "synthetic_report.json")
+                                                  .read_bytes()).hexdigest()),
+                          run_dir=run_dir, cases_path=cases_path, rules=False,
+                          extra=("--brand", "beta", "--brands-dir", str(FIXTURE_BRANDS)))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "approved=1 edited=0 rejected=0 undecided=3\n"
+                         "brand=beta rules_loaded=2 topics_loaded=1 repeat_contact=on\n")
+
+    def test_brand_and_rules_refused(self):
+        proc = self.apply(self.decisions_file(WORKED),
+                          extra=("--brand", "beta", "--brands-dir", str(FIXTURE_BRANDS)))
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(proc.stderr.strip(), "error: bad rules file: use either --brand or "
+                         "--rules, not both")
+        self.assertFalse(self.applied.exists())
+
+    def test_bad_escalate_always_now_refused(self):
+        rules = json.loads(self.rules.read_text(encoding="utf-8"))
+        rules["escalate_always"] = []
+        bad = self.dir / "bad-topics.json"
+        bad.write_text(json.dumps(rules), encoding="utf-8")
+        proc = self.apply(self.decisions_file(WORKED), rules=bad)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("escalate_always", proc.stderr)
+        self.assertFalse(self.applied.exists())
 
 
 if __name__ == "__main__":
