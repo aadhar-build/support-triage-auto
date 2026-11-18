@@ -105,7 +105,7 @@ def list_runs(runs_dir) -> List[dict]:
             continue
         try:
             run.update(_check_manifest(json.loads(text)))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, RecursionError):
             run["status"] = BAD_MANIFEST
             other.append(run)
             continue
@@ -123,7 +123,7 @@ def _metrics(run) -> Optional[dict]:
         return None
     try:
         return report.load_metrics(Path(run["path"]) / "metrics.json")
-    except (report.ReportError, OSError):
+    except (report.ReportError, OSError, RecursionError):
         return None
 
 
@@ -152,7 +152,7 @@ def _load_thresholds(path):
     try:
         data, _ = report.load_thresholds(path, explicit=True)
         return data
-    except report.ReportError:
+    except (report.ReportError, RecursionError):
         return None
 
 
@@ -277,7 +277,7 @@ def page_report(run, thresholds_path) -> str:
                      % (_e(run["name"]), _e(NO_METRICS)))
     try:
         targets, meta = report.load_thresholds(thresholds_path, explicit=True)
-    except report.ReportError:
+    except (report.ReportError, RecursionError):
         targets, meta = None, None
     return report.render(m, targets=targets, targets_meta=meta, no_thresholds=targets is None)
 
@@ -298,7 +298,7 @@ def _descriptions(rules_path) -> dict:
     out = {}
     try:
         data = json.loads(Path(rules_path).read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError):
+    except (OSError, UnicodeDecodeError, ValueError, RecursionError):
         return out
     if not isinstance(data, dict):
         return out
@@ -311,6 +311,8 @@ def _descriptions(rules_path) -> dict:
 
 
 def _error(exc) -> str:
+    if isinstance(exc, RecursionError):
+        return '<p class="error">rules file is nested too deeply to read</p>'
     return '<p class="error">%s</p>' % _e(str(exc).splitlines()[0] if str(exc) else type(exc).__name__)
 
 
@@ -320,7 +322,7 @@ def _rules_html(rules_path) -> str:
     try:
         version = policy_check.rules_version(rules_path)
         parts.append("<p>%s</p>" % _e("no version" if version is None else version))
-    except policy_check.RulesError as exc:
+    except (policy_check.RulesError, RecursionError) as exc:
         parts.append(_error(exc))
     parts.append("<h3>Public reply rules</h3>")
     try:
@@ -329,7 +331,7 @@ def _rules_html(rules_path) -> str:
                    _e(desc.get(("public_reply_rules", r.id), "")))
                 for r in policy_check.load_rules(rules_path)]
         parts.append(_table(("id", "type", "phrases or detectors", "description"), rows))
-    except policy_check.RulesError as exc:
+    except (policy_check.RulesError, RecursionError) as exc:
         parts.append(_error(exc))
     parts.append("<h3>Always-escalate topics</h3>")
     try:
@@ -338,7 +340,7 @@ def _rules_html(rules_path) -> str:
                    _e(desc.get(("escalate_always", t.id), "")))
                 for t in policy_check.load_escalate_topics(rules_path)]
         parts.append(_table(("id", "phrases", "description"), rows))
-    except policy_check.RulesError as exc:
+    except (policy_check.RulesError, RecursionError) as exc:
         parts.append(_error(exc))
     parts.append("<h3>Repeat-contact rule</h3>")
     try:
@@ -346,7 +348,7 @@ def _rules_html(rules_path) -> str:
         parts.append("<ul>%s</ul>" % "".join(
             "<li>%s: %s</li>" % (_e(k), _e(getattr(rule, k)))
             for k in ("window_days", "min_conversations", "effect", "report_window_hours")))
-    except context_signals.RepeatContactError as exc:
+    except (context_signals.RepeatContactError, RecursionError) as exc:
         parts.append(_error(exc))
     return "".join(parts)
 

@@ -466,3 +466,48 @@ class TestSourceRules(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+DEEP = "[" * 100000 + "]" * 100000  # valid-looking JSON nested past the recursion limit
+
+
+class TestDeeplyNested(ServerCase):
+    """A deeply nested owner file is just a broken file: no page returns 500."""
+
+    PAGES = ("/", "/runs", "/drift", "/policies")
+
+    def _all_pages_200(self, *extra):
+        for path in self.PAGES + extra:
+            with self.subTest(path=path):
+                self.get(path)
+
+    def test_deeply_nested_manifest_is_unreadable(self):
+        make_run(self.runs, "good", _manifest(), _read("metrics_synthetic.json"))
+        make_run(self.runs, "deep", DEEP, _read("metrics_synthetic.json"))
+        self.start()
+        self._all_pages_200("/runs/good/report", "/runs/deep/report")
+        self.assertIn("unreadable manifest", _row(self.get("/runs"), "deep"))
+
+    def test_deeply_nested_metrics_means_no_metrics(self):
+        make_run(self.runs, "good", _manifest(), _read("metrics_synthetic.json"))
+        make_run(self.runs, "deep", _manifest(created_at="2026-10-09T00:00:00Z"), DEEP)
+        self.start()
+        self._all_pages_200("/runs/good/report", "/runs/deep/report")
+        self.assertIn("no usable metrics file", self.get("/runs/deep/report"))
+
+    def test_deeply_nested_rules_fails_each_part(self):
+        path = Path(self._tmp.name) / "rules_deep.json"
+        path.write_text(DEEP, encoding="utf-8")
+        self.start(rules=path)
+        body = self.get("/policies")
+        self.assertNotIn("Traceback", body)
+        self.assertEqual(body.count('<p class="error">'), 4)
+        self.assertIn("guardrails.false_escalation_rate", body)  # thresholds still render
+
+    def test_deeply_nested_thresholds_file(self):
+        make_run(self.runs, "good", _manifest(), _read("metrics_synthetic.json"))
+        path = Path(self._tmp.name) / "thresholds_deep.json"
+        path.write_text(DEEP, encoding="utf-8")
+        self.start(thresholds=path)
+        self._all_pages_200("/runs/good/report")
+        self.assertIn("fixture-no-promise", self.get("/policies"))  # rules still render
