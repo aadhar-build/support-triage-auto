@@ -2,7 +2,7 @@
 
 A support-triage system at volume: for each customer-support conversation on X it decides to answer, ask, route or escalate to a person, and proves with evals how often it gets that right and at what cost.
 
-**Status:** starting. Week 1 (to 22 Nov 2026): load the data, rebuild threads, discover the taxonomy, label a gold set.
+**Status (18 Nov 2026):** phase 1, triage. The data loader, thread rebuild, split, keyword cheap tier, eval report with 95% ranges, policy checks, made-up regression suite, offline review page and hard-case picker are merged. The made-up suite has 63 cases; today's rule-based router passes 24 of them, and the must-pass cases it fails are the bar for the next issues. The product requirements are in [docs/prd.md](docs/prd.md).
 
 ## Design in brief
 
@@ -10,6 +10,15 @@ A support-triage system at volume: for each customer-support conversation on X i
 - Cost-aware cascade: a cheap tier labels every thread; a larger model only for low-confidence or risky threads; a tool-using agent only for actionable ones.
 - Deterministic policy checks outside the model, and a human review queue.
 - Evals: a hand-labelled gold set, a calibrated LLM judge, routing accuracy, missed escalations, cost per 1,000 tweets, p95 latency, τ²-bench pass^k, and a failure taxonomy.
+
+## How work gets built
+
+Issues are built by the coding-agent factory in `.claude/skills/factory/` (from [software-factory-mvp](https://github.com/aadhar-build/software-factory-mvp)), in two lanes that run side by side:
+
+1. **Clarify:** an issue labelled `factory` gets a spec, never code. If the spec raises a product question (a metric definition, a threshold, a policy, a reply rule), it goes on the issue with a recommended answer and the `needs-input` label. The owner answers there and removes the label.
+2. **Build:** only an issue with no open product question is built, tests first, then checked, reviewed and opened as a PR for the owner.
+
+Labels, thresholds, policy rules and the gold sets are owner files (`policies/`, `evals/`), and the factory never edits them.
 
 ## Running the baseline eval
 
