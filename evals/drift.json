@@ -1,0 +1,27 @@
+{
+  "version": "v1-draft",
+  "status": "DRAFT for Aadhar's approval (18 Nov 2026). Owner-owned and protected. Used by #20 (drift) and later #21 (incidents).",
+  "drift": {
+    "reference": {
+      "start_week": "2017-W40",
+      "end_week": "2017-W43",
+      "note": "Four weeks early in the densest stretch of the data. Confirm with the weekly volume counts before approving."
+    },
+    "min_volume": 200,
+    "samples_per_callout": 20,
+    "thresholds": {
+      "intent_psi": 0.2,
+      "volume": 2.0,
+      "mean_confidence": 0.05,
+      "escalated_share": 0.03,
+      "other_share": 0.05
+    },
+    "threshold_notes": {
+      "intent_psi": "Population stability index of the weekly intent mix vs the reference. 0.1 to 0.2 is a moderate shift; above 0.2 is the common 'act on it' line.",
+      "volume": "Ratio of the week's conversations to the reference weekly mean, in either direction (2.0 = double or half).",
+      "mean_confidence": "Absolute change in the cheap tier's mean confidence.",
+      "escalated_share": "Absolute change in the share escalated (3 points on a ~12% base is a large relative move).",
+      "other_share": "Absolute change in the share labelled other, the first sign of a new topic."
+    }
+  }
+}

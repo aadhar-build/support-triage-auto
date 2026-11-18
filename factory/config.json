@@ -48,6 +48,7 @@
     ".github/",
     "data/split.json",
     "evals/thresholds.json",
+    "evals/drift.json",
     "evals/gold/",
     "policies/",
     "scenarios/"

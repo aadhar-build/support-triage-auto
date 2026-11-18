@@ -1,6 +1,6 @@
 {
-  "version": "v1-draft",
-  "status": "DRAFT for Aadhar's approval (18 Nov 2026). Owner-owned and protected: agents never edit this file.",
+  "version": "v1.1-draft",
+  "status": "DRAFT for Aadhar's approval (18 Nov 2026): escalate_always as matchable topics (#37), repeat_contact rule (#22). Owner-owned and protected: agents never edit this file.",
   "public_reply_rules": [
     {
       "id": "no-refund-promise",
@@ -60,10 +60,116 @@
     }
   ],
   "escalate_always": [
-    "A threat of legal action, a regulator complaint or press involvement",
-    "A hacked account, fraud, or unrecognised charges",
-    "A safety risk to a person (injury, danger, self-harm)",
-    "A demand for a refund or compensation",
-    "The customer posted a card number, password or ID in public"
-  ]
+    {
+      "id": "legal-regulator-press",
+      "description": "A threat of legal action, a regulator complaint or press involvement",
+      "phrases": [
+        "lawyer",
+        "attorney",
+        "solicitor",
+        "sue you",
+        "suing",
+        "lawsuit",
+        "legal action",
+        "small claims",
+        "court",
+        "regulator",
+        "ombudsman",
+        "trading standards",
+        "better business bureau",
+        "ftc",
+        "fcc",
+        "journalist",
+        "reporter",
+        "going to the press",
+        "contact the media"
+      ]
+    },
+    {
+      "id": "fraud-hacked-charges",
+      "description": "A hacked account, fraud, or unrecognised charges",
+      "phrases": [
+        "hacked",
+        "hacker",
+        "fraud",
+        "fraudulent",
+        "scam",
+        "scammed",
+        "stolen",
+        "identity theft",
+        "unauthorised charge",
+        "unauthorized charge",
+        "unrecognised charge",
+        "unrecognized charge",
+        "didn't authorise",
+        "didn't authorize",
+        "someone used my card",
+        "someone logged into my account"
+      ]
+    },
+    {
+      "id": "safety-risk",
+      "description": "A safety risk to a person (injury, danger, self-harm)",
+      "phrases": [
+        "injured",
+        "injury",
+        "hurt me",
+        "burned",
+        "caught fire",
+        "on fire",
+        "smoke coming",
+        "exploded",
+        "electric shock",
+        "dangerous",
+        "unsafe",
+        "choking",
+        "allergic reaction",
+        "hospital",
+        "self harm",
+        "self-harm",
+        "suicide",
+        "kill myself"
+      ]
+    },
+    {
+      "id": "refund-compensation-demand",
+      "description": "A demand for a refund or compensation",
+      "phrases": [
+        "refund",
+        "money back",
+        "compensation",
+        "compensate me",
+        "reimburse",
+        "reimbursement",
+        "chargeback",
+        "charge back",
+        "credit my account"
+      ]
+    },
+    {
+      "id": "credentials-posted-publicly",
+      "description": "The customer posted a card number, password or ID in public",
+      "phrases": [
+        "my card number is",
+        "card number:",
+        "my password is",
+        "password:",
+        "my pin is",
+        "security code is",
+        "cvv",
+        "my passport number",
+        "my ssn",
+        "social security number",
+        "my id number is"
+      ],
+      "note": "Phrases catch the wording; an actual card number in the text is also caught by the card_number detector of no-pii-echo, reused by the router."
+    }
+  ],
+  "repeat_contact": {
+    "window_days": 7,
+    "min_conversations": 3,
+    "effect": "escalate",
+    "report_window_hours": 72,
+    "note": "Owner decisions 18 Nov: 7-day window, 72h reported alongside. 3 or more conversations from the same customer to the same brand inside the window escalates the latest one."
+  }
 }
