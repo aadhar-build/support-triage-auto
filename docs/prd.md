@@ -54,7 +54,7 @@ Reports also give, for escalation (positive = should escalate): TP, FP, TN, FN, 
 | Personal data repeated in a public draft | 0 | Policy check, plus a judge on drafts |
 | Out-of-policy promises (refunds, compensation) | 0 | Policy check, plus a judge on drafts |
 | Eval leakage | 0 eval conversations in prompts, few-shot examples or threshold tuning | Code review, and the factory's eval reviewer |
-| API spend | $20 a month | Spend cap in code |
+| API spend | $200 a month (API-equivalent dollars while on the subscription) | Monthly spend log checked before every call |
 
 ## How every number is reported
 

@@ -1,5 +1,5 @@
 {
-  "version": "v1.1-draft",
+  "version": "v1.2-draft",
   "status": "DRAFT for Aadhar's approval (18 Nov 2026): escalate_always as matchable topics (#37), repeat_contact rule (#22). Owner-owned and protected: agents never edit this file.",
   "public_reply_rules": [
     {
@@ -135,15 +135,24 @@
       "id": "refund-compensation-demand",
       "description": "A demand for a refund or compensation",
       "phrases": [
-        "refund",
-        "money back",
-        "compensation",
+        "i want a refund",
+        "want a full refund",
+        "want my refund",
+        "demand a refund",
+        "demanding a refund",
+        "refund me",
+        "give me a refund",
+        "want my money back",
+        "give me my money back",
+        "demand compensation",
+        "expect compensation",
+        "want compensation",
         "compensate me",
-        "reimburse",
-        "reimbursement",
-        "chargeback",
-        "charge back",
-        "credit my account"
+        "reimburse me",
+        "credit my account",
+        "file a chargeback",
+        "filing a chargeback",
+        "dispute the charge"
       ]
     },
     {

@@ -52,7 +52,7 @@
       "max_count": 0
     },
     "api_spend_usd_per_month": {
-      "max": 20.0
+      "max": 200.0
     }
   },
   "reporting": {
