@@ -3,7 +3,8 @@
 Usage: python3 -m triage.run_synthetic --cases CASES.json --out DIR [--rules RULES.json]
 
 Writes DIR/synthetic_report.json and DIR/synthetic_report.md. Reports and stdout hold only
-case ids, titles, labels, rule ids and counts, never turn, draft or brand text. No network
+case ids, titles, labels, tier names, confidences, rule ids and counts, never turn, draft or
+brand text. No network
 calls. Exit 0 when every must_pass case passes, 1 when one fails, 2 on bad input.
 """
 

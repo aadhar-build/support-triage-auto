@@ -21,6 +21,17 @@ PYTHONPATH=src python3 -m triage.run_eval --gold path/to/gold.csv --out report.j
 
 The gold CSV has the columns `thread_id,intent,action,should_escalate`. By default it samples 200 threads from the `dev` split (`--sample-size`, `--seed`, `--split`, `--format md`). The default per-tier prices are **placeholders, not real prices**, and the report says so; pass `--price-cheap`, `--price-larger` and `--price-agent` to change them.
 
+## Reviewing a synthetic run
+
+After `python3 -m triage.run_synthetic --cases CASES.json --out DIR`, a person can review what the cascade decided for each made-up case:
+
+```
+PYTHONPATH=src python3 -m triage.review_page --cases CASES.json --run DIR --out review.html
+PYTHONPATH=src python3 -m triage.apply_review --run DIR --decisions decisions.json
+```
+
+`review_page` writes one offline HTML file (no server, no network requests). Flagged cases (a policy violation or action `escalate`) come first, and approving one needs an edited draft or a reason. The reviewer approves, edits, rejects with a reason or changes the action, then downloads `decisions.json`. `apply_review` checks it against the run, merges it by case id into `DIR/review_applied.json` (re-applying is safe; a later file resumes the review) and prints the approved, edited, rejected and undecided counts and any changed actions. Both commands accept only a synthetic run, never real dataset threads.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:
