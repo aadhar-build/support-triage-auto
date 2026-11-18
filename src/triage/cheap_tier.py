@@ -100,6 +100,7 @@ def _action(intent: str, urgency: str, escalate_hit: bool) -> str:
 
 class CheapTier(LabellingTier):
     name = "cheap"
+    model_id = "keywords"
 
     def __init__(self, price_per_call: float = PLACEHOLDER_PRICES["cheap"]):
         self.price_per_call = price_per_call

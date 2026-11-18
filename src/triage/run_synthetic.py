@@ -175,6 +175,7 @@ def _results(cases: list, rules) -> list:
             "expected_violations": expected_violations,
             "actual_violations": actual_violations,
             "tiers": list(r.tiers), "confidence": r.labels.confidence,
+            "reason_codes": list(r.reason_codes),
         })
     return results
 

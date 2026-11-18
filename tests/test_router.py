@@ -5,9 +5,16 @@ from datetime import datetime, timezone
 
 from triage.cheap_tier import CheapTier
 from triage.router import (
+    CASCADE_CODES,
+    CHEAP_CONFIDENT,
     DEFAULT_CONFIDENCE_THRESHOLD,
+    HIGH_RISK_TO_LARGER,
+    LOW_CONFIDENCE_TO_LARGER,
+    REASON_CODES,
     RoutedThread,
+    TierStep,
     is_high_risk,
+    is_known_reason_code,
     route_thread,
     route_threads,
 )
@@ -24,6 +31,7 @@ def thread(root_id, text="SENTINEL_TEXT"):
 
 class StubCheap(LabellingTier):
     name = "cheap"
+    model_id = "stub"
     price_per_call = 0.0
 
     def __init__(self, labels):
@@ -41,6 +49,7 @@ class StubLarger(StubCheap):
 
 class StubAgent(AgentTier):
     name = "agent"
+    model_id = "stub"
     price_per_call = 0.0
 
     def __init__(self, result=None):
@@ -175,6 +184,142 @@ class TestRouteThreads(unittest.TestCase):
                                   threshold=bad)
         route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=0.0)
         route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), threshold=1.0)
+
+
+def route(text, threshold=DEFAULT_CONFIDENCE_THRESHOLD, larger=None, root_id=11):
+    return route_thread(thread(root_id, text), CheapTier(), larger or FakeLargerTier(),
+                        FakeAgentTier(), threshold=threshold)
+
+
+class TestReasonCodes(unittest.TestCase):
+    def test_registry(self):
+        self.assertEqual(CASCADE_CODES, ("cheap_confident", "low_confidence_to_larger",
+                                         "high_risk_to_larger"))
+        for code in CASCADE_CODES:
+            with self.subTest(code=code):
+                self.assertIn(code, REASON_CODES)
+                self.assertTrue(is_known_reason_code(code))
+        for bad in ("no_such_code", None, 3, b"cheap_confident", "", "cheap_confident:x"):
+            with self.subTest(bad=bad):
+                self.assertFalse(is_known_reason_code(bad))
+        self.assertTrue(is_known_reason_code("x", codes=("x",)))
+        self.assertFalse(is_known_reason_code("cheap_confident", codes=("x",)))
+
+    def assert_codes(self, r, first):
+        self.assertEqual(r.reason_codes[0], first)
+        self.assertEqual(sum(c in CASCADE_CODES for c in r.reason_codes), 1)
+        for code in r.reason_codes:
+            self.assertTrue(is_known_reason_code(code), code)
+
+    def test_confident_not_high_risk(self):
+        r = route("package delivery SENTINEL_TEXT")  # delivery, 0.75, normal, ask
+        self.assertEqual(r.cheap_labels.confidence, 0.75)
+        self.assert_codes(r, CHEAP_CONFIDENT)
+        self.assertNotIn("larger", r.tiers)
+        self.assertNotIn("larger", [s.tier for s in r.steps])
+
+    def test_low_confidence_not_high_risk(self):
+        r = route("hello SENTINEL_TEXT")  # other, 0.2, normal, ask
+        self.assertFalse(is_high_risk(r.cheap_labels))
+        self.assert_codes(r, LOW_CONFIDENCE_TO_LARGER)
+
+    def test_high_risk_high_confidence(self):
+        r = route("password login locked out SENTINEL_TEXT")  # account_access, 0.9
+        self.assertEqual(r.cheap_labels.confidence, 0.9)
+        self.assert_codes(r, HIGH_RISK_TO_LARGER)
+
+    def test_high_risk_low_confidence(self):
+        r = route("urgent hello SENTINEL_TEXT")  # other, 0.2, high urgency
+        self.assertLess(r.cheap_labels.confidence, DEFAULT_CONFIDENCE_THRESHOLD)
+        self.assertTrue(is_high_risk(r.cheap_labels))
+        self.assert_codes(r, HIGH_RISK_TO_LARGER)
+
+    def test_threshold_decides_confident(self):
+        self.assert_codes(route("package delivery", threshold=0.8), LOW_CONFIDENCE_TO_LARGER)
+        self.assert_codes(route("package delivery", threshold=0.75), CHEAP_CONFIDENT)
+
+
+class TestSteps(unittest.TestCase):
+    def test_steps_record_each_tier(self):
+        override = L(intent="billing", urgency="normal", action="ask", confidence=1.0)
+        r = route("hello SENTINEL_TEXT", larger=FakeLargerTier(overrides={11: override}))
+        self.assertEqual(r.tiers, ("cheap", "larger", "agent"))
+        self.assertEqual(tuple(s.tier for s in r.steps), r.tiers)
+        self.assertEqual(tuple(s.model_id for s in r.steps),
+                         ("keywords", "fake-larger", "fake-agent"))
+        self.assertNotEqual(r.cheap_labels, override)
+        self.assertEqual(r.steps[0], TierStep("cheap", "keywords", r.cheap_labels))
+        self.assertEqual(r.steps[1].labels, override)
+        self.assertEqual(r.steps[2].labels, override)
+
+    def test_agent_step_records_act_result(self):
+        final = L(action="escalate")
+        cheap = StubCheap(L(action="ask"))
+        r = route_thread(thread(5), cheap, StubLarger(L()), StubAgent(final))
+        self.assertEqual([s.tier for s in r.steps], ["cheap", "agent"])
+        self.assertEqual(r.steps[1].labels, final)
+
+    def test_missing_model_id_refused(self):
+        class NoIdCheap(LabellingTier):
+            name = "nocheap"
+            price_per_call = 0.0
+
+            def label(self, thread):
+                return L()
+
+        class NoIdAgent(AgentTier):
+            name = "noagent"
+            price_per_call = 0.0
+
+            def act(self, thread, labels):
+                return labels
+
+        empty_larger = StubLarger(L())
+        empty_larger.name = "emptylarger"
+        empty_larger.model_id = ""
+        none_cheap = StubCheap(L())
+        none_cheap.name = "nonecheap"
+        none_cheap.model_id = None
+        ok = (StubCheap(L()), StubLarger(L()), StubAgent())
+        cases = {
+            "nocheap": (NoIdCheap(), ok[1], ok[2]),
+            "nonecheap": (none_cheap, ok[1], ok[2]),
+            "emptylarger": (ok[0], empty_larger, ok[2]),
+            "noagent": (ok[0], ok[1], NoIdAgent()),
+        }
+        for name, (c, l, a) in cases.items():
+            with self.subTest(tier=name):
+                with self.assertRaisesRegex(ValueError, name):
+                    route_thread(thread(1), c, l, a)
+                with self.assertRaisesRegex(ValueError, name):
+                    route_threads([thread(1)], c, l, a)
+                with self.assertRaisesRegex(ValueError, name):
+                    route_threads([], c, l, a)
+        self.assertEqual(ok[0].calls, 0)
+
+    def test_routed_fields_unchanged(self):
+        cases = [
+            ("package delivery", ("cheap", "agent"), L("delivery", "normal", "ask", 0.75),
+             L("delivery", "normal", "ask", 0.75)),
+            ("hello", ("cheap", "larger", "agent"), L("other", "normal", "ask", 0.2),
+             L("other", "normal", "ask", 1.0)),
+            ("password login locked out", ("cheap", "larger"),
+             L("account_access", "normal", "route", 0.9),
+             L("account_access", "normal", "route", 1.0)),
+            ("thanks, love it", ("cheap", "agent"), L("praise", "low", "answer", 0.75),
+             L("praise", "low", "answer", 0.75)),
+        ]
+        for text, tiers, cheap_labels, labels in cases:
+            with self.subTest(text=text):
+                r = route(text + " SENTINEL_TEXT", root_id=42)
+                self.assertEqual(r.thread_id, 42)
+                self.assertEqual(r.tiers, tiers)
+                self.assertEqual(r.cheap_labels, cheap_labels)
+                self.assertEqual(r.labels, labels)
+
+    def test_defaults_keep_old_constructions(self):
+        r = RoutedThread(thread_id=1, labels=L(), cheap_labels=L(), tiers=("cheap",))
+        self.assertEqual((r.steps, r.reason_codes), ((), ()))
 
 
 if __name__ == "__main__":

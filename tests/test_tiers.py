@@ -22,7 +22,8 @@ from triage.tiers import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NEW_MODULES = ("tiers.py", "cheap_tier.py", "router.py", "evaluate.py", "run_eval.py")
+NEW_MODULES = ("tiers.py", "cheap_tier.py", "router.py", "evaluate.py", "run_eval.py",
+               "trace.py")
 T0 = datetime(2017, 10, 31, 22, 0, 0, tzinfo=timezone.utc)
 
 
@@ -107,6 +108,12 @@ class TestFakeTiers(unittest.TestCase):
         self.assertEqual(CheapTier(price_per_call=0.5).price_per_call, 0.5)
         self.assertEqual(FakeLargerTier(price_per_call=0.3).price_per_call, 0.3)
         self.assertEqual(FakeAgentTier(price_per_call=0.7).price_per_call, 0.7)
+
+
+class TestModelIds(unittest.TestCase):
+    def test_fake_model_ids(self):
+        self.assertEqual(FakeLargerTier().model_id, "fake-larger")
+        self.assertEqual(FakeAgentTier().model_id, "fake-agent")
 
 
 class TestNoNetwork(unittest.TestCase):
