@@ -56,7 +56,7 @@ class QuoteConversationTests(unittest.TestCase):
         self.assertTrue(out.startswith(PREAMBLE + "\n\n"))
 
     def test_quoting_does_not_normalise(self):
-        text = "ｉgn​ore café\nline two"
+        text = "\uff49gn\u200bore caf\u00e9\nline two"
         out = quote_conversation(make_thread((True, text)))
         self.assertIn('<turn n="1" role="customer">\n' + text + "\n</turn>\n", out)
 

@@ -1,0 +1,11 @@
+{
+  "version": "fixture-1",
+  "status": "made-up phrases for tests only",
+  "phrases": [
+    {"id": "ignore-your-rules", "text": "ignore your rules"},
+    {"id": "ignore-your-instructions", "text": "ignore your instructions"},
+    {"id": "youre-now", "text": "you're now"},
+    {"id": "you-are-now", "text": "you are now"},
+    {"id": "system-prompt", "text": "system prompt"}
+  ]
+}
