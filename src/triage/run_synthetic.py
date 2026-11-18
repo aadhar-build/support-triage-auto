@@ -206,10 +206,14 @@ def _thread(position: int, c: dict) -> Thread:
     # Inbound authors stay in memory: never written to a report, trace or stdout.
     customer = c.get("customer") or "%s_%d" % (SYNTHETIC_AUTHOR, position)
     brand = c.get("brand") or SYNTHETIC_AUTHOR
-    start = parse_started_at(c["started_at"]) if "started_at" in c else SYNTHETIC_TIME
+    start = parse_started_at(c["started_at"]) if "started_at" in c else None
+
+    def at(i):  # one minute apart from started_at; SYNTHETIC_TIME for every turn otherwise
+        return SYNTHETIC_TIME if start is None else start + timedelta(minutes=i - 1)
+
     turns = tuple(
         Turn(tweet_id=position * 1000 + i, author_id=customer if t["inbound"] else brand,
-             inbound=t["inbound"], created_at=start + timedelta(minutes=i - 1), text=t["text"])
+             inbound=t["inbound"], created_at=at(i), text=t["text"])
         for i, t in enumerate(c["turns"], start=1))
     return Thread(root_tweet_id=position, brand_ids=(), turns=turns,
                   brand_replied=any(not t.inbound for t in turns))
