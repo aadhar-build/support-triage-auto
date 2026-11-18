@@ -10,7 +10,7 @@ import subprocess
 import sys
 import unittest
 
-from tests.test_review_page import ReviewTestBase, standard_cases
+from tests.test_review_page import REFUND_DRAFT, PARCEL, ReviewTestBase, case, standard_cases
 
 NEW_DRAFT = "Sorry, please DM us your order number."
 
@@ -18,7 +18,7 @@ NEW_DRAFT = "Sorry, please DM us your order number."
 class ApplyTestBase(ReviewTestBase):
     def setUp(self):
         super().setUp()
-        _, self.run_dir = self.make_run(standard_cases())
+        self.cases_path, self.run_dir = self.make_run(standard_cases())
         self.report = self.run_dir / "synthetic_report.json"
         self.applied = self.run_dir / "review_applied.json"
         self.run_id = hashlib.sha256(self.report.read_bytes()).hexdigest()
@@ -33,11 +33,22 @@ class ApplyTestBase(ReviewTestBase):
         path.write_text(raw, encoding="utf-8")
         return path
 
-    def apply(self, decisions_path, run_dir=None):
+    def apply(self, decisions_path, run_dir=None, cases_path=None, rules=None):
         return subprocess.run(
             [sys.executable, "-m", "triage.apply_review", "--run",
-             str(run_dir or self.run_dir), "--decisions", str(decisions_path)],
+             str(run_dir or self.run_dir), "--decisions", str(decisions_path),
+             "--cases", str(cases_path or self.cases_path),
+             "--rules", str(rules or self.rules)],
             cwd=str(self.dir), env=self.env, capture_output=True, text=True, timeout=60)
+
+    def assert_refused(self, proc, target, expected):
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        lines = proc.stderr.splitlines()
+        self.assertEqual(len(lines), 1, proc.stderr)
+        self.assertTrue(lines[0].startswith("error:"), lines[0])
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(target.read_bytes(), expected)
 
     def applied_json(self):
         return json.loads(self.applied.read_text(encoding="utf-8"))
@@ -201,16 +212,113 @@ class TestApplyReview(ApplyTestBase):
                 self.assertEqual(self.applied.read_bytes(), before)
 
     def test_flagged_approve_needs_reason(self):
+        # feedback-1: an escalate-only flagged case (hacked) can be approved with a
+        # reason; a violation case (refund) cannot be approved at all (see
+        # TestViolationCases).
         proc = self.apply(self.decisions_file({
             "hacked": {"decision": "approve", "reason": "Escalation is right here"},
-            "refund": {"decision": "approve", "reason": "Refund was pre-agreed"},
             "praise": {"decision": "approve"},
         }))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "approved=3 edited=0 rejected=0 undecided=1\n")
+        self.assertEqual(proc.stdout, "approved=2 edited=0 rejected=0 undecided=2\n")
         cases = self.applied_json()["cases"]
         self.assertEqual(cases["hacked"]["reason"], "Escalation is right here")
         self.assertNotIn("reason", cases["praise"])
+
+
+    def test_refuses_bad_cases_or_rules(self):
+        seed = self.apply(self.decisions_file({"praise": {"decision": "approve"}}))
+        self.assertEqual(seed.returncode, 0, seed.stderr)
+        before = self.applied.read_bytes()
+        other_cases = self.write_cases([case("other", *PARCEL)], name="other-cases.json")
+        bad_cases = self.write_cases([{"id": "x"}], name="bad-cases.json")
+        empty_rules = self.dir / "empty-rules.json"
+        empty_rules.write_text(json.dumps({"public_reply_rules": []}), encoding="utf-8")
+        variants = {
+            "missing cases file": {"cases_path": self.dir / "nope.json"},
+            "invalid cases file": {"cases_path": bad_cases},
+            "cases ids do not match the run": {"cases_path": other_cases},
+            "missing rules file": {"rules": self.dir / "no-rules.json"},
+            "empty rules list": {"rules": empty_rules},
+        }
+        for name, kwargs in variants.items():
+            with self.subTest(name):
+                proc = self.apply(self.decisions_file(WORKED), **kwargs)
+                self.assert_refused(proc, self.applied, before)
+
+
+EMAIL_TEXT = "my parcel never arrived, write to sam@example.test"
+
+
+class TestViolationCases(ApplyTestBase):
+    """feedback-1: a case with any policy violation can't be approved, even with a reason.
+    It needs an edit whose draft passes policy_check with zero violations, or a reject."""
+
+    def test_violation_case_cannot_be_approved_or_kept_violating(self):
+        seed = self.apply(self.decisions_file({"praise": {"decision": "approve"}}))
+        self.assertEqual(seed.returncode, 0, seed.stderr)
+        before = self.applied.read_bytes()
+        variants = {
+            "approve with reason": {"refund": {"decision": "approve",
+                                               "reason": "Refund was pre-agreed"}},
+            "approve without reason": {"refund": {"decision": "approve"}},
+            "edit keeps a banned phrase": {"refund": {
+                "decision": "edit", "draft": "Sorry, a full refund is coming"}},
+            "edit on an unflagged case adds a banned phrase": {"parcel": {
+                "decision": "edit", "draft": "We'll refund you today"}},
+        }
+        for name, decisions in variants.items():
+            with self.subTest(name):
+                proc = self.apply(self.decisions_file(decisions))
+                self.assert_refused(proc, self.applied, before)
+                for d in decisions.values():
+                    if "draft" in d:
+                        self.assertNotIn(d["draft"], proc.stderr)
+                        self.assertIn("t-promise", proc.stderr)
+
+    def test_edit_echoing_customer_email_is_refused(self):
+        cases_path, run_dir = self.make_run([
+            case("mail", *PARCEL, turns=[{"inbound": True, "text": EMAIL_TEXT}],
+                 draft_reply=REFUND_DRAFT, expected_violations=["t-promise"]),
+        ], name="mailrun")
+        run_id = hashlib.sha256((run_dir / "synthetic_report.json").read_bytes()).hexdigest()
+        draft = "Sorry, we have emailed sam@example.test"
+        path = self.decisions_file({"mail": {"decision": "edit", "draft": draft}},
+                                   run_id=run_id)
+        proc = self.apply(path, run_dir=run_dir, cases_path=cases_path)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertTrue(proc.stderr.startswith("error:"), proc.stderr)
+        self.assertIn("t-pii", proc.stderr)
+        self.assertNotIn("sam@example.test", proc.stderr)
+        self.assertFalse((run_dir / "review_applied.json").exists())
+
+    def test_clean_edit_or_reject_is_accepted(self):
+        proc = self.apply(self.decisions_file({
+            "refund": {"decision": "edit", "draft": NEW_DRAFT,
+                       "reason": "Removed the refund promise"}}))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "approved=0 edited=1 rejected=0 undecided=3\n")
+        proc = self.apply(self.decisions_file({
+            "refund": {"decision": "reject", "reason": "Promise not allowed"}}))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "approved=0 edited=0 rejected=1 undecided=3\n")
+
+    def test_refuses_existing_entry_that_breaks_the_rule(self):
+        legacy = {
+            "approved violation case": {"decision": "approve", "original_action": "ask",
+                                        "action": "ask", "reason": "Pre-agreed"},
+            "edit that still violates": {"decision": "edit", "original_action": "ask",
+                                         "action": "ask", "draft": REFUND_DRAFT},
+        }
+        for name, entry in legacy.items():
+            with self.subTest(name):
+                self.applied.write_text(
+                    json.dumps({"run_id": self.run_id, "cases": {"refund": entry}}),
+                    encoding="utf-8")
+                before = self.applied.read_bytes()
+                proc = self.apply(self.decisions_file({"praise": {"decision": "approve"}}))
+                self.assert_refused(proc, self.applied, before)
+                self.assertNotIn(REFUND_DRAFT, proc.stderr)
 
 
 if __name__ == "__main__":

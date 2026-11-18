@@ -97,10 +97,14 @@ def load_run(run_dir) -> tuple:
     return cases, hashlib.sha256(raw).hexdigest()
 
 
+def has_violation(report_case: dict) -> bool:
+    """The system's draft broke at least one policy rule."""
+    return bool(report_case["actual_violations"])
+
+
 def is_flagged(report_case: dict) -> bool:
     """A case is flagged when it has a policy violation or the system chose escalate."""
-    return bool(report_case["actual_violations"]) \
-        or report_case["actual"]["action"] == "escalate"
+    return has_violation(report_case) or report_case["actual"]["action"] == "escalate"
 
 
 # ---------------------------------------------------------------- the page

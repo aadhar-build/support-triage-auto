@@ -1,13 +1,19 @@
 """Apply a reviewer's decisions file to a synthetic run.
 
-Usage: python3 -m triage.apply_review --run DIR --decisions DECISIONS.json
+Usage: python3 -m triage.apply_review --run DIR --decisions DECISIONS.json --cases CASES.json
+       [--rules RULES.json]
 
-Checks the decisions against DIR/synthetic_report.json and merges them by case id into
+Checks the decisions against DIR/synthetic_report.json and the made-up cases file the run
+came from, and merges them by case id into
 DIR/review_applied.json, so applying the same file twice gives the same bytes and a later
 file resumes the review. Prints approved, edited, rejected and undecided counts and each
 changed action; never prints draft or reason text. This command enforces the review rules:
-a reject needs a reason, an edit needs a draft, and approving a flagged case needs a
-reason. Exit 0 on success, 2 on bad input, leaving any existing output untouched.
+a reject needs a reason and an edit needs a draft. A case with a policy violation can't be
+approved at all: it needs an edit or a reject. Every edited draft must pass policy_check
+(the --rules file, default the same as run_synthetic) with zero violations. Approving a case
+flagged only because its action is escalate needs a reason. The rules are checked over the
+merged result, so an older review_applied.json entry that breaks them is refused too. Exit 0
+on success, 2 on bad input, leaving any existing output untouched.
 """
 
 from __future__ import annotations
@@ -20,7 +26,9 @@ import tempfile
 from pathlib import Path
 from typing import List, Optional
 
-from triage.review_page import ReportError, is_flagged, load_run
+from triage.policy_check import RulesError, check, load_rules
+from triage.review_page import ReportError, has_violation, is_flagged, load_run
+from triage.run_synthetic import DEFAULT_RULES_PATH, CasesError, load_cases
 from triage.tiers import ACTIONS
 
 APPLIED_NAME = "review_applied.json"
@@ -75,8 +83,6 @@ def _entry(case_id, d, report_case) -> dict:
         raise ApplyError("%s: 'draft' is only allowed with an edit" % where)
     if decision == "reject" and not _filled(d.get("reason")):
         raise ApplyError("%s: a reject needs a non-empty 'reason'" % where)
-    if decision == "approve" and is_flagged(report_case) and not _filled(d.get("reason")):
-        raise ApplyError("%s: approving a flagged case needs a non-empty 'reason'" % where)
 
     original = report_case["actual"]["action"]
     entry = {"decision": decision, "original_action": original,
@@ -140,6 +146,23 @@ def _valid_previous(e, original_action) -> bool:
             and (decision != "reject" or "reason" in e))
 
 
+def _check_rules(case_id, entry, report_case, customer_turns, rules) -> None:
+    """Enforce the review rules on one merged entry. Errors name rule ids, never text."""
+    where = "decision for case %r" % case_id
+    if entry["decision"] == "approve":
+        if has_violation(report_case):
+            raise ApplyError("%s: a case with a policy violation cannot be approved; edit "
+                             "the draft or reject it" % where)
+        if is_flagged(report_case) and not _filled(entry.get("reason")):
+            raise ApplyError("%s: approving a flagged case needs a non-empty 'reason'"
+                             % where)
+    if entry["decision"] == "edit":
+        found = sorted({v.rule_id for v in check(entry["draft"], customer_turns, rules)})
+        if found:
+            raise ApplyError("%s: the edited draft breaks policy rules: %s"
+                             % (where, ", ".join(found)))
+
+
 def _review(report_cases, run_id, cases: dict) -> dict:
     decided = [c["decision"] for c in cases.values()]
     changed = [{"id": i, "from": e["original_action"], "to": e["action"]}
@@ -174,15 +197,28 @@ def _parser() -> argparse.ArgumentParser:
                                 description=__doc__.splitlines()[0])
     p.add_argument("--run", required=True)
     p.add_argument("--decisions", required=True)
+    p.add_argument("--cases", required=True)
+    p.add_argument("--rules", default=str(DEFAULT_RULES_PATH))
     return p
 
 
 def _run(args) -> dict:
+    source_cases = load_cases(args.cases)
     report_cases, run_id = load_run(args.run)
+    if [c["id"] for c in source_cases] != [r["id"] for r in report_cases]:
+        raise ApplyError("the run's case ids do not match the cases file %s" % args.cases)
+    try:
+        rules = load_rules(args.rules)
+    except RulesError as e:
+        raise ApplyError("bad rules file: %s" % e)
     new = _new_entries(args.decisions, report_cases, run_id)
     out = Path(args.run) / APPLIED_NAME
     cases = dict(_previous_entries(out, report_cases, run_id))
     cases.update(new)
+    by_id = {r["id"]: r for r in report_cases}
+    turns = {c["id"]: [t["text"] for t in c["turns"] if t["inbound"]] for c in source_cases}
+    for case_id in sorted(cases):
+        _check_rules(case_id, cases[case_id], by_id[case_id], turns[case_id], rules)
     review = _review(report_cases, run_id, cases)
     _write_atomic(out, json.dumps(review, sort_keys=True, indent=2) + "\n")
     return review
@@ -192,7 +228,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     try:
         review = _run(args)
-    except (ReportError, ApplyError) as e:
+    except (CasesError, ReportError, ApplyError) as e:
         print("error: %s" % " ".join(str(e).split()), file=sys.stderr)
         return 2
     s = review["summary"]
