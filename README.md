@@ -47,6 +47,17 @@ PYTHONPATH=src python3 -m triage.apply_review --run DIR --decisions decisions.js
 
 `review_page` writes one offline HTML file (no server, no network requests). Flagged cases (a policy violation or action `escalate`) come first. A case with a policy violation can only be edited or rejected, never approved. A case flagged only by `escalate` can be approved with a reason. The reviewer approves, edits, rejects with a reason or changes the action, then downloads `decisions.json`. `apply_review` checks it against the run and its cases file, runs the policy check (`--rules`, default `policies/rules.json`) on every edited draft and refuses any that still break a rule, merges it by case id into `DIR/review_applied.json` (re-applying is safe; a later file resumes the review) and prints the approved, edited, rejected and undecided counts and any changed actions. Both commands accept only a synthetic run, never real dataset threads.
 
+## Replaying a synthetic run
+
+To see why the cascade handled each made-up conversation the way it did, run the synthetic cases with a trace (the path must be outside the repository), then build the replay page:
+
+```
+PYTHONPATH=src python3 -m triage.run_synthetic --cases CASES.json --out DIR --trace /tmp/synthetic-trace.jsonl
+PYTHONPATH=src python3 -m triage.replay --cases CASES.json --run DIR --trace /tmp/synthetic-trace.jsonl --out replay.html
+```
+
+`run_synthetic --trace` writes one audit record per case (split `synthetic`, `thread_id` = case position) before any report, and adds ` trace_records=<n>` to its summary line; without `--trace` nothing changes. `replay` writes one offline HTML page (no server, no network requests): pick a thread, step through its turns with Next and Back, and see the triage state (intent, urgency, action, confidence, reason codes, deciding tier and model id, policy result, drafted or held reply) next to the thread's trace. Until per-turn re-triage (#46) lands, the one recorded decision is shown only at the last turn, labelled as decided once on the full thread. It refuses (exit 2, one line, no file) anything but a synthetic trace and run, and a cases file, run report or trace that don't belong together; edit the cases file in any way and you must re-run `run_synthetic` first.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:

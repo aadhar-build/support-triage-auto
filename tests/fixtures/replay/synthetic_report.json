@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "actual": {
+        "action": "answer",
+        "escalate": false,
+        "intent": "praise"
+      },
+      "actual_violations": [],
+      "confidence": 0.75,
+      "expected": {
+        "action": "answer",
+        "escalate": false,
+        "intent": "praise"
+      },
+      "expected_violations": [],
+      "id": "rp-answer",
+      "must_pass": true,
+      "passed": true,
+      "reason_codes": [
+        "cheap_confident"
+      ],
+      "tiers": [
+        "cheap",
+        "agent"
+      ],
+      "title": "Made-up praise with a clean draft"
+    },
+    {
+      "actual": {
+        "action": "ask",
+        "escalate": false,
+        "intent": "delivery"
+      },
+      "actual_violations": null,
+      "confidence": 0.6,
+      "expected": {
+        "action": "ask",
+        "escalate": false,
+        "intent": "delivery"
+      },
+      "expected_violations": null,
+      "id": "rp-ask",
+      "must_pass": true,
+      "passed": true,
+      "reason_codes": [
+        "cheap_confident"
+      ],
+      "tiers": [
+        "cheap",
+        "agent"
+      ],
+      "title": "Made-up parcel with no draft"
+    },
+    {
+      "actual": {
+        "action": "route",
+        "escalate": false,
+        "intent": "account_access"
+      },
+      "actual_violations": null,
+      "confidence": 1.0,
+      "expected": {
+        "action": "route",
+        "escalate": false,
+        "intent": "account_access"
+      },
+      "expected_violations": null,
+      "id": "rp-route3",
+      "must_pass": true,
+      "passed": true,
+      "reason_codes": [
+        "high_risk_to_larger"
+      ],
+      "tiers": [
+        "cheap",
+        "larger"
+      ],
+      "title": "Made-up three-turn login trouble"
+    },
+    {
+      "actual": {
+        "action": "escalate",
+        "escalate": true,
+        "intent": "other"
+      },
+      "actual_violations": null,
+      "confidence": 1.0,
+      "expected": {
+        "action": "escalate",
+        "escalate": true,
+        "intent": "other"
+      },
+      "expected_violations": null,
+      "id": "rp-escalate",
+      "must_pass": true,
+      "passed": true,
+      "reason_codes": [
+        "high_risk_to_larger"
+      ],
+      "tiers": [
+        "cheap",
+        "larger"
+      ],
+      "title": "Made-up hacked account"
+    },
+    {
+      "actual": {
+        "action": "answer",
+        "escalate": false,
+        "intent": "praise"
+      },
+      "actual_violations": [
+        "t-promise"
+      ],
+      "confidence": 0.75,
+      "expected": {
+        "action": "answer",
+        "escalate": false,
+        "intent": "praise"
+      },
+      "expected_violations": [
+        "t-promise"
+      ],
+      "id": "rp-held",
+      "must_pass": true,
+      "passed": true,
+      "reason_codes": [
+        "cheap_confident"
+      ],
+      "tiers": [
+        "cheap",
+        "agent"
+      ],
+      "title": "Made-up praise with a draft that breaks a rule"
+    }
+  ],
+  "summary": {
+    "cases_run": 5,
+    "failed": 0,
+    "false_escalations": 0,
+    "missed_escalations": 0,
+    "must_pass_cases": 5,
+    "must_pass_failures": 0,
+    "passed": 5,
+    "policy_mismatches": 0,
+    "policy_violations": 1,
+    "rules_loaded": 3
+  }
+}

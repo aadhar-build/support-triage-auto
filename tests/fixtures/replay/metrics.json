@@ -1,0 +1,11 @@
+{
+  "schema_version": "metrics/1",
+  "kind": "synthetic",
+  "run_at": "2026-11-18T10:00:00Z",
+  "cohort": {
+    "name": "synthetic",
+    "split": null,
+    "gold_revision": "sha256:2ca242a250e4f53c3d0503dd5f79f78243745d5ec682a888ee2fd3c4429104c2",
+    "brand_population": "all"
+  }
+}

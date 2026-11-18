@@ -348,6 +348,86 @@ class TestRunSynthetic(RunSyntheticTestBase):
                 self.assertEqual(proc.stdout, "")
                 self.assertFalse(out.exists())
 
+    RUN_AT = ("--run-at", "2026-11-18T10:00:00Z")
+
+    def test_trace_written(self):
+        from triage.trace import validate_record
+        path = self.write_cases([case("parcel", *PARCEL), case("praise", *PRAISE),
+                                 case("hacked", *HACKED), case("locked", *LOCKED)])
+        plain_out = self.dir / "plain"
+        plain = self.run_cli(path, out=plain_out, extra=self.RUN_AT)
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli(path, extra=self.RUN_AT + ("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout,
+                         "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3"
+                         " trace_records=4\n")
+        self.assertEqual(plain.stdout,
+                         "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3\n")
+        records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([r["thread_id"] for r in records], [1, 2, 3, 4])
+        report = self.report_json()["cases"]
+        for record, rc in zip(records, report):
+            validate_record(record)
+            self.assertEqual(record["split"], "synthetic")
+            self.assertEqual(record["seed"], 0)
+            self.assertEqual(record["threshold"], 0.5)
+            self.assertIsNone(record["rules_version"])
+            self.assertIsNone(record["drift_config_version"])
+            self.assertEqual(record["final"]["intent"], rc["actual"]["intent"])
+            self.assertEqual(record["final"]["action"], rc["actual"]["action"])
+            self.assertEqual([t["tier"] for t in record["tiers"]], rc["tiers"])
+            self.assertEqual(record["reason_codes"], rc["reason_codes"])
+        # hand-written expectations from test_report_records_tiers_and_confidence
+        self.assertEqual([[t["tier"] for t in r["tiers"]] for r in records],
+                         [["cheap", "agent"], ["cheap", "agent"], ["cheap", "larger"],
+                          ["cheap", "larger"]])
+        self.assertEqual(records[2]["tiers"][1]["model_id"], "fake-larger")
+        # the three output files are byte-identical with and without --trace
+        for name in ("synthetic_report.json", "synthetic_report.md", "metrics.json"):
+            self.assertEqual((self.out / name).read_bytes(), (plain_out / name).read_bytes())
+
+    def test_trace_written_for_fixture_cases(self):
+        path = self.dir / "fixture_cases.json"
+        path.write_bytes(FIXTURE_CASES.read_bytes())
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli(path, extra=self.RUN_AT + ("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(proc.stdout.endswith(" trace_records=1\n"), proc.stdout)
+        content = trace.read_text(encoding="utf-8")
+        self.assertEqual(json.loads(content)["thread_id"], 1)
+        self.assertNotIn("SENTINEL", content)
+
+    def test_trace_inside_repo_refused(self):
+        path = self.write_cases([case("parcel", *PARCEL)])
+        trace = REPO_ROOT / "trace_should_not_exist.jsonl"
+        proc = self.run_cli(path, extra=self.RUN_AT + ("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertFalse(trace.exists())
+        self.assertFalse(self.out.exists())
+
+    def test_trace_write_failure_writes_no_report(self):
+        path = self.write_cases([case("parcel", *PARCEL)])
+        trace = self.dir / "no_such_dir" / "t.jsonl"
+        proc = self.run_cli(path, extra=self.RUN_AT + ("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+        self.assertFalse(trace.exists())
+        for name in ("synthetic_report.json", "synthetic_report.md", "metrics.json"):
+            self.assertFalse((self.out / name).exists(), name)
+
+    def test_trace_leaves_report_format(self):
+        from triage.review_page import load_run
+        path = self.write_cases([case("parcel", *PARCEL), case("hacked", *HACKED)])
+        proc = self.run_cli(path, extra=self.RUN_AT + ("--trace", str(self.dir / "t.jsonl")))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(set(self.report_json()), {"cases", "summary"})
+        cases, _ = load_run(self.out)
+        self.assertEqual([c["id"] for c in cases], ["parcel", "hacked"])
+
     def test_tests_do_not_read_owner_files(self):
         source = Path(__file__).read_text(encoding="utf-8")
         self.assertNotIn("evals/" + "gold", source)
