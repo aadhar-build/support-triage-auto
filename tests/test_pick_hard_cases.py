@@ -201,6 +201,33 @@ class TestPickHardCases(CliTestBase):
             orders_small.add(tuple(ids))
         self.assertGreaterEqual(len(orders_small), 2)
 
+    def test_out_inside_repo_refused(self):
+        name = "hardcase-guard-test-%d.jsonl" % os.getpid()
+        target = REPO_ROOT / name
+        link_dir = self.dir / "repo-link"
+        link_dir.symlink_to(REPO_ROOT, target_is_directory=True)
+        link_file = self.dir / "out-link.jsonl"
+        link_file.symlink_to(target)
+        cases = [
+            ("plain", str(target), self.dir),
+            ("relative from repo root", name, REPO_ROOT),
+            ("dotdot", str(REPO_ROOT / "src" / ".." / name), self.dir),
+            ("symlinked dir", str(link_dir / name), self.dir),
+            ("symlink file", str(link_file), self.dir),
+        ]
+        self.addCleanup(lambda: target.unlink() if target.exists() else None)
+        self.assertFalse(target.exists())
+        for label, out, cwd in cases:
+            with self.subTest(case=label):
+                summary_out = self.dir / "guard-summary.json"
+                proc = self.run_cli("--summary-out", str(summary_out), out=out, cwd=cwd)
+                self.assertEqual(proc.returncode, 2)
+                self.assertTrue(proc.stderr.startswith("error: "), proc.stderr)
+                self.assertIn("inside the repository", proc.stderr)
+                self.assertFalse(target.exists())
+                self.assertFalse(summary_out.exists())
+                self.assertEqual(proc.stdout, "")
+
     def test_out_dotdot_outside_repo_accepted(self):
         sub = self.dir / "sub"
         sub.mkdir()

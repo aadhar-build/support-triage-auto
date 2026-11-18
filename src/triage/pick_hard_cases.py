@@ -28,6 +28,7 @@ from triage.split import DEFAULT_SPLIT_PATH, load_split_config, split_threads
 from triage.threads import Thread, build_threads
 
 DEFAULT_DATA = "data/raw/twcs.csv"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 SIGNALS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
     ("legal", ("lawyer", "lawyers", "attorney", "solicitor", "sue", "suing", "lawsuit",
@@ -107,7 +108,15 @@ def _turn_record(turn) -> dict:
             "created_at": turn.created_at.isoformat(), "text": turn.text}
 
 
+def _check_out_path(out) -> None:
+    resolved = Path(out).resolve()
+    if resolved == REPO_ROOT or REPO_ROOT in resolved.parents:
+        raise _Fail("--out %s is inside the repository %s; write the labelling file outside it"
+                    % (resolved, REPO_ROOT))
+
+
 def _run(args) -> str:
+    _check_out_path(args.out)
     exclude = _load_exclude_ids(args.exclude_ids)
     config = load_split_config(args.split_config)
     threads, _ = build_threads(args.data)
