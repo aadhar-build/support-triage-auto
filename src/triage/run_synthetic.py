@@ -238,9 +238,11 @@ def _records(cases: list, threads: list) -> list:
     return records
 
 
-def _route(cases: list, topics, rule) -> tuple:
+def _route(cases: list, topics, rule, *, threshold=DEFAULT_CONFIDENCE_THRESHOLD,
+           tiers=None) -> tuple:
     """Route every case. Returns (routed, triggers at window_days, triggers at the report
-    window); both counts are 0 when rule is None."""
+    window); both counts are 0 when rule is None. `tiers` is (cheap, larger, agent),
+    default CheapTier(), FakeLargerTier(), FakeAgentTier()."""
     threads = [_thread(i, c) for i, c in enumerate(cases, start=1)]
     counts = None
     triggers = triggers_report = 0
@@ -250,8 +252,9 @@ def _route(cases: list, topics, rule) -> tuple:
         report = contact_counts(records, timedelta(hours=rule.report_window_hours))
         triggers = sum(n >= rule.min_conversations for n in counts.values())
         triggers_report = sum(n >= rule.min_conversations for n in report.values())
-    routed = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
-                           threshold=DEFAULT_CONFIDENCE_THRESHOLD, topics=topics,
+    cheap, larger, agent = tiers if tiers is not None else (
+        CheapTier(), FakeLargerTier(), FakeAgentTier())
+    routed = route_threads(threads, cheap, larger, agent, threshold=threshold, topics=topics,
                            repeat_rule=rule, repeat_counts=counts)
     return routed, triggers, triggers_report
 
@@ -280,6 +283,23 @@ def _results(cases: list, rules, routed: list) -> list:
             "reason_codes": list(r.reason_codes), "topic_id": list(r.topic_id),
         })
     return results
+
+
+def _route_and_score(cases: list, effective, threshold, tiers) -> tuple:
+    """(routed, results, triggers, triggers_report) under one rule set and threshold."""
+    rule = effective.repeat_contact if any("customer" in c for c in cases) else None
+    routed, triggers, triggers_report = _route(cases, effective.topics, rule,
+                                               threshold=threshold, tiers=tiers)
+    return routed, _results(cases, effective.rules, routed), triggers, triggers_report
+
+
+def run_cases(cases: list, effective, *, threshold=DEFAULT_CONFIDENCE_THRESHOLD,
+              tiers=None) -> tuple:
+    """Route validated cases under `effective` (a brand_rules.EffectiveRules) and score them.
+    Returns (routed, results). The repeat_contact rule is used when any case has
+    `customer`; `tiers` is (cheap, larger, agent), default the offline fakes."""
+    routed, results, _, _ = _route_and_score(cases, effective, threshold, tiers)
+    return routed, results
 
 
 def _summary(results: list, rules_loaded: int, topics_loaded: int, rule_loaded: int = 0,
@@ -395,8 +415,8 @@ def _run(args) -> tuple:
         if rule is None:
             raise _Fail("bad repeat_contact rule: repeat_contact rule in %s: "
                         "'repeat_contact' is missing or is not an object" % rules_path_of(args))
-    routed, triggers, triggers_report = _route(cases, topics, rule)
-    results = _results(cases, rules, routed)
+    routed, results, triggers, triggers_report = _route_and_score(
+        cases, effective, DEFAULT_CONFIDENCE_THRESHOLD, None)
     summary = _summary(results, len(rules), len(topics), int(rule is not None), triggers,
                        triggers_report)
     metrics_text = _metrics_text(args.cases, results, run_at)
