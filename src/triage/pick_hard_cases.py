@@ -1,14 +1,20 @@
-"""Pick escalation-likely eval threads as candidates for a hard-case gold set.
+"""Pick eval threads as candidates for a hard-case gold set, in two groups.
 
 Usage: python3 -m triage.pick_hard_cases --exclude-ids RANDOM300.csv --out LABELLING.jsonl
-       [--data data/raw/twcs.csv] [--split-config data/split.json] [--n 100] [--seed 0]
-       [--summary-out SUMMARY.json]
+       [--data data/raw/twcs.csv] [--split-config data/split.json]
+       [--n-signal 70] [--n-random 30] [--seed 0] [--summary-out SUMMARY.json]
 
 Only eval-split threads are considered; dev and full threads, and threads whose id is in
---exclude-ids (a CSV with a thread_id column), are never picked. Threads are ranked by
-how many distinct escalation signals their inbound turns hit, ties broken by a seeded
-shuffle. Thread ids and text go only to --out, which must resolve outside this repository.
-The summary holds aggregate counts only.
+--exclude-ids (a CSV with a thread_id column), are never picked. The remaining threads
+form two groups:
+- "signal": up to --n-signal threads whose inbound turns hit an escalation signal, ranked
+  by how many distinct signals they hit, ties broken by a seeded shuffle.
+- "no_signal_random": up to --n-random threads with no signal hit, drawn at random with
+  the same seed, as a control group.
+Each picked thread records its group; signal picks come first, then random picks, and
+"rank" is the position in the whole file. The same inputs and seed give the same output.
+Thread ids and text go only to --out, which must resolve outside this repository. The
+summary holds aggregate counts only, including counts per group.
 
 The signal word lists are defined here and are independent of the cheap tier's keywords.
 """
@@ -50,6 +56,8 @@ SIGNALS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
                          "furious", "outraged", "shocking")),
 )
 SIGNAL_NAMES: Tuple[str, ...] = tuple(name for name, _ in SIGNALS)
+GROUP_SIGNAL = "signal"
+GROUP_RANDOM = "no_signal_random"
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
 _ID_RE = re.compile(r"\d+", re.ASCII)
@@ -92,7 +100,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--split-config", default=str(DEFAULT_SPLIT_PATH))
     p.add_argument("--exclude-ids", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--n", type=int, default=100)
+    p.add_argument("--n-signal", type=int, default=70)
+    p.add_argument("--n-random", type=int, default=30)
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--summary-out")
     return p
@@ -142,8 +151,11 @@ def _write(path, text: str) -> None:
 
 
 def _run(args) -> str:
-    if args.n < 1:
-        raise _Fail("--n must be at least 1, got %d" % args.n)
+    for flag, value in (("--n-signal", args.n_signal), ("--n-random", args.n_random)):
+        if value < 0:
+            raise _Fail("%s must be at least 0, got %d" % (flag, value))
+    if args.n_signal + args.n_random < 1:
+        raise _Fail("--n-signal and --n-random are both 0: nothing to pick")
     _check_out_path(args.out)
 
     try:
@@ -178,18 +190,26 @@ def _run(args) -> str:
     kept = [t for t in eval_threads if t.root_tweet_id not in exclude]
 
     candidates = []
+    quiet = []
     for t in sorted(kept, key=lambda t: t.root_tweet_id):
         signals = escalation_signals(t)
         if signals:
             candidates.append((t, signals))
-    random.Random(args.seed).shuffle(candidates)
+        else:
+            quiet.append((t, signals))
+    rng = random.Random(args.seed)
+    rng.shuffle(candidates)
     candidates.sort(key=lambda c: len(c[1]), reverse=True)
-    picked = candidates[:args.n]
+    picked_signal = candidates[:args.n_signal]
+    picked_random = rng.sample(quiet, min(args.n_random, len(quiet)))
+    picked = ([(GROUP_SIGNAL, t, s) for t, s in picked_signal]
+              + [(GROUP_RANDOM, t, s) for t, s in picked_random])
 
-    lines = "".join(json.dumps({"rank": rank, "thread_id": t.root_tweet_id, "signals": list(signals),
-                         "turns": [_turn_record(turn) for turn in t.turns]},
-                        ensure_ascii=False) + "\n"
-                    for rank, (t, signals) in enumerate(picked, start=1))
+    lines = "".join(json.dumps({"rank": rank, "group": group, "thread_id": t.root_tweet_id,
+                                "signals": list(signals),
+                                "turns": [_turn_record(turn) for turn in t.turns]},
+                               ensure_ascii=False) + "\n"
+                    for rank, (group, t, signals) in enumerate(picked, start=1))
     _write(args.out, lines)
 
     summary = {
@@ -197,10 +217,13 @@ def _run(args) -> str:
         "threads_excluded_random_sample": len(eval_threads) - len(kept),
         "exclude_ids_unmatched": len(exclude - eval_ids),
         "threads_qualifying": len(candidates),
+        "threads_no_signal": len(quiet),
         "threads_picked": len(picked),
-        "picked_per_signal": {name: sum(1 for _, s in picked if name in s)
+        "picked_per_group": {GROUP_SIGNAL: len(picked_signal), GROUP_RANDOM: len(picked_random)},
+        "picked_per_signal": {name: sum(1 for _, s in picked_signal if name in s)
                               for name in SIGNAL_NAMES},
-        "n": args.n,
+        "n_signal": args.n_signal,
+        "n_random": args.n_random,
         "seed": args.seed,
     }
     return json.dumps(summary, sort_keys=True, indent=2) + "\n"

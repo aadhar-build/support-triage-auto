@@ -63,6 +63,7 @@ TWCS_ROWS = [
 ]
 ONE_SIGNAL = {_id(n) for n in (15, 17, 19, 21, 23, 27, 33)}
 QUALIFYING = {_id(11), _id(13)} | ONE_SIGNAL
+NO_SIGNAL = {_id(25), _id(29), _id(31)}  # eligible for the no_signal_random group
 FIXTURE_IDS = [str(_id(n)) for n in range(11, 36)]
 
 
@@ -74,6 +75,7 @@ SPLIT_ALL_EVAL = _split(0, 1.0, 0)
 SPLIT_ALL_DEV = _split(1.0, 0, 0)
 SPLIT_ALL_FULL = _split(0, 0, 1.0)
 SPLIT_MIXED = _split(0.3, 0.4, 0.3)
+SPLIT_MIXED_SEED6 = _split(0.3, 0.4, 0.3, seed=6)
 
 
 class CliTestBase(unittest.TestCase):
@@ -110,12 +112,18 @@ class CliTestBase(unittest.TestCase):
     def picked_ids(self, path=None):
         return [p["thread_id"] for p in self.picks(path)]
 
+    def group(self, name, path=None):
+        return [p for p in self.picks(path) if p["group"] == name]
+
+    def group_ids(self, name, path=None):
+        return [p["thread_id"] for p in self.group(name, path)]
+
 
 class TestPickHardCases(CliTestBase):
     def test_rank_by_distinct_signals(self):
         proc = self.run_cli()
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        picks = self.picks()
+        picks = self.group("signal")
         self.assertEqual([p["thread_id"] for p in picks[:2]], [_id(11), _id(13)])
         self.assertEqual(picks[0]["signals"], ["legal", "fraud_or_hacked", "strong_negative"])
         self.assertEqual(picks[1]["signals"], ["fraud_or_hacked", "strong_negative"])
@@ -123,6 +131,79 @@ class TestPickHardCases(CliTestBase):
         by_id = {p["thread_id"]: p for p in picks}
         self.assertEqual(by_id[_id(23)]["signals"], ["strong_negative"])
         self.assertEqual([p["rank"] for p in picks], list(range(1, 10)))
+
+    def test_two_groups_signal_first_then_no_signal_random(self):
+        proc = self.run_cli()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        picks = self.picks()
+        self.assertEqual([p["group"] for p in picks], ["signal"] * 9 + ["no_signal_random"] * 3)
+        self.assertEqual([p["rank"] for p in picks], list(range(1, 13)))
+        self.assertEqual(set(self.group_ids("signal")), QUALIFYING)
+        self.assertEqual(set(self.group_ids("no_signal_random")), NO_SIGNAL)
+        for p in self.group("no_signal_random"):
+            self.assertEqual(p["signals"], [])
+
+    def test_defaults_are_70_signal_and_30_random(self):
+        proc = self.run_cli()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        summary = json.loads(proc.stdout)
+        self.assertEqual(summary["n_signal"], 70)
+        self.assertEqual(summary["n_random"], 30)
+
+    def test_summary_counts_per_group(self):
+        exclude = self.write("exclude-g.csv", "thread_id\n%d\n%d\n" % (_id(15), _id(31)))
+        proc = self.run_cli("--n-signal", "3", "--n-random", "1", exclude=exclude)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        summary = json.loads(proc.stdout)
+        self.assertEqual(summary["threads_qualifying"], 8)
+        self.assertEqual(summary["threads_no_signal"], 2)
+        self.assertEqual(summary["picked_per_group"], {"signal": 3, "no_signal_random": 1})
+        self.assertEqual(summary["threads_picked"], 4)
+
+    def test_random_group_respects_its_count(self):
+        proc = self.run_cli("--n-signal", "2", "--n-random", "1")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(self.group_ids("signal"), [_id(11), _id(13)])
+        random_ids = self.group_ids("no_signal_random")
+        self.assertEqual(len(random_ids), 1)
+        self.assertIn(random_ids[0], NO_SIGNAL)
+
+    def test_seed_controls_random_draw(self):
+        a, b = self.dir / "ra.jsonl", self.dir / "rb.jsonl"
+        for out in (a, b):
+            proc = self.run_cli("--n-random", "1", "--seed", "3", out=out)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(a.read_bytes(), b.read_bytes())
+        drawn = set()
+        for seed in range(20):
+            out = self.dir / ("r-%d.jsonl" % seed)
+            proc = self.run_cli("--n-random", "1", "--seed", str(seed), out=out)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            ids = self.group_ids("no_signal_random", out)
+            self.assertEqual(len(ids), 1)
+            self.assertIn(ids[0], NO_SIGNAL)
+            drawn.add(ids[0])
+        self.assertGreaterEqual(len(drawn), 2)
+
+    def test_random_group_eval_only(self):
+        for name, config in (("dev", SPLIT_ALL_DEV), ("full", SPLIT_ALL_FULL)):
+            with self.subTest(split=name):
+                split = self.write("split-r-%s.json" % name, json.dumps(config))
+                proc = self.run_cli(split=split)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertEqual(self.group_ids("no_signal_random"), [])
+        from triage.split import assign_split, config_from_dict
+        config = config_from_dict(SPLIT_MIXED_SEED6)
+        eval_quiet = {i for i in NO_SIGNAL if assign_split(i, config) == "eval"}
+        other_quiet = NO_SIGNAL - eval_quiet
+        self.assertTrue(eval_quiet, "fixture needs no-signal eval threads")
+        self.assertTrue(other_quiet, "fixture needs no-signal dev/full threads")
+        split = self.write("split-mixed6.json", json.dumps(SPLIT_MIXED_SEED6))
+        proc = self.run_cli(split=split)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(set(self.group_ids("no_signal_random")), eval_quiet)
+        for i in self.picked_ids():
+            self.assertEqual(assign_split(i, config), "eval")
 
     def test_dev_and_full_splits_never_picked(self):
         for name, config in (("dev", SPLIT_ALL_DEV), ("full", SPLIT_ALL_FULL)):
@@ -145,40 +226,47 @@ class TestPickHardCases(CliTestBase):
         split = self.write("split-mixed.json", json.dumps(SPLIT_MIXED))
         proc = self.run_cli(split=split)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        picked = set(self.picked_ids())
+        picked = set(self.group_ids("signal"))
         self.assertEqual(picked, eval_hits)
-        self.assertFalse(picked & other_hits)
+        self.assertFalse(set(self.picked_ids()) & other_hits)
+        for i in self.picked_ids():
+            self.assertEqual(assign_split(i, config), "eval")
 
     def test_random_sample_ids_excluded(self):
-        exclude = self.write("exclude.csv", "thread_id,note\n%d,x\n999999,y\n%d,dup\n" % (_id(19), _id(19)))
+        exclude = self.write("exclude.csv", "thread_id,note\n%d,x\n999999,y\n%d,dup\n%d,quiet\n"
+                             % (_id(19), _id(19), _id(25)))
         proc = self.run_cli(exclude=exclude)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertNotIn(_id(19), self.picked_ids())
-        self.assertEqual(set(self.picked_ids()), QUALIFYING - {_id(19)})
+        self.assertNotIn(_id(25), self.picked_ids())
+        self.assertEqual(set(self.group_ids("signal")), QUALIFYING - {_id(19)})
+        self.assertEqual(set(self.group_ids("no_signal_random")), NO_SIGNAL - {_id(25)})
         summary = json.loads(proc.stdout)
         self.assertEqual(summary["threads_considered"], 12)
-        self.assertEqual(summary["threads_excluded_random_sample"], 1)
+        self.assertEqual(summary["threads_excluded_random_sample"], 2)
         self.assertEqual(summary["exclude_ids_unmatched"], 1)
         self.assertEqual(summary["threads_qualifying"], 8)
 
     def test_no_signal_never_picked_and_fewer_than_n(self):
-        proc = self.run_cli("--n", "50")
+        proc = self.run_cli("--n-signal", "50", "--n-random", "40")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        picked = self.picked_ids()
+        picked = self.group_ids("signal")
         self.assertEqual(sorted(picked), sorted(QUALIFYING))
+        self.assertEqual(sorted(self.group_ids("no_signal_random")), sorted(NO_SIGNAL))
         for no_signal in (_id(25), _id(29), _id(31)):
             self.assertNotIn(no_signal, picked)
         summary = json.loads(proc.stdout)
         self.assertEqual(summary["threads_qualifying"], 9)
-        self.assertEqual(summary["threads_picked"], 9)
+        self.assertEqual(summary["threads_picked"], 12)
 
     def test_same_inputs_and_seed_same_ids(self):
         a, b = self.dir / "a.jsonl", self.dir / "b.jsonl"
         for out in (a, b):
-            proc = self.run_cli("--n", "5", "--seed", "7", out=out)
+            proc = self.run_cli("--n-signal", "5", "--n-random", "2", "--seed", "7", out=out)
             self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(a.read_bytes(), b.read_bytes())
-        self.assertEqual(len(self.picked_ids(a)), 5)
+        self.assertEqual(len(self.group_ids("signal", a)), 5)
+        self.assertEqual(len(self.group_ids("no_signal_random", a)), 2)
 
     def test_seed_reorders_ties_only(self):
         orders_small = set()
@@ -186,16 +274,16 @@ class TestPickHardCases(CliTestBase):
             out = self.dir / ("all-%d.jsonl" % seed)
             proc = self.run_cli("--seed", str(seed), out=out)
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            picks = self.picks(out)
+            picks = self.group("signal", out)
             self.assertEqual(picks[0]["thread_id"], _id(11))
             scores = [len(p["signals"]) for p in picks]
             self.assertEqual(scores, sorted(scores, reverse=True))
             self.assertEqual({p["thread_id"] for p in picks}, QUALIFYING)
 
             out = self.dir / ("five-%d.jsonl" % seed)
-            proc = self.run_cli("--n", "5", "--seed", str(seed), out=out)
+            proc = self.run_cli("--n-signal", "5", "--seed", str(seed), out=out)
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            ids = self.picked_ids(out)
+            ids = self.group_ids("signal", out)
             self.assertEqual(ids[:2], [_id(11), _id(13)])
             self.assertTrue(set(ids[2:]) <= ONE_SIGNAL)
             orders_small.add(tuple(ids))
@@ -239,7 +327,9 @@ class TestPickHardCases(CliTestBase):
             ("non-integer thread_id", {"exclude": bad_id}, (), "line 3"),
             ("short row", {"exclude": short_row}, (), "line 2"),
             ("empty exclude file", {"exclude": empty}, (), "empty"),
-            ("n zero", {}, ("--n", "0"), "--n"),
+            ("both counts zero", {}, ("--n-signal", "0", "--n-random", "0"), "nothing to pick"),
+            ("negative signal count", {}, ("--n-signal", "-1"), "--n-signal"),
+            ("negative random count", {}, ("--n-random", "-1"), "--n-random"),
             ("missing data file", {"data": self.dir / "nope-data.csv"}, (), "hint"),
         ]
         for label, kwargs, extra, needle in cases:
@@ -272,7 +362,11 @@ class TestPickHardCases(CliTestBase):
             summary = json.loads(text)
             self.assertEqual(set(summary), {
                 "threads_considered", "threads_excluded_random_sample", "exclude_ids_unmatched",
-                "threads_qualifying", "threads_picked", "picked_per_signal", "n", "seed"})
+                "threads_qualifying", "threads_no_signal", "threads_picked", "picked_per_group",
+                "picked_per_signal", "n_signal", "n_random", "seed"})
+            self.assertEqual(summary["picked_per_group"], {"signal": 9, "no_signal_random": 3})
+            self.assertEqual(summary["threads_no_signal"], 3)
+            self.assertEqual(summary["threads_picked"], 12)
             self.assertEqual(summary["picked_per_signal"], {
                 "legal": 2, "fraud_or_hacked": 2, "safety": 1, "repeated_contact": 2,
                 "strong_negative": 5})
@@ -287,8 +381,13 @@ class TestPickHardCases(CliTestBase):
         proc = self.run_cli()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         by_id = {p["thread_id"]: p for p in self.picks()}
-        self.assertEqual(set(by_id[_id(11)]), {"rank", "thread_id", "signals", "turns"})
+        self.assertEqual(set(by_id[_id(11)]), {"rank", "group", "thread_id", "signals", "turns"})
         self.assertEqual(by_id[_id(11)]["rank"], 1)
+        self.assertEqual(by_id[_id(11)]["group"], "signal")
+        self.assertEqual(by_id[_id(29)]["group"], "no_signal_random")
+        self.assertEqual(by_id[_id(29)]["signals"], [])
+        self.assertEqual([t["text"] for t in by_id[_id(29)]["turns"]], [
+            "can you help SENTINEL_TEXT_29", "this is terrible, ask our lawyer SENTINEL_TEXT_30"])
         self.assertEqual(by_id[_id(11)]["turns"], [
             {"tweet_id": _id(11), "inbound": True, "created_at": "2017-10-31T22:10:11+00:00",
              "text": "my lawyer says this fraud is the worst SENTINEL_TEXT_11"},
@@ -306,7 +405,7 @@ class TestPickHardCases(CliTestBase):
     def test_signal_outside_cheap_tier_keywords_picked(self):
         proc = self.run_cli()
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        by_id = {p["thread_id"]: p for p in self.picks()}
+        by_id = {p["thread_id"]: p for p in self.group("signal")}
         self.assertIn(_id(27), by_id)
         self.assertEqual(by_id[_id(27)]["signals"], ["safety"])
 
