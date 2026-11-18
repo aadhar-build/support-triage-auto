@@ -4,17 +4,24 @@ Every thread and tweet here is made up by hand. Nothing reads data/raw/, the rea
 data/split.json or the owner's evals/drift.json (except the opt-in conformance test).
 """
 
+import ast
+import contextlib
 import copy
+import io
 import json
-from pathlib import Path
+import os
+import sys
 import tempfile
 import unittest
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 import triage.drift as drift
 from triage.cheap_tier import CheapTier
+from triage.evaluate import wilson_interval
 from triage.threads import Thread, Turn
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 FIXTURE_CONFIG = FIXTURES / "drift_config.json"
 
@@ -322,6 +329,211 @@ class TestLoadDriftConfig(unittest.TestCase):
         self.assertEqual(config.thresholds, {"intent_psi": 0.2, "volume": 2.0,
                                              "mean_confidence": 0.05,
                                              "escalated_share": 0.03, "other_share": 0.05})
+
+
+# ---- CLI fixture: a made-up twcs.csv, never real rows ----
+TWCS_HEADER = ("tweet_id,author_id,inbound,created_at,text,response_tweet_id,"
+               "in_response_to_tweet_id\n")
+CLI_BASE = 8800000
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _twitter_date(dt):
+    return "%s %s %02d %02d:%02d:%02d +0000 %d" % (
+        _DAYS[dt.weekday()], _MONTHS[dt.month - 1], dt.day, dt.hour, dt.minute, dt.second,
+        dt.year)
+
+
+def _row(n, inbound, at, response="", parent=""):
+    author = "custSENTINEL%d" % n if inbound else "SENTINELBRAND"
+    text = ("thanks love it SENTINELTEXT%d" % n) if inbound else "DM us SENTINELTEXT%d" % n
+    return "%d,%s,%s,%s,\"%s\",%s,%s" % (
+        CLI_BASE + n, author, "True" if inbound else "False", _twitter_date(at), text,
+        "" if response == "" else CLI_BASE + response, "" if parent == "" else CLI_BASE + parent)
+
+
+def _cli_rows():
+    w = lambda i, day, hour=10: MON + timedelta(weeks=i, days=day, hours=hour)  # noqa: E731
+    rows = [_row(1, True, w(0, 2))]                                   # 2016-W10, partial
+    rows += [_row(11, True, w(1, 1)), _row(12, True, w(1, 3))]        # 2016-W11, reference
+    rows += [_row(21, True, w(2, 1)), _row(22, True, w(2, 3))]        # 2016-W12, reference
+    # 2016-W13, monitored, 5 threads: volume ratio 2.5 against the reference mean of 2.
+    # 31 has a brand reply inside the week; 34 gets a brand reply and an inbound turn
+    # only after the week's end (2016-W14).
+    rows += [_row(31, True, w(3, 1), response=51), _row(51, False, w(3, 5), parent=31)]
+    rows += [_row(32, True, w(3, 2)), _row(33, True, w(3, 3))]
+    rows += [_row(34, True, w(3, 4), response=52), _row(52, False, w(4, 0, 1), 53, 34),
+             _row(53, True, w(4, 0, 2), parent=52)]
+    rows += [_row(35, True, w(3, 6))]
+    rows += [_row(41, True, w(4, 2))]                                 # 2016-W14, partial
+    return rows
+
+
+CLI_IDS = [CLI_BASE + n for n in (1, 11, 12, 21, 22, 31, 32, 33, 34, 35, 41, 51, 52, 53)]
+# The two smallest sha256("0:2016-W13:<id>") digests among 8800031..8800035, worked out
+# by hand once: 8800031 (526d3101...) then 8800034 (9be80a9f...).
+EXPECTED_SAMPLE_IDS = [8800031, 8800034]
+
+
+class TestCli(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+        self.data = self.dir / "twcs.csv"
+        self.data.write_text(TWCS_HEADER + "\n".join(_cli_rows()) + "\n", encoding="utf-8")
+        self.split = self.dir / "split.json"
+        self.split.write_text(json.dumps({"seed": 0, "unit": "thread", "fractions": {
+            "dev": 1.0, "eval": 0.0, "full": 0.0}}), encoding="utf-8")
+        self.report = self.dir / "report.json"
+
+    def main(self, *extra, config=FIXTURE_CONFIG, split="dev", report=None):
+        argv = ["--split", split, "--report-out", str(report or self.report),
+                "--config", str(config), "--data", str(self.data),
+                "--split-config", str(self.split)] + list(extra)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = drift.main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_missing_config_is_clear_error(self):
+        missing = self.dir / "no_such_drift.json"
+        code, out, err = self.main(config=missing)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertEqual(len(err.strip().splitlines()), 1)
+        self.assertTrue(err.startswith("error: "))
+        self.assertIn(str(missing), err)
+        self.assertFalse(self.report.exists())
+
+    def test_empty_reference_exits_2(self):
+        config = self.dir / "cfg.json"
+        data = json.loads(FIXTURE_CONFIG.read_text(encoding="utf-8"))
+        data["drift"]["reference"].update(start_week="2016-W30", end_week="2016-W31")
+        config.write_text(json.dumps(data), encoding="utf-8")
+        code, _, err = self.main(config=config)
+        self.assertEqual(code, 2)
+        self.assertIn("error: reference range 2016-W30..2016-W31 holds no usable threads", err)
+        self.assertFalse(self.report.exists())
+
+    def test_samples_hash_selected_bounded_and_cut(self):
+        samples = self.dir / "samples.jsonl"
+        code, out, err = self.main("--samples-out", str(samples))
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(out, "weeks=5 callouts=1 samples_written=2 split=dev\n")
+        first = samples.read_bytes()
+        lines = [json.loads(x) for x in first.decode("utf-8").splitlines()]
+        self.assertEqual([x["thread_id"] for x in lines], EXPECTED_SAMPLE_IDS)
+        for x in lines:
+            self.assertEqual(x["split"], "dev")
+            self.assertEqual(x["week"], "2016-W13")  # only the flagged week is sampled
+            self.assertEqual(x["signals"], ["volume"])
+            for turn in x["turns"]:
+                self.assertEqual(set(turn), {"tweet_id", "inbound", "created_at", "text"})
+        # cut at the week's end: 31 keeps its in-week reply; 34 loses the later turns
+        self.assertEqual([t["tweet_id"] for t in lines[0]["turns"]],
+                         [CLI_BASE + 31, CLI_BASE + 51])
+        self.assertEqual([t["tweet_id"] for t in lines[1]["turns"]], [CLI_BASE + 34])
+        # same input, same file
+        samples.unlink()
+        self.assertEqual(self.main("--samples-out", str(samples))[0], 0)
+        self.assertEqual(samples.read_bytes(), first)
+        report = json.loads(self.report.read_text(encoding="utf-8"))
+        self.assertEqual(report["samples_written"], 2)
+
+    def test_samples_out_inside_repo_refused(self):
+        inside = REPO_ROOT / ("drift_samples_test_%d.jsonl" % os.getpid())
+        self.addCleanup(lambda: inside.unlink() if inside.exists() else None)
+        code, out, err = self.main("--samples-out", str(inside))
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("error: "))
+        self.assertFalse(inside.exists())
+        self.assertFalse(self.report.exists())
+
+    def test_eval_split_samples_refused(self):
+        samples = self.dir / "samples.jsonl"
+        code, out, err = self.main("--samples-out", str(samples), split="eval")
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("error: "))
+        self.assertFalse(samples.exists())
+        self.assertFalse(self.report.exists())
+
+    def test_report_aggregate_only_look_ahead_and_ci(self):
+        md = self.dir / "report.md"
+        self.assertEqual(self.main()[0], 0)
+        self.assertEqual(self.main("--format", "md", report=md)[0], 0)
+        for path in (self.report, md):
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("SENTINEL", text, path.name)
+            self.assertNotIn("thanks love it", text, path.name)
+            for tid in CLI_IDS:
+                self.assertNotIn(str(tid), text, path.name)
+        md_text = md.read_text(encoding="utf-8")
+        self.assertIn("cut_at_week_end", md_text)
+        self.assertIn("thread_links_from_full_file", md_text)
+        self.assertIn("| 2016-W13 |", md_text)
+
+        report = json.loads(self.report.read_text(encoding="utf-8"))
+        self.assertEqual(report["look_ahead"]["turns"], "cut_at_week_end")
+        self.assertEqual(report["look_ahead"]["reference"], "earlier_weeks_only")
+        self.assertEqual(set(report["look_ahead"]["residual"]),
+                         {"thread_links_from_full_file", "dataset_snapshot"})
+        self.assertEqual(report["config_version"], "fixture-v1")
+        self.assertEqual(report["split"], "dev")
+        self.assertEqual(report["psi_epsilon"], 1e-4)
+        self.assertEqual(report["samples_written"], 0)
+        self.assertEqual(report["weeks"], 5)
+        self.assertEqual(report["callouts"], 1)
+        self.assertEqual(report["reference"]["weeks_used"], ["2016-W11", "2016-W12"])
+        rows = {r["week"]: r for r in report["week_rows"]}
+        self.assertEqual(sorted(rows), ["2016-W10", "2016-W11", "2016-W12", "2016-W13",
+                                        "2016-W14"])
+        w13 = rows["2016-W13"]
+        self.assertEqual((w13["phase"], w13["volume"], w13["volume_ratio"]),
+                         ("monitored", 5, 2.5))
+        self.assertTrue(w13["directional"])  # volume under 30
+        self.assertEqual(w13["intents"]["praise"]["count"], 5)
+        for row in report["week_rows"]:
+            n = row["volume"]
+            for intent, cell in row["intents"].items():
+                self.assertEqual(cell["ci"], wilson_interval(cell["count"], n), intent)
+            for key in ("escalated", "other"):
+                self.assertEqual(row[key]["ci"], wilson_interval(row[key]["count"], n))
+        self.assertIsNone(rows["2016-W11"]["intent_psi"])
+        self.assertEqual(report["call_outs"], [{"week": "2016-W13", "signal": "volume",
+                                                "value": 2.5, "reference_value": 1.0,
+                                                "threshold": 2.0}])
+
+
+class TestLiveConformance(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get("TRIAGE_LIVE_CONFORMANCE") == "1",
+                         "set TRIAGE_LIVE_CONFORMANCE=1 to load the owner's evals/drift.json")
+    def test_live_drift_config_loads(self):
+        config = drift.load_drift_config(REPO_ROOT / "evals" / "drift.json")
+        self.assertEqual(set(config.thresholds), set(drift.SIGNAL_ORDER))
+
+
+class TestModuleHygiene(unittest.TestCase):
+    def test_stdlib_only(self):
+        banned = {"urllib", "http", "socket", "requests", "ssl", "ftplib", "smtplib"}
+        stdlib = set(sys.stdlib_module_names)
+        src = (REPO_ROOT / "src" / "triage" / "drift.py").read_text(encoding="utf-8")
+        self.assertNotIn("os.environ", src)
+        self.assertNotIn("getenv", src)
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    continue
+                mods = [node.module or ""]
+            else:
+                continue
+            for mod in mods:
+                top = mod.split(".")[0]
+                self.assertNotIn(top, banned, mod)
+                self.assertTrue(top == "triage" or top in stdlib, "non-stdlib %s" % mod)
 
 
 class TestReplay(unittest.TestCase):
