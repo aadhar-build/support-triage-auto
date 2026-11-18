@@ -18,6 +18,7 @@ from triage.evaluate import (
     report_to_json,
     report_to_markdown,
     score,
+    wilson_interval,
 )
 from triage.router import RoutedThread, route_threads
 from triage.threads import Thread, Turn
@@ -117,7 +118,107 @@ class TestLoadGold(GoldFileMixin, unittest.TestCase):
             load_gold(os.path.join(self._tmp.name, "nope.csv"))
 
 
+class TestWilsonInterval(unittest.TestCase):
+    # Expected bounds are worked by hand from the Wilson score formula with z = 1.96.
+    def test_zero_successes(self):
+        low, high = wilson_interval(0, 37)
+        self.assertEqual(low, 0.0)
+        self.assertAlmostEqual(high, 0.094, delta=0.001)
+
+    def test_all_successes(self):
+        low, high = wilson_interval(37, 37)
+        self.assertAlmostEqual(low, 0.906, delta=0.001)
+        self.assertEqual(high, 1.0)
+        for n in (1, 2, 5, 6, 300):
+            with self.subTest(n=n):
+                self.assertEqual(wilson_interval(0, n)[0], 0.0)
+                self.assertEqual(wilson_interval(n, n)[1], 1.0)
+
+    def test_zero_denominator(self):
+        self.assertIsNone(wilson_interval(0, 0))
+
+    def test_interior_value_and_bounds(self):
+        low, high = wilson_interval(8, 10)
+        self.assertAlmostEqual(low, 0.4902, delta=0.001)
+        self.assertAlmostEqual(high, 0.9433, delta=0.001)
+        for k, n in ((1, 3), (5, 5), (0, 1), (150, 300), (8, 10), (0, 37), (37, 37)):
+            with self.subTest(k=k, n=n):
+                low, high = wilson_interval(k, n)
+                self.assertTrue(0.0 <= low <= k / n <= high <= 1.0, (low, high))
+
+
 class TestScore(unittest.TestCase):
+    def hand_fixture(self):
+        routed = [
+            rt(101, "delivery", "ask", CA),                # action ok, intent ok
+            rt(102, "billing", "ask", CLA),                # action mismatch
+            rt(103, "complaint", "answer", CA),            # missed escalation
+            rt(104, "account_access", "escalate", CL),     # false escalation, intent mismatch
+            rt(105, "outage_technical", "escalate", CL),   # correct escalation
+            rt(106, "other", "ask", CA),                   # no gold row
+        ]
+        gold = {
+            101: g("delivery", "ask", False),
+            102: g("billing", "route", False),
+            103: g("complaint", "escalate", True),
+            104: g("outage_technical", "route", False),
+            105: g("outage_technical", "escalate", True),
+            999: g("praise", "answer", False),             # no routed thread
+        }
+        return routed, gold
+
+    def test_intervals_match_rates(self):
+        r = score(*self.hand_fixture(), PLACEHOLDER_PRICES)
+        expected = {
+            "action_accuracy_ci": (2, 5),
+            "intent_accuracy_ci": (4, 5),
+            "missed_escalation_rate_ci": (1, 2),
+            "false_escalation_rate_ci": (1, 3),
+            "needs_person_share_ci": (2, 6),
+        }
+        for field, (k, n) in expected.items():
+            with self.subTest(field):
+                self.assertEqual(getattr(r, field), wilson_interval(k, n))
+        self.assertEqual(r.tier_shares_ci, {"cheap": wilson_interval(6, 6),
+                                            "larger": wilson_interval(3, 6),
+                                            "agent": wilson_interval(4, 6)})
+        # independent check: 2 of 5 worked by hand
+        low, high = r.action_accuracy_ci
+        self.assertAlmostEqual(low, 0.1176, delta=0.001)
+        self.assertAlmostEqual(high, 0.7693, delta=0.001)
+
+    def test_interval_null_when_rate_null(self):
+        cases = {
+            "no routed threads": ([], {1: g("delivery", "ask", True)}),
+            "no scored threads": ([rt(1, "delivery", "ask", CA)], {}),
+        }
+        for name, (routed, gold) in cases.items():
+            with self.subTest(name):
+                r = score(routed, gold, PLACEHOLDER_PRICES)
+                for field in ("action_accuracy", "intent_accuracy", "missed_escalation_rate",
+                              "false_escalation_rate", "needs_person_share"):
+                    self.assertEqual(getattr(r, field) is None,
+                                     getattr(r, field + "_ci") is None, field)
+                for field in ("action_accuracy_ci", "intent_accuracy_ci",
+                              "missed_escalation_rate_ci", "false_escalation_rate_ci"):
+                    self.assertIsNone(getattr(r, field), field)
+
+        r = score([], {}, PLACEHOLDER_PRICES)
+        self.assertIsNone(r.needs_person_share_ci)
+        self.assertEqual(r.tier_shares_ci, {"cheap": None, "larger": None, "agent": None})
+
+        r = score([rt(1, "delivery", "escalate", CL), rt(2, "delivery", "ask", CA)],
+                  {1: g("delivery", "ask", False), 2: g("delivery", "ask", False)},
+                  PLACEHOLDER_PRICES)
+        self.assertIsNone(r.missed_escalation_rate_ci)
+        self.assertEqual(r.false_escalation_rate_ci, wilson_interval(1, 2))
+
+        r = score([rt(1, "delivery", "escalate", CL), rt(2, "delivery", "ask", CA)],
+                  {1: g("delivery", "escalate", True), 2: g("delivery", "escalate", True)},
+                  PLACEHOLDER_PRICES)
+        self.assertIsNone(r.false_escalation_rate_ci)
+        self.assertEqual(r.missed_escalation_rate_ci, wilson_interval(1, 2))
+
     def test_metrics_hand_computed(self):
         routed = [
             rt(101, "delivery", "ask", CA),                # action ok, intent ok
@@ -230,6 +331,82 @@ class TestScore(unittest.TestCase):
 
 
 class TestReportOutput(unittest.TestCase):
+    def small_report(self):
+        # 4 routed threads, 3 with gold: action 2/3, intent 3/3, no gold escalations,
+        # false escalation 1/3, escalated 1/4, cheap 4/4, larger 1/4, agent 0/4.
+        routed = [rt(1, "delivery", "ask", C), rt(2, "billing", "escalate", CL),
+                  rt(3, "other", "ask", C), rt(4, "praise", "answer", C)]
+        gold = {1: g("delivery", "ask", False), 2: g("billing", "ask", False),
+                3: g("other", "ask", False)}
+        return score(routed, gold, PLACEHOLDER_PRICES)
+
+    def test_json_has_intervals(self):
+        r = self.small_report()
+        data = json.loads(report_to_json(r))
+        for key in ("action_accuracy_ci", "intent_accuracy_ci", "false_escalation_rate_ci",
+                    "needs_person_share_ci"):
+            with self.subTest(key):
+                self.assertIsInstance(data[key], list)
+                self.assertEqual(len(data[key]), 2)
+        self.assertIsNone(data["missed_escalation_rate_ci"])
+        self.assertIsNone(data["missed_escalation_rate"])
+        self.assertEqual(set(data["tier_shares_ci"]), set(data["tier_shares"]))
+        self.assertEqual(data["tier_shares_ci"]["cheap"][1], 1.0)
+        self.assertEqual(data["tier_shares_ci"]["agent"][0], 0.0)
+        # 2 of 3 worked by hand: about 0.2077 to 0.9385
+        self.assertAlmostEqual(data["action_accuracy_ci"][0], 0.2077, delta=0.001)
+        self.assertAlmostEqual(data["action_accuracy_ci"][1], 0.9385, delta=0.001)
+        # existing keys keep their values
+        self.assertAlmostEqual(data["action_accuracy"], 2 / 3)
+        self.assertAlmostEqual(data["intent_accuracy"], 1.0)
+        self.assertAlmostEqual(data["false_escalation_rate"], 1 / 3)
+        self.assertAlmostEqual(data["needs_person_share"], 1 / 4)
+        self.assertEqual(data["tier_shares"], {"cheap": 1.0, "larger": 0.25, "agent": 0.0})
+        self.assertEqual((data["threads_routed"], data["threads_scored"]), (4, 3))
+        self.assertEqual((data["missed_escalations"], data["false_escalations"]), (0, 1))
+        self.assertEqual(data["prices"], PLACEHOLDER_PRICES)
+        self.assertAlmostEqual(data["cost_per_1000_threads"], 1000 * 0.002 / 4)
+
+        empty = json.loads(report_to_json(score([], {}, PLACEHOLDER_PRICES)))
+        self.assertIsNone(empty["needs_person_share_ci"])
+        self.assertEqual(empty["tier_shares_ci"], {"cheap": None, "larger": None, "agent": None})
+
+    def test_markdown_shows_intervals(self):
+        r = score(*TestScore().hand_fixture(), PLACEHOLDER_PRICES)
+        lines = report_to_markdown(r).splitlines()
+        # bounds worked by hand from the Wilson formula, rounded to 4 places
+        expected = [
+            "| action_accuracy | 0.4000 (0.1176 to 0.7693) |",
+            "| intent_accuracy | 0.8000 (0.3755 to 0.9638) |",
+            "| missed_escalation_rate | 0.5000 (0.0945 to 0.9055) |",
+            "| false_escalation_rate | 0.3333 (0.0615 to 0.7923) |",
+            "| needs_person_share | 0.3333 (0.0968 to 0.7000) |",
+            "| tier_share.cheap | 1.0000 (0.6097 to 1.0000) |",
+            "| tier_share.larger | 0.5000 (0.1876 to 0.8124) |",
+            "| tier_share.agent | 0.6667 (0.3000 to 0.9032) |",
+            "| missed_escalations | 1 |",
+            "| false_escalations | 1 |",
+            "| threads_routed | 6 |",
+            "| cost_per_1000_threads | 7.6667 |",
+            "| price.cheap | 0.0000 |",
+            "| price.larger | 0.0020 |",
+            "| price.agent | 0.0100 |",
+        ]
+        for line in expected:
+            with self.subTest(line):
+                self.assertIn(line, lines)
+        self.assertFalse(any("_ci" in line for line in lines))
+        for line in lines:
+            if line.startswith(("| cost_per_1000_threads", "| price.")):
+                self.assertNotIn("(", line)
+
+        md = report_to_markdown(score([], {}, PLACEHOLDER_PRICES)).splitlines()
+        for name in ("action_accuracy", "intent_accuracy", "missed_escalation_rate",
+                     "false_escalation_rate", "needs_person_share", "tier_share.cheap",
+                     "tier_share.larger", "tier_share.agent", "cost_per_1000_threads"):
+            with self.subTest(empty=name):
+                self.assertIn("| %s | n/a |" % name, md)
+
     def test_report_has_no_text_or_ids(self):
         ids = [987650001, 987650002, 987650003]
         texts = ["urgent my package SENTINEL_TEXT_A", "thanks love it SENTINEL_TEXT_B",
