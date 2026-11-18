@@ -176,7 +176,7 @@ def _classes(labels: Sequence[str], counts: List[List[int]], n: int) -> dict:
 
 # ---------------------------------------------------------------- validation
 
-def _check_run_at(run_at) -> None:
+def check_run_at(run_at) -> None:
     if not isinstance(run_at, str) or not _RUN_AT_RE.fullmatch(run_at):
         raise ValueError("run_at must be an ISO 8601 UTC time ending in Z, got %r" % (run_at,))
     try:
@@ -219,7 +219,7 @@ def compute(cases: Iterable[ScoredCase], kind: str, *, run_at: str, cohort: Mapp
             operations: Optional[Mapping] = None) -> dict:
     if kind not in KINDS:
         raise ValueError("kind must be 'gold' or 'synthetic', got %r" % (kind,))
-    _check_run_at(run_at)
+    check_run_at(run_at)
     _check_cohort(kind, cohort)
     _check_sample(sample)
 
