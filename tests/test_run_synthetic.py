@@ -95,6 +95,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
             "actual": {"intent": "other", "action": "escalate", "escalate": True},
             "expected_violations": None, "actual_violations": None,
             "tiers": ["cheap", "larger"], "confidence": 1.0,
+            "reason_codes": ["high_risk_to_larger"],
         })
         self.assertEqual(report["cases"][0]["actual"],
                          {"intent": "delivery", "action": "ask", "escalate": False})
@@ -133,6 +134,24 @@ class TestRunSynthetic(RunSyntheticTestBase):
         md = self.report_md()
         self.assertNotIn("tiers", md)
         self.assertNotIn("agent", md)
+
+    def test_report_records_reason_codes(self):
+        from triage.router import is_known_reason_code
+        path = self.write_cases([case("parcel", *PARCEL), case("praise", *PRAISE),
+                                 case("hacked", *HACKED), case("locked", *LOCKED)])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        got = {c["id"]: c["reason_codes"] for c in self.report_json()["cases"]}
+        self.assertEqual(got, {
+            "parcel": ["cheap_confident"],
+            "praise": ["cheap_confident"],
+            "hacked": ["high_risk_to_larger"],
+            "locked": ["high_risk_to_larger"],
+        })
+        for codes in got.values():
+            for code in codes:
+                self.assertTrue(is_known_reason_code(code), code)
+        self.assertNotIn("reason_codes", self.report_md())
 
     def test_label_mismatch_fails_case(self):
         path = self.write_cases([case("parcel", PARCEL[0], "billing", "ask", False,

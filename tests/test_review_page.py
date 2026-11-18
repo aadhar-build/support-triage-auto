@@ -225,6 +225,34 @@ class TestReviewPage(ReviewTestBase):
             (run_dir / "synthetic_report.json").read_bytes()).hexdigest()
         self.assertIn('data-run-id="%s"' % run_id, page)
 
+    def test_load_run_accepts_reason_codes(self):
+        from triage.review_page import load_run
+        from triage.router import is_known_reason_code
+        _, run_dir = self.make_run(standard_cases())
+        cases, run_id = load_run(run_dir)
+        self.assertEqual([c["id"] for c in cases], ["parcel", "hacked", "praise", "refund"])
+        for c in cases:
+            self.assertIsInstance(c["reason_codes"], list)
+            self.assertTrue(c["reason_codes"])
+            for code in c["reason_codes"]:
+                self.assertTrue(is_known_reason_code(code), code)
+
+    def test_load_run_refuses_missing_reason_codes(self):
+        from triage.review_page import ReportError, load_run
+        _, run_dir = self.make_run(standard_cases())
+        report = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))
+        for name, mutate in (("missing", lambda c: c.pop("reason_codes")),
+                             ("not a list", lambda c: c.__setitem__("reason_codes", "x")),
+                             ("non-string", lambda c: c.__setitem__("reason_codes", [1]))):
+            with self.subTest(name):
+                bad = json.loads(json.dumps(report))
+                mutate(bad["cases"][0])
+                d = self.dir / ("rc-" + name.replace(" ", "-"))
+                d.mkdir()
+                (d / "synthetic_report.json").write_text(json.dumps(bad), encoding="utf-8")
+                with self.assertRaises(ReportError):
+                    load_run(d)
+
     def test_refuses_non_synthetic_input(self):
         cases_path, run_dir = self.make_run(standard_cases())
         good = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))
