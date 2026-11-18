@@ -1,0 +1,28 @@
+{
+  "version": "fixture-v9",
+  "status": "Made-up fixture thresholds for tests only",
+  "north_star": {
+    "correctly_handled_without_person": {"min": 0.5}
+  },
+  "supporting": {
+    "action_accuracy": {"min": 0.8},
+    "action_accuracy_per_action": {"min": 0.7},
+    "intent_accuracy": {"min": 0.9},
+    "larger_tier_share": {"max": 0.25},
+    "cost_per_1000_usd": {"max": 2.0},
+    "p95_latency_s": {"max": 9.0},
+    "judge_agreement": {"min": 0.7},
+    "reply_tie_or_win": {"min": 0.4}
+  },
+  "guardrails": {
+    "missed_escalations_hard_case": {"max_count": 1},
+    "missed_escalation_rate_ci_upper": {"max": 0.6},
+    "false_escalation_rate": {"max": 0.05},
+    "pii_in_public_draft": {"max_count": 0},
+    "out_of_policy_promises": {"max_count": 0},
+    "eval_leakage": {"max_count": 0},
+    "api_spend_usd_per_month": {"max": 50.0}
+  },
+  "reporting": {"ci_level": 0.95, "ci_method": "wilson", "directional_below_n": 30, "headline_f_beta": 2},
+  "confidence_threshold": {"value": null, "note": "fixture"}
+}

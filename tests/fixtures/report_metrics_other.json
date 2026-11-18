@@ -1,0 +1,798 @@
+{
+  "action": {
+    "accuracy": {
+      "ci": [
+        0.7333246397578691,
+        0.8829986834574896
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 82,
+      "value": 0.82
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          70,
+          6,
+          4
+        ],
+        [
+          5,
+          5,
+          0
+        ],
+        [
+          2,
+          1,
+          7
+        ]
+      ],
+      "labels": [
+        "answer",
+        "route",
+        "escalate"
+      ]
+    },
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 100,
+      "value": 0.5013850415512464
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.6604148288589573,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.6709772888116837,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.6828852770844177,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "route",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.654040404040404,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8425925925925927,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.6916666666666668,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "answer": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.9020618556701031
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.89171974522293
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.8816120906801007
+        },
+        "fn": 10,
+        "fp": 7,
+        "precision": {
+          "ci": [
+            0.8240368875294818,
+            0.9552648581064284
+          ],
+          "directional": false,
+          "n": 77,
+          "num": 70,
+          "value": 0.9090909090909091
+        },
+        "predicted": 77,
+        "support": 80,
+        "tn": 13,
+        "tnr": {
+          "ci": [
+            0.43285051021946463,
+            0.8188104521320554
+          ],
+          "directional": true,
+          "n": 20,
+          "num": 13,
+          "value": 0.65
+        },
+        "tp": 70,
+        "tpr": {
+          "ci": [
+            0.7849700281693438,
+            0.9306651696322249
+          ],
+          "directional": false,
+          "n": 80,
+          "num": 70,
+          "value": 0.875
+        }
+      },
+      "escalate": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.6481481481481481
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.6666666666666666
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.6862745098039216
+        },
+        "fn": 3,
+        "fp": 4,
+        "precision": {
+          "ci": [
+            0.35379677689163724,
+            0.8483377638586862
+          ],
+          "directional": true,
+          "n": 11,
+          "num": 7,
+          "value": 0.6363636363636364
+        },
+        "predicted": 11,
+        "support": 10,
+        "tn": 86,
+        "tnr": {
+          "ci": [
+            0.8912298532290508,
+            0.9825830399867512
+          ],
+          "directional": false,
+          "n": 90,
+          "num": 86,
+          "value": 0.9555555555555556
+        },
+        "tp": 7,
+        "tpr": {
+          "ci": [
+            0.39677321997956516,
+            0.892210712513788
+          ],
+          "directional": true,
+          "n": 10,
+          "num": 7,
+          "value": 0.7
+        }
+      },
+      "route": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.43103448275862066
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.45454545454545453
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.4807692307692308
+        },
+        "fn": 5,
+        "fp": 7,
+        "precision": {
+          "ci": [
+            0.19325746190524656,
+            0.6804926643446272
+          ],
+          "directional": true,
+          "n": 12,
+          "num": 5,
+          "value": 0.4166666666666667
+        },
+        "predicted": 12,
+        "support": 10,
+        "tn": 83,
+        "tnr": {
+          "ci": [
+            0.8480596940416417,
+            0.9618156704022723
+          ],
+          "directional": false,
+          "n": 90,
+          "num": 83,
+          "value": 0.9222222222222223
+        },
+        "tp": 5,
+        "tpr": {
+          "ci": [
+            0.23658959361548731,
+            0.7634104063845126
+          ],
+          "directional": true,
+          "n": 10,
+          "num": 5,
+          "value": 0.5
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8295677476267593,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8254970082995561,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8219940466013957,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "route",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8325757575757575,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.7077777777777777,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.82,
+        "zero_filled": 0
+      }
+    }
+  },
+  "averaging": "Macro and weighted averages run over the included classes: the union of gold and predicted classes (support > 0 or predicted > 0), listed in included_classes. A per-class value that is null counts as zero in the average (zero_filled counts them) and still shows as null in per_class. Macro is the unweighted mean; weighted is sum(support * value) / sum(support).",
+  "cohort": {
+    "brand_population": "all",
+    "gold_revision": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "name": "gold_random",
+    "split": "dev"
+  },
+  "config": {
+    "prices": {
+      "agent": 2.0,
+      "cheap": 0.0,
+      "larger": 0.5
+    },
+    "threshold": 0.65
+  },
+  "coverage": {
+    "gold_rows_unmatched": 0,
+    "threads_routed": 100,
+    "threads_scored": 100,
+    "threads_without_gold": 0
+  },
+  "directional_below": 30,
+  "escalation": {
+    "accuracy": {
+      "ci": [
+        0.8625032899347025,
+        0.965681175635936
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 93,
+      "value": 0.93
+    },
+    "balanced_accuracy": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.8277777777777777
+    },
+    "counts": {
+      "fn": 3,
+      "fp": 4,
+      "positives": 10,
+      "predicted_positives": 11,
+      "tn": 86,
+      "tp": 7
+    },
+    "f0_5": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6481481481481481
+    },
+    "f1": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6666666666666666
+    },
+    "f2": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6862745098039216
+    },
+    "fnr": {
+      "ci": [
+        0.10778928748621183,
+        0.6032267800204347
+      ],
+      "directional": true,
+      "n": 10,
+      "num": 3,
+      "value": 0.3
+    },
+    "fpr": {
+      "ci": [
+        0.01741696001324882,
+        0.1087701467709492
+      ],
+      "directional": false,
+      "n": 90,
+      "num": 4,
+      "value": 0.044444444444444446
+    },
+    "mcc": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6285493925655832
+    },
+    "npv": {
+      "ci": [
+        0.9055248072121062,
+        0.9884709877763475
+      ],
+      "directional": false,
+      "n": 89,
+      "num": 86,
+      "value": 0.9662921348314607
+    },
+    "precision": {
+      "ci": [
+        0.35379677689163724,
+        0.8483377638586862
+      ],
+      "directional": true,
+      "n": 11,
+      "num": 7,
+      "value": 0.6363636363636364
+    },
+    "prevalence": {
+      "ci": [
+        0.05522854161313613,
+        0.1743673043676654
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 10,
+      "value": 0.1
+    },
+    "tnr": {
+      "ci": [
+        0.8912298532290508,
+        0.9825830399867512
+      ],
+      "directional": false,
+      "n": 90,
+      "num": 86,
+      "value": 0.9555555555555556
+    },
+    "tpr": {
+      "ci": [
+        0.39677321997956516,
+        0.892210712513788
+      ],
+      "directional": true,
+      "n": 10,
+      "num": 7,
+      "value": 0.7
+    }
+  },
+  "intent": {
+    "accuracy": {
+      "ci": [
+        0.21894753866228117,
+        0.39585038432811953
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 30,
+      "value": 0.3
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          10,
+          20,
+          10
+        ],
+        [
+          20,
+          15,
+          10
+        ],
+        [
+          5,
+          5,
+          5
+        ]
+      ],
+      "labels": [
+        "billing",
+        "delivery",
+        "other"
+      ]
+    },
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 100,
+      "value": -0.0894941634241245
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.28700758022072975,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.28986928104575166,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.2971456647927236,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "billing",
+        "delivery",
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.28690476190476194,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.63116458704694,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.3055555555555555,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "billing": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.2777777777777778
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.26666666666666666
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.2564102564102564
+        },
+        "fn": 30,
+        "fp": 25,
+        "precision": {
+          "ci": [
+            0.16326363398295565,
+            0.45055248069821086
+          ],
+          "directional": false,
+          "n": 35,
+          "num": 10,
+          "value": 0.2857142857142857
+        },
+        "predicted": 35,
+        "support": 40,
+        "tn": 35,
+        "tnr": {
+          "ci": [
+            0.45727854313239624,
+            0.6993591351212818
+          ],
+          "directional": false,
+          "n": 60,
+          "num": 35,
+          "value": 0.5833333333333334
+        },
+        "tp": 10,
+        "tpr": {
+          "ci": [
+            0.14186967895549518,
+            0.40194259066970106
+          ],
+          "directional": false,
+          "n": 40,
+          "num": 10,
+          "value": 0.25
+        }
+      },
+      "delivery": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.36585365853658536
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.35294117647058826
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.3409090909090909
+        },
+        "fn": 30,
+        "fp": 25,
+        "precision": {
+          "ci": [
+            0.2422277353579172,
+            0.529678399454681
+          ],
+          "directional": false,
+          "n": 40,
+          "num": 15,
+          "value": 0.375
+        },
+        "predicted": 40,
+        "support": 45,
+        "tn": 30,
+        "tnr": {
+          "ci": [
+            0.41522461348360484,
+            0.669749282535538
+          ],
+          "directional": false,
+          "n": 55,
+          "num": 30,
+          "value": 0.5454545454545454
+        },
+        "tp": 15,
+        "tpr": {
+          "ci": [
+            0.21358692207276764,
+            0.479297831907446
+          ],
+          "directional": false,
+          "n": 45,
+          "num": 15,
+          "value": 0.3333333333333333
+        }
+      },
+      "other": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.21739130434782608
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.25
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.29411764705882354
+        },
+        "fn": 10,
+        "fp": 20,
+        "precision": {
+          "ci": [
+            0.08860454100652487,
+            0.3913133553653824
+          ],
+          "directional": true,
+          "n": 25,
+          "num": 5,
+          "value": 0.2
+        },
+        "predicted": 25,
+        "support": 15,
+        "tn": 65,
+        "tnr": {
+          "ci": [
+            0.6643136684446008,
+            0.8422057999125651
+          ],
+          "directional": false,
+          "n": 85,
+          "num": 65,
+          "value": 0.7647058823529411
+        },
+        "tp": 5,
+        "tpr": {
+          "ci": [
+            0.15176100694691236,
+            0.5828687484878701
+          ],
+          "directional": true,
+          "n": 15,
+          "num": 5,
+          "value": 0.3333333333333333
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.30835395310474845,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.30299019607843136,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.30009084053201696,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "billing",
+        "delivery",
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.31303571428571425,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.5934937611408199,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.3,
+        "zero_filled": 0
+      }
+    }
+  },
+  "kind": "gold",
+  "n": 100,
+  "operations": {
+    "cost_per_1000_usd": 1.5,
+    "prices_are_placeholders": false,
+    "tier_shares": {
+      "cheap": {
+        "ci": [
+          0.9630051925239981,
+          1.0
+        ],
+        "directional": false,
+        "n": 100,
+        "num": 100,
+        "value": 1.0
+      },
+      "larger": {
+        "ci": [
+          0.2636410465347802,
+          0.4474573957080203
+        ],
+        "directional": false,
+        "n": 100,
+        "num": 35,
+        "value": 0.35
+      }
+    }
+  },
+  "run_at": "2026-11-02T10:00:00Z",
+  "sample": {
+    "seed": 3,
+    "size": 120
+  },
+  "schema_version": "metrics/1"
+}
