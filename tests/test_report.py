@@ -203,7 +203,8 @@ class TestFromProducer(Base):
                                "gold_revision": "sha256:" + "a" * 64, "brand_population": "all"},
                        sample={"size": 4, "seed": 1},
                        config={"threshold": 0.7, "prices": {"cheap": 0.0}},
-                       coverage={"threads_routed": 4},
+                       coverage={"threads_routed": 4, "threads_scored": 4,
+                                 "threads_without_gold": 0, "gold_rows_unmatched": 0},
                        operations={"tier_shares": {"cheap": proportion(4, 4)},
                                    "cost_per_1000_usd": 0.0, "prices_are_placeholders": True})
 
@@ -251,6 +252,94 @@ class TestGoldAggregateOnly(Base):
         out = self.tmp / "x.html"
         self.assert_refused([str(path), "--thresholds", str(THRESHOLDS), "-o", str(out)], out,
                             "ids")
+
+    FAKE = ["T-FAKE-1", "T-FAKE-2"]
+
+    def refuse_with(self, edit, source=GOLD):
+        m = load(source)
+        edit(m)
+        path = self.write("edited.json", m)
+        out = self.tmp / "x.html"
+        self.assert_refused([str(path), "--thresholds", str(THRESHOLDS), "-o", str(out)], out)
+
+    def test_extra_key_at_any_depth_refused(self):
+        places = [
+            lambda m: m["escalation"],
+            lambda m: m["escalation"]["counts"],
+            lambda m: m["escalation"]["fnr"],
+            lambda m: m["escalation"]["mcc"],
+            lambda m: m["action"],
+            lambda m: m["action"]["confusion_matrix"],
+            lambda m: m["action"]["per_class"]["answer"],
+            lambda m: m["action"]["per_class"]["answer"]["tpr"],
+            lambda m: m["intent"]["macro"],
+            lambda m: m["intent"]["weighted"]["f1"],
+            lambda m: m["operations"],
+            lambda m: m["operations"]["tier_shares"]["cheap"],
+            lambda m: m["coverage"],
+            lambda m: m["sample"],
+            lambda m: m["config"],
+            lambda m: m["config"]["prices"],
+        ]
+        for i, place in enumerate(places):
+            with self.subTest(place=i):
+                self.refuse_with(lambda m: place(m).update(missed_cases=self.FAKE))
+
+    def test_extra_key_in_synthetic_refused(self):
+        self.refuse_with(lambda m: m["escalation"].update(missed_cases=self.FAKE), SYNTHETIC)
+        self.refuse_with(lambda m: m["intent"]["per_class"][
+            m["intent"]["confusion_matrix"]["labels"][0]].update(cases=self.FAKE), SYNTHETIC)
+
+    def test_free_strings_in_unchecked_shapes_refused(self):
+        edits = [
+            lambda m: m["config"].update(threshold="T-FAKE-1"),
+            lambda m: m["coverage"].update(threads_routed="T-FAKE-1"),
+            lambda m: m["sample"].update(seed="T-FAKE-1"),
+            lambda m: m["operations"]["tier_shares"].update({"T-FAKE-1": proportion(1, 2)}),
+            lambda m: m["config"]["prices"].update({"T-FAKE-1": 1.0}),
+            lambda m: m["action"]["macro"]["included_classes"].append("T-FAKE-1"),
+            lambda m: m["escalation"]["counts"].update(tp=["T-FAKE-1"]),
+            lambda m: m["action"]["accuracy"].update(value="x"),
+            lambda m: m["action"]["per_class"]["answer"].update(support="x"),
+            lambda m: m["escalation"]["fnr"].update(ci=[0.1, "x"]),
+        ]
+        for i, edit in enumerate(edits):
+            with self.subTest(edit=i):
+                self.refuse_with(edit)
+
+    def test_gold_data_holds_only_allowlisted_strings(self):
+        allowed = {
+            # key names a metrics/1 gold file may carry
+            "schema_version", "kind", "run_at", "cohort", "sample", "config", "coverage",
+            "operations", "n", "directional_below", "averaging", "escalation", "action",
+            "intent", "name", "split", "gold_revision", "brand_population", "size", "seed",
+            "threshold", "prices", "threads_routed", "threads_scored", "threads_without_gold",
+            "gold_rows_unmatched", "tier_shares", "cost_per_1000_usd", "prices_are_placeholders",
+            "counts", "tp", "fp", "tn", "fn", "positives", "predicted_positives", "tpr", "tnr",
+            "fpr", "fnr", "precision", "npv", "accuracy", "prevalence", "f1", "f2", "f0_5",
+            "balanced_accuracy", "mcc", "value", "num", "ci", "directional", "confusion_matrix",
+            "labels", "per_class", "macro", "weighted", "kappa", "support", "predicted",
+            "zero_filled", "included_classes",
+            # tier names, labels and the fixture's own allowlisted string values
+            "cheap", "larger", "agent", "answer", "ask", "route", "escalate",
+            "metrics/1", "gold", "gold_random", "dev", "all", "2026-11-09T10:00:00Z",
+            "sha256:" + "b" * 64, metrics_mod.AVERAGING,
+        } | set(metrics_mod.INTENTS)
+        page = self.build(GOLD)
+        found = set()
+
+        def walk(v):
+            if isinstance(v, dict):
+                for k, x in v.items():
+                    found.add(k)
+                    walk(x)
+            elif isinstance(v, list):
+                for x in v:
+                    walk(x)
+            elif isinstance(v, str):
+                found.add(v)
+        walk(json.loads(data_block(page, "metrics-data")))
+        self.assertEqual(found - allowed, set())
 
 
 class TestSyntheticCells(Base):
@@ -498,6 +587,15 @@ class TestBadInput(Base):
     def test_unwritable_out(self):
         out = self.tmp / "no_dir" / "page.html"
         self.assert_refused([str(GOLD), "--thresholds", str(THRESHOLDS), "-o", str(out)], out)
+
+    def test_out_same_as_input_refused(self):
+        src = self.write("in.json", GOLD.read_text(encoding="utf-8"))
+        before = src.read_text(encoding="utf-8")
+        code, stdout, stderr = run_main([str(src), "--thresholds", str(THRESHOLDS), "-o",
+                                         str(src)])
+        self.assertEqual((code, stdout), (2, ""))
+        self.assertTrue(stderr.startswith("error: "), stderr)
+        self.assertEqual(src.read_text(encoding="utf-8"), before)
 
     def test_explicit_thresholds_missing(self):
         self.refuse(GOLD, thresholds=self.tmp / "missing_thresholds.json")

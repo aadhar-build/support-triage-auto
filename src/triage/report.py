@@ -13,12 +13,14 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import sys
 from pathlib import Path
 from typing import List, Optional
 
-from triage.metrics import AVERAGED, COHORT_KEYS, KINDS, SCHEMA_VERSION, comparison_key
-from triage.tiers import ACTIONS, INTENTS
+from triage.metrics import (AVERAGED, COHORT_KEYS, KINDS, SAMPLE_KEYS, SCHEMA_VERSION,
+                            comparison_key)
+from triage.tiers import ACTIONS, INTENTS, PLACEHOLDER_PRICES
 from triage.trace import REPO_ROOT
 
 DEFAULT_THRESHOLDS = REPO_ROOT / "evals" / "thresholds.json"
@@ -30,6 +32,15 @@ COUNT_KEYS = ("tp", "fp", "tn", "fn", "positives", "predicted_positives")
 ESC_PROPORTIONS = ("tpr", "tnr", "fpr", "fnr", "precision", "npv", "accuracy", "prevalence")
 ESC_SCORES = ("f1", "f2", "f0_5", "balanced_accuracy", "mcc")
 BLOCK_KEYS = ("confusion_matrix", "per_class", "macro", "weighted", "accuracy", "kappa")
+PROPORTION_KEYS = ("value", "num", "n", "ci", "directional")
+SCORE_KEYS = ("value", "n", "ci", "directional")
+PER_CLASS_COUNTS = ("support", "predicted", "tp", "fp", "tn", "fn")
+PER_CLASS_PROPORTIONS = ("tpr", "tnr", "precision")
+PER_CLASS_SCORES = ("f1", "f2", "f0_5")
+CONFIG_KEYS = ("threshold", "prices")
+COVERAGE_KEYS = ("threads_routed", "threads_scored", "threads_without_gold", "gold_rows_unmatched")
+OPERATIONS_KEYS = ("tier_shares", "cost_per_1000_usd", "prices_are_placeholders")
+TIERS = tuple(PLACEHOLDER_PRICES)
 TARGET_GROUPS = ("north_star", "supporting", "guardrails")
 MEASURED = {"north_star.correctly_handled_without_person", "supporting.action_accuracy",
             "supporting.intent_accuracy", "supporting.action_accuracy_per_action",
@@ -78,23 +89,78 @@ def _has_ids(value) -> bool:
     return False
 
 
-def _need(obj, keys, where: str) -> None:
+def _obj(obj, keys, where: str, optional=()) -> dict:
+    """obj must be an object holding every key in keys, optionally some of optional, no other."""
     if not isinstance(obj, dict):
         raise ReportError("%s must be an object" % where)
+    unknown = sorted(map(str, set(obj) - set(keys) - set(optional)))
+    if unknown:
+        raise ReportError("%s has unknown key %s" % (where, ", ".join(unknown)))
     missing = [k for k in keys if k not in obj]
     if missing:
         raise ReportError("%s lacks %s" % (where, ", ".join(missing)))
+    return obj
 
 
-def _check_proportion(p, where: str) -> None:
-    _need(p, ("value", "num", "n", "ci", "directional"), where)
-    ci = p["ci"]
-    if ci is not None and not (isinstance(ci, list) and len(ci) == 2):
-        raise ReportError("%s.ci must be null or [low, high]" % where)
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
 
 
-def _check_score(p, where: str) -> None:
-    _need(p, ("value", "n", "ci", "directional"), where)
+def _count(v, where: str) -> int:
+    if not _is_int(v) or v < 0:
+        raise ReportError("%s must be a non-negative int" % where)
+    return v
+
+
+def _int_or_null(v, where: str):
+    if v is not None and not _is_int(v):
+        raise ReportError("%s must be an int or null" % where)
+    return v
+
+
+def _number(v, where: str, nullable: bool = True):
+    if v is None and nullable:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        raise ReportError("%s must be a number%s" % (where, " or null" if nullable else ""))
+    return v
+
+
+def _flag(v, where: str) -> bool:
+    if not isinstance(v, bool):
+        raise ReportError("%s must be true or false" % where)
+    return v
+
+
+def _text(v, where: str, nullable: bool = False):
+    if not (isinstance(v, str) or (nullable and v is None)):
+        raise ReportError("%s must be a string%s" % (where, " or null" if nullable else ""))
+    return v
+
+
+def _ci(v, where: str):
+    if v is None:
+        return None
+    if not (isinstance(v, list) and len(v) == 2):
+        raise ReportError("%s must be null or [low, high]" % where)
+    return [_number(x, where, nullable=False) for x in v]
+
+
+def _proportion(p, where: str) -> dict:
+    _obj(p, PROPORTION_KEYS, where)
+    return {"value": _number(p["value"], where + ".value"), "num": _count(p["num"], where + ".num"),
+            "n": _count(p["n"], where + ".n"), "ci": _ci(p["ci"], where + ".ci"),
+            "directional": _flag(p["directional"], where + ".directional")}
+
+
+def _score(p, where: str, averaged: bool = False) -> dict:
+    _obj(p, SCORE_KEYS + (("zero_filled",) if averaged else ()), where)
+    out = {"value": _number(p["value"], where + ".value"), "n": _count(p["n"], where + ".n"),
+           "ci": _ci(p["ci"], where + ".ci"),
+           "directional": _flag(p["directional"], where + ".directional")}
+    if averaged:
+        out["zero_filled"] = _count(p["zero_filled"], where + ".zero_filled")
+    return out
 
 
 def _is_grid(grid, k: int, cell_ok) -> bool:
@@ -103,10 +169,9 @@ def _is_grid(grid, k: int, cell_ok) -> bool:
                     for r in grid))
 
 
-def _check_block(name: str, block, vocab, synthetic: bool) -> None:
-    _need(block, BLOCK_KEYS, name)
-    cm = block["confusion_matrix"]
-    _need(cm, ("labels", "counts"), name + ".confusion_matrix")
+def _check_block(name: str, block, vocab, synthetic: bool) -> dict:
+    _obj(block, BLOCK_KEYS + (("ids",) if synthetic else ()), name)
+    cm = _obj(block["confusion_matrix"], ("labels", "counts"), name + ".confusion_matrix")
     labels = cm["labels"]
     if not isinstance(labels, list) or len(set(map(str, labels))) != len(labels):
         raise ReportError("%s labels must be a list of distinct labels" % name)
@@ -114,32 +179,85 @@ def _check_block(name: str, block, vocab, synthetic: bool) -> None:
         if label not in vocab:
             raise ReportError("%s label %r is not a known %s" % (name, label, name))
     k = len(labels)
-    if not _is_grid(cm["counts"], k, lambda c: isinstance(c, int) and not isinstance(c, bool)
-                    and c >= 0):
+    if not _is_grid(cm["counts"], k, lambda c: _is_int(c) and c >= 0):
         raise ReportError("%s counts must be a %dx%d list of non-negative ints" % (name, k, k))
     per_class = block["per_class"]
     if not isinstance(per_class, dict) or set(per_class) != set(labels):
         raise ReportError("%s per_class must have exactly the labels as keys" % name)
+    out = {"confusion_matrix": {"labels": list(labels), "counts": [list(r) for r in cm["counts"]]},
+           "per_class": {}}
     for label in labels:
-        _need(per_class[label], ("support", "predicted", "tpr", "tnr", "precision", "f1", "f2",
-                                 "f0_5"), "%s.per_class.%s" % (name, label))
+        where = "%s.per_class.%s" % (name, label)
+        e = _obj(per_class[label], PER_CLASS_COUNTS + PER_CLASS_PROPORTIONS + PER_CLASS_SCORES,
+                 where)
+        entry = {key: _count(e[key], "%s.%s" % (where, key)) for key in PER_CLASS_COUNTS}
+        entry.update({key: _proportion(e[key], "%s.%s" % (where, key))
+                      for key in PER_CLASS_PROPORTIONS})
+        entry.update({key: _score(e[key], "%s.%s" % (where, key)) for key in PER_CLASS_SCORES})
+        out["per_class"][label] = entry
     for avg in ("macro", "weighted"):
-        _need(block[avg], AVERAGED + ("included_classes",), "%s.%s" % (name, avg))
-        for key in AVERAGED:
-            _need(block[avg][key], ("value", "n", "ci", "directional", "zero_filled"),
-                  "%s.%s.%s" % (name, avg, key))
-    _check_proportion(block["accuracy"], name + ".accuracy")
-    _check_score(block["kappa"], name + ".kappa")
+        where = "%s.%s" % (name, avg)
+        a = _obj(block[avg], AVERAGED + ("included_classes",), where)
+        included = a["included_classes"]
+        if not isinstance(included, list) or any(c not in labels for c in included):
+            raise ReportError("%s.included_classes must be a list of the block's labels" % where)
+        rebuilt = {key: _score(a[key], "%s.%s" % (where, key), averaged=True) for key in AVERAGED}
+        rebuilt["included_classes"] = list(included)
+        out[avg] = rebuilt
+    out["accuracy"] = _proportion(block["accuracy"], name + ".accuracy")
+    out["kappa"] = _score(block["kappa"], name + ".kappa")
     if synthetic:
-        if not _is_grid(block.get("ids"), k, lambda c: isinstance(c, list)
+        if not _is_grid(block["ids"], k, lambda c: isinstance(c, list)
                         and all(isinstance(i, str) for i in c)):
             raise ReportError("%s.ids must be a %dx%d list of lists of strings" % (name, k, k))
+        out["ids"] = [[list(c) for c in r] for r in block["ids"]]
+    return out
+
+
+def _check_tier_map(obj, where: str, value) -> dict:
+    if not isinstance(obj, dict):
+        raise ReportError("%s must be an object" % where)
+    unknown = sorted(map(str, set(obj) - set(TIERS)))
+    if unknown:
+        raise ReportError("%s has unknown tier %s" % (where, ", ".join(unknown)))
+    return {t: value(v, "%s.%s" % (where, t)) for t, v in obj.items()}
+
+
+def _check_config(config) -> dict:
+    _obj(config, CONFIG_KEYS, "config")
+    prices = config["prices"]
+    return {"threshold": _number(config["threshold"], "config.threshold"),
+            "prices": None if prices is None else _check_tier_map(
+                prices, "config.prices", lambda v, w: _number(v, w, nullable=False))}
+
+
+def _check_operations(ops):
+    if ops is None:
+        return None
+    _obj(ops, OPERATIONS_KEYS, "operations")
+    return {"tier_shares": _check_tier_map(ops["tier_shares"], "operations.tier_shares",
+                                           _proportion),
+            "cost_per_1000_usd": _number(ops["cost_per_1000_usd"], "operations.cost_per_1000_usd"),
+            "prices_are_placeholders": _flag(ops["prices_are_placeholders"],
+                                             "operations.prices_are_placeholders")}
+
+
+def _check_coverage(coverage):
+    if coverage is None:
+        return None
+    _obj(coverage, COVERAGE_KEYS, "coverage")
+    return {k: _count(coverage[k], "coverage." + k) for k in COVERAGE_KEYS}
 
 
 def check_metrics(m) -> dict:
+    """Check m against the full metrics/1 shape and return a copy rebuilt from checked fields.
+
+    Every object has an exact key set and every leaf a checked type, so nothing the producer
+    doesn't write can reach the page. Cohort, sample and run_at values are type-checked only
+    (spec: light validation), so a hand-edited brand_population still reaches compare."""
     if not isinstance(m, dict):
         raise ReportError("metrics file must be a JSON object")
-    unknown = sorted(set(m) - set(TOP_KEYS))
+    unknown = sorted(map(str, set(m) - set(TOP_KEYS)))
     if unknown:
         raise ReportError("not a metrics/1 file: unknown key %s" % ", ".join(unknown))
     missing = [k for k in TOP_KEYS if k not in m]
@@ -155,23 +273,24 @@ def check_metrics(m) -> dict:
     synthetic = m["kind"] == "synthetic"
     if not synthetic and _has_ids(m):
         raise ReportError("a gold metrics file must not carry ids")
-    esc = m["escalation"]
-    _need(esc, ("counts",) + ESC_PROPORTIONS + ESC_SCORES, "escalation")
-    _need(esc["counts"], COUNT_KEYS, "escalation.counts")
-    for key in ESC_PROPORTIONS:
-        _check_proportion(esc[key], "escalation." + key)
-    for key in ESC_SCORES:
-        _check_score(esc[key], "escalation." + key)
-    _check_block("action", m["action"], ACTIONS, synthetic)
-    _check_block("intent", m["intent"], INTENTS, synthetic)
-    ops = m["operations"]
-    if ops is not None:
-        _need(ops, ("tier_shares", "cost_per_1000_usd", "prices_are_placeholders"), "operations")
-        if not isinstance(ops["tier_shares"], dict):
-            raise ReportError("operations.tier_shares must be an object")
-        for tier, p in ops["tier_shares"].items():
-            _check_proportion(p, "operations.tier_shares." + str(tier))
-    return m
+    esc = _obj(m["escalation"], ("counts",) + ESC_PROPORTIONS + ESC_SCORES, "escalation")
+    _obj(esc["counts"], COUNT_KEYS, "escalation.counts")
+    escalation = {"counts": {k: _count(esc["counts"][k], "escalation.counts." + k)
+                             for k in COUNT_KEYS}}
+    escalation.update({k: _proportion(esc[k], "escalation." + k) for k in ESC_PROPORTIONS})
+    escalation.update({k: _score(esc[k], "escalation." + k) for k in ESC_SCORES})
+    sample = _obj(m["sample"], SAMPLE_KEYS, "sample")
+    return {"schema_version": m["schema_version"], "kind": m["kind"],
+            "run_at": _text(m["run_at"], "run_at"),
+            "cohort": {k: _text(m["cohort"][k], "cohort." + k, nullable=True)
+                       for k in COHORT_KEYS},
+            "sample": {k: _int_or_null(sample[k], "sample." + k) for k in SAMPLE_KEYS},
+            "config": _check_config(m["config"]), "coverage": _check_coverage(m["coverage"]),
+            "operations": _check_operations(m["operations"]), "n": _count(m["n"], "n"),
+            "directional_below": _count(m["directional_below"], "directional_below"),
+            "averaging": _text(m["averaging"], "averaging"), "escalation": escalation,
+            "action": _check_block("action", m["action"], ACTIONS, synthetic),
+            "intent": _check_block("intent", m["intent"], INTENTS, synthetic)}
 
 
 def load_metrics(path) -> dict:
@@ -681,6 +800,10 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _run(args) -> None:
+    out = Path(args.out).resolve()
+    for given in (args.metrics, args.compare, args.thresholds):
+        if given is not None and Path(given).resolve() == out:
+            raise ReportError("-o must not be an input file: %s" % args.out)
     m = load_metrics(args.metrics)
     other = None
     if args.compare is not None:
