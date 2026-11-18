@@ -60,14 +60,14 @@ Reports also give, for escalation (positive = should escalate): TP, FP, TN, FN, 
 
 - Every rate is shown with its count (for example, 12 of 37) and a 95% Wilson interval, including shares (#14).
 - A rate with n under 30 is marked directional.
-- Two runs differ "outside noise" only when their intervals don't overlap.
+- Runs are compared week on week, so runs over different weeks or samples can be compared, each shown with its range. Truly unlike runs (a different run kind, gold version, split or brand population) are refused. When ranges are disjoint, the report says "ranges don't overlap", never "significant".
 - Gold-run reports are aggregate only: no conversation text or ids. Drill-down to single conversations works on the made-up (synthetic) set only.
 
 ## Eval sets
 
 - **Gold random set:** 300 random eval conversations, reviewed by the owner.
 - **Hard-case set:** about 100 eval conversations, about 70 picked by escalation signal and about 30 random with no signal, reported separately (#18).
-- **Synthetic set:** `evals/gold/synthetic.json`, 50 made-up conversations, 17 of them must-pass. Baseline on 18 Nov: 19 of 50 pass; 15 of 17 must-pass fail.
+- **Synthetic set:** `evals/gold/synthetic.json`, 63 made-up conversations, 22 of them must-pass. Baseline on 18 Nov: 24 of 63 pass; 20 of 22 must-pass fail.
 
 ## Release criteria for the demo
 
@@ -108,6 +108,14 @@ Labels, thresholds, policy rules, taxonomy and guidelines belong to the owner. T
 
 ## Surfaces for the demo
 
-- **Customer:** simulated social-style thread with a fictional brand (#28).
-- **Support agent:** simulated review inbox, which builds on the offline review page (#28).
-- **Admin / team lead:** a real local console, run on demand and not always on (#27, #29), with the drill-down reports (#26).
+- **Admin / team lead only** (owner decision, 18 Nov): a real local console, run on demand and not always on (#27, #29), with the drill-down reports (#26). Selecting a conversation replays it turn by turn with its traces and the triage state at each turn (#28). The simulated customer and agent views are dropped.
+
+## Decision timing (owner decision, 18 Nov)
+
+- No look-ahead. Every decision, alert and count uses only what was known at that moment: no later turns and no later brand replies. After-the-fact replays are not allowed. Where zero look-ahead can't be reached, live monitoring becomes more urgent.
+- Triage is re-run after every new turn, and each decision is kept as a step in the thread's history (#46).
+
+## Testing rules (owner decision, 18 Nov)
+
+- Unit tests never read the live owner files. They use made-up fixtures with the same shape. An optional conformance check, run only when switched on, validates the live files.
+- Scale limits on the VPS (first guesses, revised after the first measured run): 200k generated rows within 60 seconds and 1 GB of memory, and the full dataset within 20 minutes and 6 GB.
