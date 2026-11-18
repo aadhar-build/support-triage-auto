@@ -232,8 +232,7 @@ def page_overview(runs_dir, thresholds_path) -> str:
     nulls = sum(1 for r in month if r["cost"]["estimated_usd"] is None)
     month_line = "This month: %s estimated across %d run%s" % (
         _usd(total), len(month), "" if len(month) == 1 else "s")
-    if nulls:
-        month_line += " (%d with no cost recorded)" % nulls
+    month_line += " (%d with no cost recorded)" % nulls
     cap = _monthly_cap(_load_thresholds(thresholds_path))
     cap_line = "Monthly cap: not set" if cap is None else "Monthly cap: %s" % _usd(cap)
     spend = ["<section><h2>Spend</h2><ul>",
@@ -390,6 +389,8 @@ def page_policies(runs_dir, rules_path, thresholds_path) -> str:
     rows = []
     for r in list_runs(runs_dir):
         if r["status"] != "ok":
+            rows.append("<tr><td>%s</td><td colspan=\"2\">%s</td><td colspan=\"3\">"
+                        "config not recorded</td></tr>" % (_e(r["name"]), _e(r["status"])))
             continue
         m = _metrics(r)
         if m is None:

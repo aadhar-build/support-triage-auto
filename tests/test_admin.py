@@ -371,6 +371,7 @@ class TestEffectiveConfig(ServerCase):
         make_run(self.runs, "run-040", _manifest(created_at="2026-10-02T00:00:00Z"), m40)
         make_run(self.runs, "run-050", _manifest(created_at="2026-10-03T00:00:00Z"), m50)
         make_run(self.runs, "run-nometrics", _manifest(created_at="2026-10-04T00:00:00Z"))
+        make_run(self.runs, "x-no-manifest", None, m40)
         self.start()
         body = self.get("/policies")
         section = body.split("Each run&#x27;s effective config")[1]
@@ -383,6 +384,7 @@ class TestEffectiveConfig(ServerCase):
         self.assertNotIn("differs from now", row50)
         self.assertIn("not recorded", row50)
         self.assertIn("config not recorded", _row(section, "run-nometrics"))
+        self.assertIn("config not recorded", _row(section, "x-no-manifest"))
 
 
 class TestSpend(ServerCase):
@@ -402,7 +404,8 @@ class TestSpend(ServerCase):
         body = self.get("/")
         self.assertIn("This run: $0.25 estimated", body)
         self.assertIn("Per-run cap: $2.50", body)
-        self.assertIn("This month: $0.35 estimated across 2 runs", body)
+        self.assertIn("This month: $0.35 estimated across 2 runs (0 with no cost recorded)",
+                      body)
         self.assertIn("Monthly cap: $123", body)
         self.assertIn("placeholder prices, not real spend; API-equivalent dollars", body)
         self.assertIn("Estimated from run manifests", body)
