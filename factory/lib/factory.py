@@ -129,6 +129,25 @@ def move(job: dict, to: str, note: str = "") -> dict:
     return job
 
 
+def enter_build(job: dict, d: Path, note: str = "") -> dict:
+    """Move a job into build by hand (`job advance <id> build`), always into a fresh round.
+
+    The first build after spec is round 1. Any later move into build (owner feedback
+    from needs-human, a CI failure while merging, a retry from recovery) is the next
+    round, so the earlier round's gate and review files are never overwritten or
+    counted again. Owner-driven rounds are not capped by max_rounds. Refuses, changing
+    nothing, if the move is illegal or the new round's folder already exists.
+    """
+    if "build" not in TRANSITIONS.get(job["stage"], set()):
+        raise FactoryError(f"illegal move {job['stage']} -> build for job {job['id']}")
+    new_round = job["round"] + 1
+    if (d / f"round-{new_round}").exists():
+        raise FactoryError(f"round-{new_round} already exists for job {job['id']}; "
+                           "refusing to overwrite it")
+    job["round"] = new_round
+    return move(job, "build", note or f"round {new_round}")
+
+
 def next_round_or_recovery(job: dict, max_rounds: int, note: str) -> dict:
     """After a failed gate or a CHANGES review: another build round, or recovery."""
     if job["round"] < max_rounds:

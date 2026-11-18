@@ -88,9 +88,10 @@ def cmd_show(root: Path, cfg: dict, args: list[str]) -> str:
 
 def cmd_advance(root: Path, cfg: dict, args: list[str]) -> str:
     d, job = _load(root, args[0])
-    if args[1] == "build" and job["round"] == 0:
-        job["round"] = 1
-    F.move(job, args[1], " ".join(args[2:]))
+    if args[1] == "build":
+        F.enter_build(job, d, " ".join(args[2:]))
+    else:
+        F.move(job, args[1], " ".join(args[2:]))
     F.write_job(d, job)
     return f"{job['id']} -> {job['stage']}"
 
