@@ -94,6 +94,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
             "expected": {"intent": "other", "action": "escalate", "escalate": True},
             "actual": {"intent": "other", "action": "escalate", "escalate": True},
             "expected_violations": None, "actual_violations": None,
+            "tiers": ["cheap", "larger"], "confidence": 1.0,
         })
         self.assertEqual(report["cases"][0]["actual"],
                          {"intent": "delivery", "action": "ask", "escalate": False})
@@ -115,6 +116,23 @@ class TestRunSynthetic(RunSyntheticTestBase):
                          "cases=1 passed=1 failed=0 must_pass_failures=0 rules_loaded=1\n")
         self.assertEqual(self.report_json()["summary"]["rules_loaded"], 1)
         self.assertIn("| rules_loaded | 1 |", self.report_md())
+
+    def test_report_records_tiers_and_confidence(self):
+        path = self.write_cases([case("parcel", *PARCEL), case("praise", *PRAISE),
+                                 case("hacked", *HACKED), case("locked", *LOCKED)])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3\n")
+        got = {c["id"]: (c["tiers"], c["confidence"]) for c in self.report_json()["cases"]}
+        self.assertEqual(got, {
+            "parcel": (["cheap", "agent"], 0.6),
+            "praise": (["cheap", "agent"], 0.75),
+            "hacked": (["cheap", "larger"], 1.0),
+            "locked": (["cheap", "larger"], 1.0),
+        })
+        md = self.report_md()
+        self.assertNotIn("tiers", md)
+        self.assertNotIn("agent", md)
 
     def test_label_mismatch_fails_case(self):
         path = self.write_cases([case("parcel", PARCEL[0], "billing", "ask", False,
