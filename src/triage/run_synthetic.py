@@ -9,7 +9,11 @@ case ids, titles, labels, tier names, confidences, rule ids and counts, never tu
 brand text. No network calls. Stdout and the reports' summary give rules_loaded, the number of
 policy rules read from --rules, and topics_loaded, the number of always-escalate topics read
 from the same file (a missing or empty topic list is bad input). Each case records the ids of
-the topics that forced it to escalate in topic_id. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
+the topics that forced it to escalate in topic_id.
+Cases with a made-up `customer` (plus `brand` and `started_at`) are counted per customer and
+brand; when any case has one, the `repeat_contact` rule is read from --rules (bad input when
+missing) and the reports' summary gives the trigger counts at its window and report window.
+Customer values never leave memory. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
 bad input.
 With --trace PATH it also writes one audit trace record per case (split "synthetic",
 thread_id = 1-based case position) to PATH outside the repository, before any report; if the
@@ -22,12 +26,14 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
 from triage import metrics as metrics_mod
 from triage.cheap_tier import CheapTier
+from triage.context_signals import ContactRecord, RepeatContactError, contact_counts, \
+    load_repeat_contact_rule
 from triage.policy_check import RulesError, check, load_escalate_topics, load_rules, \
     rules_version
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
@@ -47,7 +53,9 @@ SYNTHETIC_TIME = datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 SUMMARY_KEYS = ("cases_run", "passed", "failed", "must_pass_cases", "must_pass_failures",
                 "missed_escalations", "false_escalations", "policy_violations",
-                "policy_mismatches", "rules_loaded", "topics_loaded")
+                "policy_mismatches", "rules_loaded", "topics_loaded",
+                "repeat_contact_rule_loaded", "repeat_contact_triggers",
+                "repeat_contact_triggers_report_window")
 
 
 class _Fail(Exception):
@@ -155,6 +163,15 @@ def _check_case(index, c, seen, fail) -> None:
         raise fail("%s: 'must_pass' is missing or is not a bool" % where)
     if "brand" in c and not isinstance(c["brand"], str):
         raise fail("%s: 'brand' must be a string" % where)
+    if "customer" in c:
+        if not isinstance(c["customer"], str) or not c["customer"]:
+            raise fail("%s: 'customer' must be a non-empty string" % where)
+        if not c.get("brand"):
+            raise fail("%s: 'customer' is given without a non-empty 'brand'" % where)
+        if "started_at" not in c:
+            raise fail("%s: 'customer' is given without 'started_at'" % where)
+    if "started_at" in c and parse_started_at(c["started_at"]) is None:
+        raise fail("%s: 'started_at' must be an ISO 8601 timestamp with a timezone" % where)
     if "tags" in c and not (isinstance(c["tags"], list)
                             and all(isinstance(t, str) for t in c["tags"])):
         raise fail("%s: 'tags' must be a list of strings" % where)
@@ -168,21 +185,66 @@ def _check_case(index, c, seen, fail) -> None:
             raise fail("%s: 'expected_violations' is given without 'draft_reply'" % where)
 
 
+def parse_started_at(value) -> Optional[datetime]:
+    """A case's started_at as an aware UTC datetime, or None when it is not a valid ISO 8601
+    timestamp with a timezone. A trailing Z means UTC."""
+    if not isinstance(value, str):
+        return None
+    text = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
 # ---------------------------------------------------------------- running
 
 def _thread(position: int, c: dict) -> Thread:
+    # Inbound authors stay in memory: never written to a report, trace or stdout.
+    customer = c.get("customer") or "%s_%d" % (SYNTHETIC_AUTHOR, position)
+    brand = c.get("brand") or SYNTHETIC_AUTHOR
+    start = parse_started_at(c["started_at"]) if "started_at" in c else SYNTHETIC_TIME
     turns = tuple(
-        Turn(tweet_id=position * 1000 + i, author_id=SYNTHETIC_AUTHOR,
-             inbound=t["inbound"], created_at=SYNTHETIC_TIME, text=t["text"])
+        Turn(tweet_id=position * 1000 + i, author_id=customer if t["inbound"] else brand,
+             inbound=t["inbound"], created_at=start + timedelta(minutes=i - 1), text=t["text"])
         for i, t in enumerate(c["turns"], start=1))
     return Thread(root_tweet_id=position, brand_ids=(), turns=turns,
                   brand_replied=any(not t.inbound for t in turns))
 
 
-def _route(cases: list, topics) -> list:
+def _records(cases: list, threads: list) -> list:
+    """A ContactRecord for each case with `customer`; its brand stands in for the @mention."""
+    records = []
+    for c, t in zip(cases, threads):
+        if "customer" not in c:
+            continue
+        brand = c["brand"]
+        records.append(ContactRecord(
+            root_tweet_id=t.root_tweet_id, customer=c["customer"], start=t.turns[0].created_at,
+            brands_at_start=frozenset({brand}),
+            brand_replies=tuple((brand, x.created_at) for x in t.turns if not x.inbound)))
+    return records
+
+
+def _route(cases: list, topics, rule) -> tuple:
+    """Route every case. Returns (routed, triggers at window_days, triggers at the report
+    window); both counts are 0 when rule is None."""
     threads = [_thread(i, c) for i, c in enumerate(cases, start=1)]
-    return route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
-                         threshold=DEFAULT_CONFIDENCE_THRESHOLD, topics=topics)
+    counts = None
+    triggers = triggers_report = 0
+    if rule is not None:
+        records = _records(cases, threads)
+        counts = contact_counts(records, timedelta(days=rule.window_days))
+        report = contact_counts(records, timedelta(hours=rule.report_window_hours))
+        triggers = sum(n >= rule.min_conversations for n in counts.values())
+        triggers_report = sum(n >= rule.min_conversations for n in report.values())
+    routed = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
+                           threshold=DEFAULT_CONFIDENCE_THRESHOLD, topics=topics,
+                           repeat_rule=rule, repeat_counts=counts)
+    return routed, triggers, triggers_report
 
 
 def _results(cases: list, rules, routed: list) -> list:
@@ -211,7 +273,8 @@ def _results(cases: list, rules, routed: list) -> list:
     return results
 
 
-def _summary(results: list, rules_loaded: int, topics_loaded: int) -> dict:
+def _summary(results: list, rules_loaded: int, topics_loaded: int, rule_loaded: int = 0,
+             triggers: int = 0, triggers_report: int = 0) -> dict:
     drafts = [r for r in results if r["actual_violations"] is not None]
     return {
         "cases_run": len(results),
@@ -228,6 +291,9 @@ def _summary(results: list, rules_loaded: int, topics_loaded: int) -> dict:
                                  for r in drafts),
         "rules_loaded": rules_loaded,
         "topics_loaded": topics_loaded,
+        "repeat_contact_rule_loaded": rule_loaded,
+        "repeat_contact_triggers": triggers,
+        "repeat_contact_triggers_report_window": triggers_report,
     }
 
 
@@ -308,9 +374,16 @@ def _run(args) -> tuple:
         rules_ver = rules_version(args.rules) if args.trace is not None else None
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
-    routed = _route(cases, topics)
+    rule = None
+    if any("customer" in c for c in cases):
+        try:
+            rule = load_repeat_contact_rule(args.rules)
+        except RepeatContactError as e:
+            raise _Fail("bad repeat_contact rule: %s" % e)
+    routed, triggers, triggers_report = _route(cases, topics, rule)
     results = _results(cases, rules, routed)
-    summary = _summary(results, len(rules), len(topics))
+    summary = _summary(results, len(rules), len(topics), int(rule is not None), triggers,
+                       triggers_report)
     metrics_text = _metrics_text(args.cases, results, run_at)
     trace_records = None
     if args.trace is not None:

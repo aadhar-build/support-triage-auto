@@ -88,7 +88,8 @@ class TestRunSynthetic(RunSyntheticTestBase):
             "cases_run": 3, "passed": 3, "failed": 0, "must_pass_cases": 3,
             "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
             "policy_violations": 0, "policy_mismatches": 0, "rules_loaded": 3,
-            "topics_loaded": 2,
+            "topics_loaded": 2, "repeat_contact_rule_loaded": 0, "repeat_contact_triggers": 0,
+            "repeat_contact_triggers_report_window": 0,
         })
         self.assertEqual([c["id"] for c in report["cases"]], ["parcel", "praise", "hacked"])
         self.assertEqual(report["cases"][2], {
@@ -257,7 +258,8 @@ class TestRunSynthetic(RunSyntheticTestBase):
             "cases_run": 0, "passed": 0, "failed": 0, "must_pass_cases": 0,
             "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
             "policy_violations": 0, "policy_mismatches": 0, "rules_loaded": 3,
-            "topics_loaded": 2,
+            "topics_loaded": 2, "repeat_contact_rule_loaded": 0, "repeat_contact_triggers": 0,
+            "repeat_contact_triggers_report_window": 0,
         })
         self.assertTrue((self.out / "synthetic_report.md").is_file())
 
@@ -523,6 +525,155 @@ class TestEscalateAlwaysTopics(RunSyntheticTestBase):
 
         metrics = json.loads((self.out / "metrics.json").read_text(encoding="utf-8"))
         self.assertFalse(banned & set(keys(metrics)))
+
+
+REPEAT_RULES = REPO_ROOT / "tests" / "fixtures" / "repeat_contact_rules.json"
+REPEAT_CASES = REPO_ROOT / "tests" / "fixtures" / "repeat_contact_cases.json"
+REPEAT_CUSTOMER = "zzcustomerkestrel7731"
+REPEAT_KEYS = ("repeat_contact_rule_loaded", "repeat_contact_triggers",
+               "repeat_contact_triggers_report_window")
+
+
+class TestRepeatContactCases(RunSyntheticTestBase):
+    def setUp(self):
+        super().setUp()
+        self.repeat_rules = self.dir / "repeat_rules.json"
+        self.repeat_rules.write_bytes(REPEAT_RULES.read_bytes())
+        self.cases_path = self.dir / "repeat_cases.json"
+        self.cases_path.write_bytes(REPEAT_CASES.read_bytes())
+
+    def test_fixture_cases_pass_and_counts(self):
+        proc = self.run_cli(self.cases_path, rules=self.repeat_rules)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0"
+                                      " rules_loaded=3 topics_loaded=2\n")
+        report = self.report_json()
+        self.assertEqual([c["passed"] for c in report["cases"]], [True, True, True])
+        self.assertEqual([c["actual"]["action"] for c in report["cases"]],
+                         ["ask", "ask", "escalate"])
+        self.assertEqual(report["cases"][2]["reason_codes"], ["cheap_confident", "repeat_contact"])
+        self.assertEqual(report["cases"][2]["tiers"], ["cheap"])
+        self.assertEqual(report["cases"][0]["reason_codes"], ["cheap_confident"])
+        summary = report["summary"]
+        self.assertEqual(summary["repeat_contact_rule_loaded"], 1)
+        self.assertEqual(summary["repeat_contact_triggers"], 1)
+        self.assertEqual(summary["repeat_contact_triggers_report_window"], 0)
+        self.assertLessEqual(set(REPEAT_KEYS), set(summary))
+        md = self.report_md()
+        self.assertIn("| repeat_contact_triggers | 1 |", md)
+        self.assertIn("| repeat_contact_triggers_report_window | 0 |", md)
+
+    def test_missing_rule_fails_closed(self):
+        rules = json.loads(REPEAT_RULES.read_text(encoding="utf-8"))
+        del rules["repeat_contact"]
+        no_rule = self.dir / "no_repeat_rule.json"
+        no_rule.write_text(json.dumps(rules), encoding="utf-8")
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli(self.cases_path, rules=no_rule, extra=("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertTrue(proc.stderr.startswith("error: "), proc.stderr)
+        self.assertIn("repeat_contact", proc.stderr)
+        self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        self.assertFalse(self.out.exists())
+        self.assertFalse(trace.exists())
+
+    def test_bad_case_fields_exit_2(self):
+        base = json.loads(REPEAT_CASES.read_text(encoding="utf-8"))["cases"][0]
+        bad = {
+            "empty customer": dict(base, customer=""),
+            "customer not a string": dict(base, customer=7),
+            "no brand": {k: v for k, v in base.items() if k != "brand"},
+            "no started_at": {k: v for k, v in base.items() if k != "started_at"},
+            "naive started_at": dict(base, started_at="2021-03-01T09:00:00"),
+            "bad started_at": dict(base, started_at="yesterday"),
+        }
+        for name, c in bad.items():
+            with self.subTest(name):
+                out = self.dir / ("out-" + name.replace(" ", "-"))
+                proc = self.run_cli(self.write_cases([c], name="bad.json"),
+                                    rules=self.repeat_rules, out=out)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+                self.assertFalse(out.exists())
+
+    def test_trace_records_repeat_contact(self):
+        from triage.trace import validate_record
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli(self.cases_path, rules=self.repeat_rules,
+                            extra=("--trace", str(trace)))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(records), 3)
+        for record in records:
+            validate_record(record)
+            self.assertEqual(record["trace_schema"], 2)
+        day5 = records[2]
+        self.assertEqual(day5["thread_id"], 3)
+        self.assertIn("repeat_contact", day5["reason_codes"])
+        self.assertEqual(day5["topic_id"], [])
+        self.assertEqual([t["tier"] for t in day5["tiers"]], ["cheap"])
+        self.assertEqual(day5["final"]["action"], "escalate")
+        self.assertNotIn("repeat_contact", records[1]["reason_codes"])
+
+    def test_no_customer_ids_in_output(self):
+        cases = json.loads(REPEAT_CASES.read_text(encoding="utf-8"))["cases"]
+        cases.append(case("plain", *PARCEL))
+        path = self.write_cases(cases)
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli(path, rules=self.repeat_rules,
+                            extra=("--trace", str(trace), "--run-at", "2026-11-18T10:00:00Z"))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        outputs = {"stdout": proc.stdout, "stderr": proc.stderr,
+                   "trace": trace.read_text(encoding="utf-8")}
+        for name in ("synthetic_report.json", "synthetic_report.md", "metrics.json"):
+            outputs[name] = (self.out / name).read_text(encoding="utf-8")
+        for name, text in outputs.items():
+            with self.subTest(name):
+                self.assertNotIn(REPEAT_CUSTOMER, text)
+                self.assertNotIn("kestrel", text)
+                self.assertNotIn("synthetic_customer", text)
+        summary = self.report_json()["summary"]
+        self.assertEqual([summary[k] for k in REPEAT_KEYS], [1, 1, 0])
+
+        def keys(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    yield k
+                    yield from keys(v)
+            elif isinstance(node, list):
+                for v in node:
+                    yield from keys(v)
+
+        banned = set(REPEAT_KEYS) | {"reason", "reasons", "reason_codes", "topic_id"}
+        metrics = json.loads(outputs["metrics.json"])
+        self.assertFalse(banned & set(keys(metrics)))
+
+    def test_existing_cases_unchanged(self):
+        path = self.dir / "fixture_cases.json"
+        path.write_bytes(FIXTURE_CASES.read_bytes())
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "cases=1 passed=1 failed=0 must_pass_failures=0"
+                                      " rules_loaded=3 topics_loaded=2\n")
+        report = self.report_json()
+        only = report["cases"][0]
+        self.assertTrue(only["passed"])
+        self.assertEqual(only["expected"], {"intent": "delivery", "action": "ask",
+                                            "escalate": False})
+        self.assertEqual(only["actual"], {"intent": "delivery", "action": "ask",
+                                          "escalate": False})
+        self.assertNotIn("repeat_contact", only["reason_codes"])
+        self.assertEqual([report["summary"][k] for k in REPEAT_KEYS], [0, 0, 0])
+
+    @unittest.skipUnless(os.environ.get("TRIAGE_CONFORMANCE") == "1",
+                         "set TRIAGE_CONFORMANCE=1 to check the owner's live files")
+    def test_live_files_conformance(self):
+        from triage import run_synthetic
+        live_cases = REPO_ROOT / "evals" / "gold" / "synthetic.json"
+        proc = self.run_cli(live_cases, rules=run_synthetic.DEFAULT_RULES_PATH)
+        self.assertIn(proc.returncode, (0, 1), proc.stderr)
+        self.assertEqual(self.report_json()["summary"]["repeat_contact_rule_loaded"], 1)
 
 
 if __name__ == "__main__":

@@ -150,6 +150,9 @@
     "passed": 5,
     "policy_mismatches": 0,
     "policy_violations": 1,
+    "repeat_contact_rule_loaded": 0,
+    "repeat_contact_triggers": 0,
+    "repeat_contact_triggers_report_window": 0,
     "rules_loaded": 3,
     "topics_loaded": 2
   }

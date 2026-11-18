@@ -1,0 +1,60 @@
+{
+  "version": "test-fixture-repeat",
+  "public_reply_rules": [
+    {
+      "id": "t-promise",
+      "type": "banned_phrase",
+      "description": "Made-up test rule: promises.",
+      "phrases": [
+        "we'll refund",
+        "full refund",
+        "compensation"
+      ]
+    },
+    {
+      "id": "t-secret",
+      "type": "banned_phrase",
+      "description": "Made-up test rule: secrets.",
+      "phrases": [
+        "cvv",
+        "your password"
+      ]
+    },
+    {
+      "id": "t-pii",
+      "type": "pii_echo",
+      "description": "Made-up test rule: personal data.",
+      "detect": [
+        "card_number",
+        "email_from_customer",
+        "phone_from_customer"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "t-zorblax",
+      "description": "Made-up test topic: sentinel alpha.",
+      "phrases": [
+        "zorblax claim",
+        "quuxfrob"
+      ]
+    },
+    {
+      "id": "t-florp",
+      "description": "Made-up test topic: sentinel beta.",
+      "phrases": [
+        "can't florp",
+        "wibblewarp"
+      ],
+      "note": "Made-up extra key, ignored by the loader."
+    }
+  ],
+  "repeat_contact": {
+    "window_days": 7,
+    "min_conversations": 3,
+    "effect": "escalate",
+    "report_window_hours": 72,
+    "note": "Made-up extra key, ignored by the loader."
+  }
+}
