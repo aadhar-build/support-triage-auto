@@ -149,5 +149,69 @@ class TestRunEval(CliTestBase):
                 self.assertFalse(out.exists())
 
 
+class TestTrace(CliTestBase):
+    def test_trace_written(self):
+        from triage.trace import validate_record
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli("--trace", str(trace), "--threshold", "0.6", "--seed", "3")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        lines = trace.read_text(encoding="utf-8").splitlines()
+        report = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertEqual(len(lines), report["threads_routed"])
+        self.assertEqual(len(lines), 5)
+        records = [json.loads(line) for line in lines]
+        for rec in records:
+            validate_record(rec)
+            self.assertEqual(rec["threshold"], 0.6)
+            self.assertEqual((rec["split"], rec["seed"]), ("dev", 3))
+            self.assertIsNone(rec["rules_version"])
+            self.assertIsNone(rec["drift_config_version"])
+            self.assertRegex(rec["code_version"], r"^[0-9a-f]{40}$")
+        self.assertEqual(sorted(r["thread_id"] for r in records), [1, 3, 5, 7, 9])
+        self.assertTrue(proc.stdout.strip().endswith(" trace_records=5"), proc.stdout)
+
+    def test_trace_has_no_text_or_author_ids(self):
+        trace = self.dir / "t.jsonl"
+        proc = self.run_cli("--trace", str(trace))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        content = trace.read_text(encoding="utf-8")
+        import csv
+        import io
+        rows = list(csv.DictReader(io.StringIO(TWCS_HEADER + "\n".join(TWCS_ROWS) + "\n")))
+        for row in rows:
+            for value in (row["text"], row["author_id"]):
+                with self.subTest(value=value):
+                    self.assertNotIn(value, content)
+        self.assertNotIn("SENTINEL", content)
+
+    def test_trace_inside_repo_refused(self):
+        trace = REPO_ROOT / "trace_should_not_exist.jsonl"
+        proc = self.run_cli("--trace", str(trace))
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertTrue(proc.stderr.startswith("error: "), proc.stderr)
+        self.assertEqual(len(proc.stderr.strip().splitlines()), 1, proc.stderr)
+        self.assertFalse(trace.exists())
+        self.assertFalse(self.out.exists())
+
+    def test_trace_refused_before_data_is_loaded(self):
+        trace = REPO_ROOT / "trace_should_not_exist.jsonl"
+        proc = self.run_cli("--trace", str(trace), data=self.dir / "missing.csv")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("inside the repository", proc.stderr)
+
+    def test_trace_write_failure_writes_no_report(self):
+        trace = self.dir / "no_such_dir" / "t.jsonl"
+        proc = self.run_cli("--trace", str(trace))
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertFalse(trace.exists())
+        self.assertFalse(self.out.exists())
+
+    def test_no_trace_summary_unchanged(self):
+        proc = self.run_cli()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("trace_records", proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

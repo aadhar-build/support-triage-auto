@@ -22,7 +22,8 @@ from triage.tiers import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-NEW_MODULES = ("tiers.py", "cheap_tier.py", "router.py", "evaluate.py", "run_eval.py")
+NEW_MODULES = ("tiers.py", "cheap_tier.py", "router.py", "evaluate.py", "run_eval.py",
+               "trace.py")
 T0 = datetime(2017, 10, 31, 22, 0, 0, tzinfo=timezone.utc)
 
 

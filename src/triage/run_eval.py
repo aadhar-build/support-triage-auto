@@ -2,8 +2,9 @@
 
 Usage: python3 -m triage.run_eval --gold GOLD.csv --out REPORT [options]
 
-No network calls and no keys. The only file written is --out. Default prices are
-placeholders, not real prices.
+No network calls and no keys. The only file written is --out, plus the audit trace when
+--trace PATH is given (one JSON line per routed thread, outside the repository; it is
+written before the report). Default prices are placeholders, not real prices.
 """
 
 from __future__ import annotations
@@ -22,6 +23,8 @@ from triage.split import DEFAULT_SPLIT_PATH, SPLIT_NAMES, SplitConfigError, load
     split_threads
 from triage.threads import build_threads
 from triage.tiers import PLACEHOLDER_PRICES, FakeAgentTier, FakeLargerTier
+from triage.trace import REPO_ROOT, RunInfo, TraceError, build_record, check_trace_path, \
+    code_version, write_trace
 
 DEFAULT_DATA = "data/raw/twcs.csv"
 
@@ -45,6 +48,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--price-cheap", type=float, default=PLACEHOLDER_PRICES["cheap"])
     p.add_argument("--price-larger", type=float, default=PLACEHOLDER_PRICES["larger"])
     p.add_argument("--price-agent", type=float, default=PLACEHOLDER_PRICES["agent"])
+    p.add_argument("--trace", default=None,
+                   help="write an audit trace (JSON lines) to this path outside the repo")
     return p
 
 
@@ -57,6 +62,8 @@ def _run(args) -> str:
     for name, price in prices.items():
         if not math.isfinite(price) or price < 0:
             raise _Fail("--price-%s must be a finite number >= 0, got %r" % (name, price))
+    if args.trace is not None:
+        check_trace_path(args.trace)
 
     try:
         gold = load_gold(args.gold)
@@ -96,21 +103,32 @@ def _run(args) -> str:
     report = score(routed, gold, prices, sample_size=args.sample_size, seed=args.seed,
                    split=args.split, threshold=args.threshold)
     text = report_to_json(report) if args.format == "json" else report_to_markdown(report)
+    trace_records = None
+    if args.trace is not None:
+        commit, dirty = code_version(REPO_ROOT)
+        # This slice applies no rules file and no drift config, so both versions are null.
+        run = RunInfo(code_version=commit, code_dirty=dirty, rules_version=None,
+                      drift_config_version=None, threshold=args.threshold, split=args.split,
+                      seed=args.seed)
+        trace_records = write_trace(args.trace, (build_record(r, run) for r in routed))
     try:
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(text)
     except OSError as e:
         raise _Fail("cannot write %s: %s" % (args.out, e.strerror or e))
-    return ("routed=%d scored=%d without_gold=%d gold_unmatched=%d split=%s"
-            % (report.threads_routed, report.threads_scored, report.threads_without_gold,
-               report.gold_rows_unmatched, args.split))
+    summary = ("routed=%d scored=%d without_gold=%d gold_unmatched=%d split=%s"
+               % (report.threads_routed, report.threads_scored, report.threads_without_gold,
+                  report.gold_rows_unmatched, args.split))
+    if trace_records is not None:
+        summary += " trace_records=%d" % trace_records
+    return summary
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     try:
         summary = _run(args)
-    except _Fail as e:
+    except (_Fail, TraceError) as e:
         print("error: %s" % e, file=sys.stderr)
         return 2
     print(summary)
