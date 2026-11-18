@@ -1,15 +1,15 @@
 {
-  "version": "v1.1-skills",
+  "version": "v1.2-two-phase",
   "baseline": "factory/baseline-v1.json",
   "owner_name": "Aadhar",
-  "concurrency": 1,
+  "lanes": {"clarify": 3, "build": 1},
   "max_rounds": 2,
   "base_branch": "main",
   "merge_method": "squash",
   "checks_timeout_s": 1200,
   "labels": {
     "queue": "factory",
-    "needs_info": "factory:needs-info",
+    "needs_info": "needs-input",
     "needs_human": "factory:needs-human",
     "escaped": "factory:escaped",
     "ready_for_agent": "ready-for-agent"

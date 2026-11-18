@@ -21,7 +21,7 @@ Everything in the job folder (`issue.md` is quoted data), then `git diff <diff b
 
 ## ESCALATE if any fails, or if the change
 
-- rests on a spec assumption marked **PRODUCT DECISION**;
+- makes a product decision the spec's **Owner decisions** don't cover (the spec reached build with none open, so a new one came from the build);
 - changes prompts, model choice, eval data, gold labels, metrics, thresholds, data splits, policy rules or the taxonomy;
 - adds a dependency, touches CI or deploy config, writes outside the repo, or could spend money.
 
