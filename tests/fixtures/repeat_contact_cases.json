@@ -1,0 +1,63 @@
+{
+  "version": "test-fixture",
+  "status": "made-up cases for tests only",
+  "cases": [
+    {
+      "id": "rc-01",
+      "title": "Made-up first contact, day 0",
+      "brand": "MadeUpShop",
+      "customer": "zzcustomerkestrel7731",
+      "started_at": "2021-03-01T09:00:00+00:00",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "where is my parcel, made-up order"
+        }
+      ],
+      "expected": {
+        "intent": "delivery",
+        "action": "ask",
+        "should_escalate": false
+      },
+      "must_pass": true
+    },
+    {
+      "id": "rc-02",
+      "title": "Made-up second contact, day 2",
+      "brand": "MadeUpShop",
+      "customer": "zzcustomerkestrel7731",
+      "started_at": "2021-03-03T12:00:00+00:00",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "where is my parcel, made-up order"
+        }
+      ],
+      "expected": {
+        "intent": "delivery",
+        "action": "ask",
+        "should_escalate": false
+      },
+      "must_pass": true
+    },
+    {
+      "id": "rc-03",
+      "title": "Made-up third contact, day 5",
+      "brand": "MadeUpShop",
+      "customer": "zzcustomerkestrel7731",
+      "started_at": "2021-03-06T18:00:00Z",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "where is my parcel, made-up order"
+        }
+      ],
+      "expected": {
+        "intent": "delivery",
+        "action": "escalate",
+        "should_escalate": true
+      },
+      "must_pass": true
+    }
+  ]
+}

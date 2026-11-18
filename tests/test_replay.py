@@ -18,6 +18,8 @@ from triage import replay, run_synthetic
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "replay"
 FIXTURE_RULES = REPO_ROOT / "tests" / "fixtures" / "policy_rules.json"
+REPEAT_RULES = REPO_ROOT / "tests" / "fixtures" / "repeat_contact_rules.json"
+REPEAT_CASES = REPO_ROOT / "tests" / "fixtures" / "repeat_contact_cases.json"
 CASE_IDS = ["rp-answer", "rp-ask", "rp-route3", "rp-escalate", "rp-held"]
 
 
@@ -119,6 +121,28 @@ class TestSuccess(ReplayTestBase):
         self.assertIn("<code>escalate_always</code>", forced)
         self.assertEqual(field(panel(page, "rp-forced", 1), "action")[1], "action: escalate")
         self.assertNotIn("escalate_always", section(page, "rp-answer"))
+
+    def test_repeat_contact_case_replays(self):
+        cases = self.dir / "repeat-cases.json"
+        shutil.copyfile(REPEAT_CASES, cases)
+        customers = {c["customer"] for c in
+                     json.loads(cases.read_text(encoding="utf-8"))["cases"]}
+        run_dir, trace = self.dir / "repeat-run", self.dir / "repeat-trace.jsonl"
+        code, stdout, stderr = run_main(run_synthetic, [
+            "--cases", str(cases), "--rules", str(REPEAT_RULES),
+            "--out", str(run_dir), "--run-at", "2026-11-18T10:00:00Z",
+            "--trace", str(trace)])
+        self.assertEqual(code, 0, stderr)
+        code, stdout, stderr = self.replay(cases=cases, run=run_dir, trace=trace)
+        self.assertEqual(code, 0, stderr)
+        page = self.out.read_text(encoding="utf-8")
+        day5 = section(page, "rc-03")
+        self.assertIn("<code>repeat_contact</code>", day5)
+        self.assertEqual(field(panel(page, "rc-03", 1), "action")[1], "action: escalate")
+        self.assertNotIn("repeat_contact", section(page, "rc-02"))
+        for customer in customers:
+            self.assertNotIn(customer, page)
+        self.assertNotIn("synthetic_customer", page)
 
 
 class TestRefuse(ReplayTestBase):
