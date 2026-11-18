@@ -1,0 +1,19 @@
+{
+  "version": "fixture-rules-v3",
+  "status": "Made-up fixture rules for the admin console tests only",
+  "public_reply_rules": [
+    {"id": "fixture-no-promise", "type": "banned_phrase",
+     "description": "Fixture rule: never promise a gift.",
+     "phrases": ["free gift", "we promise"]},
+    {"id": "fixture-no-pii", "type": "pii_echo",
+     "description": "Fixture rule: never echo contact details.",
+     "detect": ["card_number", "email_from_customer"]}
+  ],
+  "escalate_always": [
+    {"id": "fixture-legal-topic", "description": "Fixture topic: legal threats",
+     "phrases": ["see you in court"]},
+    {"id": "fixture-safety-topic", "phrases": ["smoke alarm"]}
+  ],
+  "repeat_contact": {"window_days": 9, "min_conversations": 4, "effect": "escalate",
+                     "report_window_hours": 36}
+}

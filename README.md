@@ -81,6 +81,22 @@ PYTHONPATH=src python3 -m triage.report this_week.json --compare last_week.json 
 
 It writes one offline HTML page (no server, no network requests) and prints `page=<path>`. The page shows each headline rate with its value, "num of n", 95% range and a "directional" badge when the evidence is thin; the escalation detail; confusion matrices and sortable per-class tables for action and intent; and, with `--compare`, both runs side by side with the delta and a literal "ranges don't overlap" mark. Green and red come only from the targets in `evals/thresholds.json` (read, never written; `--thresholds PATH` points elsewhere); a missing key shows "target not set". Compare refuses only truly unlike runs (a different kind, cohort, split, gold revision or brand population); a different `run_at`, sample or config is fine. A gold-run page carries aggregates only; on a synthetic run, clicking a confusion cell lists its case ids. Any refusal exits 2 with one `error:` line and writes no file.
 
+## Admin console (local, read-only)
+
+A read-only web console over a folder of past runs. Start it by hand; it runs in the foreground only (never a service), and Ctrl-C stops it and exits 0:
+
+```
+PYTHONPATH=src python3 -m triage.admin --runs ~/triage-runs/
+```
+
+It binds only to `127.0.0.1` (default port 8765, `--port N` to change it, `--port 0` for a free one) and answers only requests whose `Host` is `127.0.0.1` or `localhost`. From your own machine, reach it over an SSH tunnel, then open `localhost:9000` in a browser:
+
+```
+ssh -L 9000:127.0.0.1:8765 <server>
+```
+
+Keep `--runs` outside git. Each run is one subfolder with a hand-written `manifest.json` (`{"schema_version": "run-manifest/1", "kind": "synthetic" | "gold_random" | "hard_case", "created_at": "...Z", "cost": {"estimated_usd": ..., "cost_per_1000_usd": ..., "prices_are_placeholders": ...}}`) and optionally a `metrics.json`; nothing writes manifests yet. Pages: Overview (latest run and estimated spend against the caps), Eval reports (run list and each run's drill-down report), Drift and incidents (names the commands only) and Policies and thresholds (rules and thresholds on disk next to each run's effective config). `--rules` and `--thresholds` point at other files; both are only read.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:
