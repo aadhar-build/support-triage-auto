@@ -39,6 +39,10 @@ class _Fail(Exception):
     pass
 
 
+class CasesError(_Fail):
+    """A cases file failed validation. The message is one line."""
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="python3 -m triage.run_synthetic",
                                 description=__doc__.splitlines()[0])
@@ -50,21 +54,22 @@ def _parser() -> argparse.ArgumentParser:
 
 # ---------------------------------------------------------------- loading and validation
 
-def _load_cases(path) -> list:
+def load_cases(path) -> list:
+    """Load and validate a made-up cases file. Raises CasesError with a one-line message."""
     def fail(problem):
-        return _Fail("bad cases file %s: %s" % (path, problem))
+        return CasesError("bad cases file %s: %s" % (path, problem))
 
     try:
         with open(path, "rb") as f:
             raw = f.read()
     except FileNotFoundError:
-        raise _Fail("cases file not found: %s" % path)
+        raise CasesError("cases file not found: %s" % path)
     except OSError as e:
-        raise _Fail("cannot read cases file %s: %s" % (path, e.strerror or e))
+        raise CasesError("cannot read cases file %s: %s" % (path, e.strerror or e))
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as e:
-        raise _Fail("cases file %s is not valid UTF-8 (byte offset %d)" % (path, e.start))
+        raise CasesError("cases file %s is not valid UTF-8 (byte offset %d)" % (path, e.start))
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
@@ -167,6 +172,7 @@ def _results(cases: list, rules) -> list:
             "passed": passed, "expected": expected, "actual": actual,
             "expected_violations": expected_violations,
             "actual_violations": actual_violations,
+            "tiers": list(r.tiers), "confidence": r.labels.confidence,
         })
     return results
 
@@ -232,7 +238,7 @@ def _write(out_dir: Path, results: list, summary: dict) -> None:
 
 
 def _run(args) -> dict:
-    cases = _load_cases(args.cases)
+    cases = load_cases(args.cases)
     try:
         rules = load_rules(args.rules)
     except RulesError as e:
