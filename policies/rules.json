@@ -1,0 +1,69 @@
+{
+  "version": "v1-draft",
+  "status": "DRAFT for Aadhar's approval (18 Nov 2026). Owner-owned and protected: agents never edit this file.",
+  "public_reply_rules": [
+    {
+      "id": "no-refund-promise",
+      "type": "banned_phrase",
+      "description": "A public reply never promises a refund, compensation, credit or replacement. A person decides those.",
+      "phrases": [
+        "we will refund",
+        "we'll refund",
+        "you will get a refund",
+        "you'll get a refund",
+        "full refund",
+        "we will compensate",
+        "we'll compensate",
+        "compensation",
+        "we will credit",
+        "we'll credit",
+        "free replacement",
+        "we will replace",
+        "we'll replace"
+      ]
+    },
+    {
+      "id": "no-liability-admission",
+      "type": "banned_phrase",
+      "description": "A public reply never admits legal fault or liability.",
+      "phrases": [
+        "our fault",
+        "we are liable",
+        "we're liable",
+        "we accept liability",
+        "we admit"
+      ]
+    },
+    {
+      "id": "no-pii-echo",
+      "type": "pii_echo",
+      "description": "A public reply never contains a card number (13-19 digits, Luhn-valid), and never repeats an email address or phone number the customer posted. The brand's own support contacts are allowed.",
+      "detect": [
+        "card_number",
+        "email_from_customer",
+        "phone_from_customer"
+      ]
+    },
+    {
+      "id": "no-sensitive-request",
+      "type": "banned_phrase",
+      "description": "A public reply never asks for card details, a password, a PIN or a security code. Ask the customer to DM instead.",
+      "phrases": [
+        "card number",
+        "card details",
+        "your password",
+        "your pin",
+        "security code",
+        "cvv",
+        "cvc"
+      ]
+    }
+  ],
+  "escalate_always": [
+    "A threat of legal action, a regulator complaint or press involvement",
+    "A hacked account, fraud, or unrecognised charges",
+    "A safety risk to a person (injury, danger, self-harm)",
+    "A demand for a refund or compensation",
+    "The customer posted a card number, password or ID in public"
+  ]
+}
