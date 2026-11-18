@@ -24,7 +24,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from triage.split import DEFAULT_SPLIT_PATH, load_split_config, split_threads
+from triage.loader import HeaderError
+from triage.split import DEFAULT_SPLIT_PATH, SplitConfigError, load_split_config, split_threads
 from triage.threads import Thread, build_threads
 
 DEFAULT_DATA = "data/raw/twcs.csv"
@@ -51,6 +52,7 @@ SIGNALS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
 SIGNAL_NAMES: Tuple[str, ...] = tuple(name for name, _ in SIGNALS)
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
+_ID_RE = re.compile(r"\d+", re.ASCII)
 _PHRASES: Dict[str, Tuple[Tuple[str, ...], ...]] = {
     name: tuple(tuple(_TOKEN_RE.findall(entry)) for entry in entries) for name, entries in SIGNALS
 }
@@ -97,10 +99,26 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _load_exclude_ids(path) -> Set[int]:
+    """Read the thread_id column of a CSV. Bad content raises _Fail."""
     with open(path, "r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            raise _Fail("exclusion file %s is empty: expected a thread_id column" % path)
         reader.fieldnames = [h.strip() if h else h for h in reader.fieldnames]
-        return {int(row["thread_id"].strip()) for row in reader}
+        if "thread_id" not in reader.fieldnames:
+            raise _Fail("exclusion file %s has no thread_id column" % path)
+        ids: Set[int] = set()
+        for row in reader:
+            value = row.get("thread_id")
+            if value is None:
+                raise _Fail("exclusion file %s line %d: row has too few fields"
+                            % (path, reader.line_num))
+            value = value.strip()
+            if not _ID_RE.fullmatch(value):
+                raise _Fail("exclusion file %s line %d: thread_id must be a non-negative integer"
+                            % (path, reader.line_num))
+            ids.add(int(value))
+    return ids
 
 
 def _turn_record(turn) -> dict:
@@ -115,11 +133,44 @@ def _check_out_path(out) -> None:
                     % (resolved, REPO_ROOT))
 
 
+def _write(path, text: str) -> None:
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError as e:
+        raise _Fail("cannot write %s: %s" % (path, e.strerror or e))
+
+
 def _run(args) -> str:
+    if args.n < 1:
+        raise _Fail("--n must be at least 1, got %d" % args.n)
     _check_out_path(args.out)
-    exclude = _load_exclude_ids(args.exclude_ids)
-    config = load_split_config(args.split_config)
-    threads, _ = build_threads(args.data)
+
+    try:
+        exclude = _load_exclude_ids(args.exclude_ids)
+    except FileNotFoundError:
+        raise _Fail("exclusion file not found: %s" % args.exclude_ids)
+    except OSError as e:
+        raise _Fail("cannot read exclusion file %s: %s" % (args.exclude_ids, e.strerror or e))
+    except UnicodeDecodeError as e:
+        raise _Fail("exclusion file %s is not valid UTF-8 (byte offset %d)"
+                    % (args.exclude_ids, e.start))
+
+    try:
+        config = load_split_config(args.split_config)
+    except SplitConfigError as e:
+        raise _Fail("bad split config: %s" % e)
+
+    try:
+        threads, _ = build_threads(args.data)
+    except FileNotFoundError:
+        raise _Fail("data file not found: %s (hint: run scripts/download_data.sh)" % args.data)
+    except OSError as e:
+        raise _Fail("cannot read data file %s: %s" % (args.data, e.strerror or e))
+    except HeaderError as e:
+        raise _Fail("bad header in %s: %s" % (args.data, e))
+    except UnicodeDecodeError as e:
+        raise _Fail("%s is not valid UTF-8 (byte offset %d)" % (args.data, e.start))
 
     mapping, _ = split_threads(threads, config)
     eval_threads = [t for t in threads if mapping[t.root_tweet_id] == "eval"]
@@ -135,12 +186,11 @@ def _run(args) -> str:
     candidates.sort(key=lambda c: len(c[1]), reverse=True)
     picked = candidates[:args.n]
 
-    lines = [json.dumps({"rank": rank, "thread_id": t.root_tweet_id, "signals": list(signals),
+    lines = "".join(json.dumps({"rank": rank, "thread_id": t.root_tweet_id, "signals": list(signals),
                          "turns": [_turn_record(turn) for turn in t.turns]},
                         ensure_ascii=False) + "\n"
-             for rank, (t, signals) in enumerate(picked, start=1)]
-    with open(args.out, "w", encoding="utf-8") as f:
-        f.writelines(lines)
+                    for rank, (t, signals) in enumerate(picked, start=1))
+    _write(args.out, lines)
 
     summary = {
         "threads_considered": len(eval_threads),
@@ -160,13 +210,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     try:
         summary = _run(args)
+        if args.summary_out:
+            _write(args.summary_out, summary)
     except _Fail as e:
         print("error: %s" % e, file=sys.stderr)
         return 2
-    if args.summary_out:
-        with open(args.summary_out, "w", encoding="utf-8") as f:
-            f.write(summary)
-    else:
+    if not args.summary_out:
         sys.stdout.write(summary)
     return 0
 

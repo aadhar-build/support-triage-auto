@@ -228,6 +228,30 @@ class TestPickHardCases(CliTestBase):
                 self.assertFalse(summary_out.exists())
                 self.assertEqual(proc.stdout, "")
 
+    def test_bad_inputs_rejected(self):
+        no_column = self.write("no-column.csv", "id,note\n%d,x\n" % _id(19))
+        bad_id = self.write("bad-id.csv", "thread_id\n%d\nabc\n" % _id(19))
+        short_row = self.write("short-row.csv", "note,thread_id\nx\n")
+        empty = self.write("empty.csv", "")
+        cases = [
+            ("missing exclude file", {"exclude": self.dir / "nope.csv"}, (), "not found"),
+            ("no thread_id column", {"exclude": no_column}, (), "thread_id"),
+            ("non-integer thread_id", {"exclude": bad_id}, (), "line 3"),
+            ("short row", {"exclude": short_row}, (), "line 2"),
+            ("empty exclude file", {"exclude": empty}, (), "empty"),
+            ("n zero", {}, ("--n", "0"), "--n"),
+            ("missing data file", {"data": self.dir / "nope-data.csv"}, (), "hint"),
+        ]
+        for label, kwargs, extra, needle in cases:
+            with self.subTest(case=label):
+                proc = self.run_cli(*extra, **kwargs)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertTrue(proc.stderr.startswith("error: "), proc.stderr)
+                self.assertIn(needle, proc.stderr)
+                self.assertFalse(self.out.exists())
+                self.assertEqual(proc.stdout, "")
+                self.assertNotIn(str(_id(19)), proc.stderr)
+
     def test_out_dotdot_outside_repo_accepted(self):
         sub = self.dir / "sub"
         sub.mkdir()
