@@ -174,5 +174,41 @@ class TestEmailEcho(unittest.TestCase):
         self.assertEqual(check(draft, customer, RULES), [])
 
 
+class TestPhoneEcho(unittest.TestCase):
+    def test_customer_phone_echo_flagged_any_format(self):
+        customer = ["call me on +44 (0)20 7946 0018"]
+        draft = "We'll ring 44 020-7946-0018"
+        self.assertEqual(check(draft, customer, RULES),
+                         [Violation("t-pii", 11, 27, "44 020-7946-0018")])
+        self.assertEqual(check("07700.900.123 noted", ["07700 900123"], RULES),
+                         [Violation("t-pii", 0, 13, "07700.900.123")])
+        self.assertEqual(check("Ring (07700) 900-123", ["07700 900123"], RULES),
+                         [Violation("t-pii", 5, 20, "(07700) 900-123")])
+        self.assertEqual(check("Ring +4479460018?", ["my number: 44 7946 0018"], RULES),
+                         [Violation("t-pii", 5, 16, "+4479460018")])
+
+    def test_brand_phone_not_flagged(self):
+        customer = ["call me on +44 (0)20 7946 0018"]
+        self.assertEqual(check("Our line is 0800 000 1234", customer, RULES), [])
+
+    def test_digit_count_bounds(self):
+        # 6 digits is too short to be a phone, 16 too long; both are posted by the customer.
+        self.assertEqual(check("Code 123 456", ["code 123-456"], RULES), [])
+        self.assertEqual(check("Ref 1234 5678 9012 3456", ["ref 1234567890123456"], RULES), [])
+
+    def test_digits_inside_email_not_a_phone(self):
+        self.assertEqual(check("Mail 07700900123@example.com", ["07700 900123"], RULES), [])
+
+
+class TestPiiEcho(unittest.TestCase):
+    def test_only_listed_detectors_run(self):
+        customer = ["mail jo.bloggs@example.com or ring 07700 900123"]
+        draft = "Hi jo.bloggs@example.com, we will ring 07700 900123"
+        self.assertEqual(check(draft, customer, CARD_ONLY), [])
+        phone_only = (Rule("t-phone", "pii_echo", (), ("phone_from_customer",)),)
+        self.assertEqual(check(draft, customer, phone_only),
+                         [Violation("t-phone", 39, 51, "07700 900123")])
+
+
 if __name__ == "__main__":
     unittest.main()

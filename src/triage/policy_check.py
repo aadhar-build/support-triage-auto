@@ -41,6 +41,8 @@ EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # letter or separator, and one character long so offsets stay the same.
 EMAIL_MASK = "\x00"
 CARD_RUN = re.compile(r"[0-9](?:[ -]?[0-9])*")
+# Optional "+" and "(", then digits joined by at most two of: space - . ( )
+PHONE_RUN = re.compile(r"\+?\(?[0-9](?:[ .()-]{0,2}[0-9])*")
 
 
 def load_rules(path):
@@ -139,6 +141,9 @@ def _pii_spans(draft, customer_turns, detect):
     masked = _mask_emails(draft)
     if "card_number" in detect:
         spans |= _card_spans(masked)
+    if "phone_from_customer" in detect:
+        posted = {key for turn in customer_turns for _, key in _phones(_mask_emails(turn))}
+        spans |= {span for span, key in _phones(masked) if key in posted}
     if "email_from_customer" in detect:
         posted = {m.group().lower() for turn in customer_turns for m in EMAIL.finditer(turn)}
         spans |= {m.span() for m in EMAIL.finditer(draft) if m.group().lower() in posted}
@@ -161,6 +166,14 @@ def _card_spans(text):
         if 13 <= len(digits) <= 19 and _luhn_ok(digits):
             spans.add((start, end))
     return spans
+
+
+def _phones(text):
+    """Yield (span, key) for each phone candidate; the key is its digits only."""
+    for match in PHONE_RUN.finditer(text):
+        key = "".join(ch for ch in match.group() if ch.isdigit())
+        if 7 <= len(key) <= 15:
+            yield match.span(), key
 
 
 def _luhn_ok(digits):
