@@ -5,6 +5,7 @@ or phrases of its own. Standard library only.
 """
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +24,17 @@ class Rule:
     type: str
     phrases: tuple
     detect: tuple
+
+
+@dataclass(frozen=True)
+class Violation:
+    rule_id: str
+    start: int
+    end: int
+    text: str
+
+
+CURLY_APOSTROPHE = "\u2019"
 
 
 def load_rules(path):
@@ -84,3 +96,33 @@ def load_rules(path):
                                % (rule_id, name, ", ".join(DETECTORS)))
             rules.append(Rule(rule_id, rule_type, (), tuple(detect)))
     return tuple(rules)
+
+
+def check(draft, customer_turns, rules):
+    """Return every policy violation in `draft`, sorted by (start, end, rule_id)."""
+    hits = set()
+    for rule in rules:
+        if rule.type == "banned_phrase":
+            spans = _phrase_spans(draft, rule.phrases)
+        else:
+            spans = set()
+        hits.update((start, end, rule.id) for start, end in spans)
+    return [Violation(rule_id, start, end, draft[start:end])
+            for start, end, rule_id in sorted(hits)]
+
+
+def is_safe_to_send(draft, customer_turns, rules):
+    """True only when `check` finds no violation at all."""
+    return check(draft, customer_turns, rules) == []
+
+
+def _phrase_spans(draft, phrases):
+    # Both apostrophes are one character, so swapping them keeps every offset.
+    text = draft.replace(CURLY_APOSTROPHE, "'")
+    spans = set()
+    for phrase in phrases:
+        words = phrase.replace(CURLY_APOSTROPHE, "'").split(" ")
+        pattern = r"(?<!\w)" + r"\s+".join(re.escape(w) for w in words) + r"(?!\w)"
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            spans.add(match.span())
+    return spans

@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from triage.policy_check import Rule, RulesError, load_rules
+from triage.policy_check import Rule, RulesError, Violation, check, is_safe_to_send, load_rules
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "policy_rules.json"
@@ -69,6 +69,45 @@ class TestLoadRules(unittest.TestCase):
     def test_live_rules_file_loads(self):
         # Schema-compatibility smoke test only: no assertions about the owner's content.
         load_rules(REPO_ROOT / "policies" / "rules.json")
+
+
+RULES = load_rules(FIXTURE)
+
+
+class TestBannedPhrase(unittest.TestCase):
+    def test_phrase_hit_has_id_and_span(self):
+        self.assertEqual(check("Sorry! We'll refund you today.", [], RULES),
+                         [Violation("t-promise", 7, 19, "We'll refund")])
+
+    def test_each_occurrence_reported(self):
+        draft = "No full refund. Really, no full refund."
+        self.assertEqual(check(draft, [], RULES), [
+            Violation("t-promise", 3, 14, "full refund"),
+            Violation("t-promise", 27, 38, "full refund"),
+        ])
+
+    def test_case_insensitive(self):
+        self.assertEqual(check("What is YOUR PASSWORD?", [], RULES),
+                         [Violation("t-secret", 8, 21, "YOUR PASSWORD")])
+
+    def test_word_boundaries(self):
+        self.assertEqual(check("Send the cvvx code", [], RULES), [])
+        self.assertEqual(check("Send the xcvv code", [], RULES), [])
+        self.assertEqual(check("overcompensation", [], RULES), [])
+        self.assertEqual(check("cvv please", [], RULES), [Violation("t-secret", 0, 3, "cvv")])
+        self.assertEqual(check("tell us the cvv", [], RULES),
+                         [Violation("t-secret", 12, 15, "cvv")])
+
+    def test_curly_and_straight_apostrophes(self):
+        self.assertEqual(check("we\u2019ll refund it", [], RULES),
+                         [Violation("t-promise", 0, 12, "we\u2019ll refund")])
+        curly_rule = (Rule("t-curly", "banned_phrase", ("we\u2019ll refund",), ()),)
+        self.assertEqual(check("ok we'll refund", [], curly_rule),
+                         [Violation("t-curly", 3, 15, "we'll refund")])
+
+    def test_space_matches_any_whitespace_run(self):
+        self.assertEqual(check("a full\n  refund", [], RULES),
+                         [Violation("t-promise", 2, 15, "full\n  refund")])
 
 
 if __name__ == "__main__":
