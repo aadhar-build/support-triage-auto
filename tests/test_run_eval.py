@@ -354,5 +354,287 @@ class TestTrace(CliTestBase):
         self.assertFalse(mpath.exists())
 
 
+FIXTURE_PRICES = REPO_ROOT / "tests" / "fixtures" / "model_prices.json"
+FIXTURE_THRESHOLDS = REPO_ROOT / "tests" / "fixtures" / "thresholds_spend.json"
+SPLIT_ALL_EVAL = {"seed": 1, "unit": "thread", "fractions": {"dev": 0, "eval": 1.0, "full": 0}}
+BANNED_KEYS = {"reason", "reasons", "reason_codes", "topic_id"}
+
+
+def _keys(obj):
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            yield k
+            yield from _keys(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            yield from _keys(v)
+
+
+class ScriptedClient:
+    """Always answers with one valid reply priced at (1000 in, 50 out) on fixture-model."""
+
+    def __init__(self):
+        from triage.model_tier import ModelReply, TokenUsage
+        self.calls = []
+        self._reply = ModelReply(
+            text='{"intent": "billing", "urgency": "normal", "action": "route", '
+                 '"confidence": 0.7}',
+            usage={"fixture-model": TokenUsage(1000, 50, 0, 0)})
+
+    def complete(self, system, user):
+        self.calls.append((system, user))
+        return self._reply
+
+
+class MustNotCall:
+    def complete(self, system, user):
+        raise AssertionError("complete() was called on a refused run")
+
+
+class TestLarger(CliTestBase):
+    def setUp(self):
+        super().setUp()
+        from datetime import datetime, timezone
+        from triage.spend_log import SpendLog
+        self.clock = lambda: datetime(2026, 11, 18, 10, 0, 0, tzinfo=timezone.utc)
+        self.log = self.dir / "state" / "spend.jsonl"
+        self.log.parent.mkdir()
+        SpendLog.create(self.log)
+
+    def main(self, *extra, client=None, split=None, out=None, log=None,
+             prices=FIXTURE_PRICES, thresholds=FIXTURE_THRESHOLDS):
+        import contextlib
+        import io
+        from triage import run_eval
+        argv = ["--data", str(self.data), "--gold", str(self.gold),
+                "--split-config", str(split or self.split), "--out", str(out or self.out),
+                "--rules", str(FIXTURE_RULES), "--prices", str(prices),
+                "--thresholds", str(thresholds), "--spend-log", str(log or self.log),
+                "--larger-model", "fixture-model"]
+        argv.extend(extra)
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = run_eval.main(argv, model_client=client, clock=self.clock)
+        return code, stdout.getvalue(), stderr.getvalue()
+
+    def events(self, path=None):
+        return [json.loads(x) for x in (path or self.log).read_text(
+            encoding="utf-8").splitlines()]
+
+    def test_fake_default_fields(self):
+        missing = {name: self.dir / ("missing_%s" % name) for name in
+                   ("prices.json", "thresholds.json", "spend.jsonl")}
+        outs = {}
+        for name, extra in (("default", ()), ("fake", ("--larger", "fake"))):
+            out = self.dir / ("%s.json" % name)
+            code, stdout, err = self.main(*extra, out=out, prices=missing["prices.json"],
+                                          thresholds=missing["thresholds.json"],
+                                          log=missing["spend.jsonl"])
+            self.assertEqual(code, 0, err)
+            self.assertIn(" larger=fake spend_usd=0.0000 unconfirmed_usd=0.0000 "
+                          "month_to_date_usd=n/a stopped_by=none split=dev", stdout)
+            outs[name] = json.loads(out.read_text(encoding="utf-8"))
+        for path in missing.values():
+            self.assertFalse(path.exists(), path)
+        self.assertEqual(outs["default"], outs["fake"])
+        data = outs["fake"]
+        self.assertEqual(data["larger_mode"], "fake")
+        self.assertEqual(data["larger_model"], "fake-larger")
+        for key in ("larger_input_tokens", "larger_output_tokens", "larger_answered"):
+            self.assertEqual(data[key], 0, key)
+        self.assertEqual(data["larger_confirmed_usd"], 0.0)
+        self.assertEqual(data["larger_unconfirmed_usd"], 0.0)
+        self.assertIsNone(data["monthly_cap_usd"])
+        self.assertIsNone(data["month_to_date_usd"])
+        self.assertFalse(data["larger_post_merge_eval"])
+        # same metric values as the subprocess run of the unchanged CLI
+        proc = self.run_cli(out=self.dir / "cli.json")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        cli = json.loads((self.dir / "cli.json").read_text(encoding="utf-8"))
+        for key in ("action_accuracy", "intent_accuracy", "missed_escalations",
+                    "false_escalations", "needs_person_share", "tier_shares",
+                    "cost_per_1000_threads"):
+            self.assertEqual(data[key], cli[key], key)
+        self.assertEqual(len(self.events()), 1)
+
+    def test_real_refusals(self):
+        bad_json = self.write("bad.json", "{nope")
+        other_prices = self.write("other_prices.json", json.dumps({
+            "version": "v", "models": {"some-other-model": {"bands": [
+                {"max_input_tokens": None, "input_usd_per_mtok": 1, "output_usd_per_mtok": 1}]}}}))
+        no_key = self.write("no_key.json", json.dumps({"guardrails": {}}))
+        corrupt = self.dir / "corrupt.jsonl"
+        corrupt.write_text(self.log.read_text(encoding="utf-8") + "{partial", encoding="utf-8")
+        at_cap = self.dir / "at_cap.jsonl"
+        at_cap.write_text(self.log.read_text(encoding="utf-8") + json.dumps(
+            {"event": "reserve", "id": "a" * 32, "at": "2026-11-02T00:00:00+00:00",
+             "run_id": "x", "model": "fixture-model", "split": "dev", "usd": 200.0}) + "\n",
+            encoding="utf-8")
+        in_repo = REPO_ROOT / "spend_should_not_exist.jsonl"
+        eval_split = self.write("split_eval.json", json.dumps(SPLIT_ALL_EVAL))
+        cases = {
+            "split full": dict(extra=("--split", "full")),
+            "split full post-merge": dict(extra=("--split", "full", "--post-merge-eval")),
+            "split eval without opt-in": dict(extra=("--split", "eval"), split=eval_split),
+            "post-merge on dev": dict(extra=("--post-merge-eval",)),
+            "missing prices": dict(prices=self.dir / "nope.json"),
+            "bad prices": dict(prices=bad_json),
+            "model not priced": dict(prices=other_prices),
+            "missing thresholds": dict(thresholds=self.dir / "nope_t.json"),
+            "bad thresholds": dict(thresholds=no_key),
+            "spend log in repo": dict(log=in_repo),
+            "spend log in repo with create": dict(log=in_repo, extra=("--create-spend-log",)),
+            "missing log": dict(log=self.dir / "nope.jsonl"),
+            "corrupt log": dict(log=corrupt),
+            "month at cap": dict(log=at_cap, thresholds=self.write(
+                "t200.json", json.dumps({"guardrails": {"api_spend_usd_per_month": {"max": 200}}}))),
+            "max spend -1": dict(extra=("--max-spend-usd", "-1")),
+            "max spend nan": dict(extra=("--max-spend-usd", "nan")),
+            "max spend inf": dict(extra=("--max-spend-usd", "inf")),
+            "max spend 2.51": dict(extra=("--max-spend-usd", "2.51")),
+        }
+        for name, kw in cases.items():
+            with self.subTest(name):
+                extra = kw.pop("extra", ())
+                out = self.dir / ("out_%s.json" % name.replace(" ", "_"))
+                before = {p: p.read_bytes() for p in (self.log, corrupt, at_cap)}
+                code, stdout, err = self.main("--larger", "real", *extra, client=MustNotCall(),
+                                              out=out, **kw)
+                self.assertEqual(code, 2, err)
+                self.assertTrue(err.startswith("error: "), err)
+                self.assertEqual(len(err.strip().splitlines()), 1, err)
+                self.assertEqual(stdout, "")
+                self.assertFalse(out.exists())
+                self.assertFalse(in_repo.exists())
+                for p, b in before.items():
+                    self.assertEqual(p.read_bytes(), b, p)
+
+    def test_post_merge_eval_needs_real(self):
+        code, _, err = self.main("--post-merge-eval", "--split", "eval", client=MustNotCall())
+        self.assertEqual(code, 2)
+        self.assertIn("--larger real", err)
+
+    def test_create_spend_log(self):
+        new = self.dir / "fresh" / "spend.jsonl"
+        code, _, err = self.main("--larger", "real", client=ScriptedClient(), log=new)
+        self.assertEqual(code, 2)
+        self.assertFalse(new.exists())
+        code, _, err = self.main("--larger", "real", "--create-spend-log",
+                                 client=ScriptedClient(), log=new)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.events(new)[0]["event"], "open")
+        code, _, err = self.main("--larger", "real", "--create-spend-log",
+                                 client=ScriptedClient(), log=new)
+        self.assertEqual(code, 2, err)
+
+    def test_real_mode_report(self):
+        client = ScriptedClient()
+        md_out = self.dir / "report.md"
+        code, stdout, err = self.main("--larger", "real", client=client)
+        self.assertEqual(code, 0, err)
+        code_md, _, err = self.main("--larger", "real", "--format", "md", client=ScriptedClient(),
+                                    out=md_out)
+        self.assertEqual(code_md, 0, err)
+        n = len(client.calls)
+        self.assertGreaterEqual(n, 1)
+        data = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertEqual(data["larger_mode"], "real")
+        self.assertEqual(data["larger_model"], "fixture-model")
+        self.assertEqual(data["larger_prompt_version"], "larger-tier-v1")
+        self.assertEqual(data["larger_input_tokens"], 1000 * n)
+        self.assertEqual(data["larger_output_tokens"], 50 * n)
+        self.assertAlmostEqual(data["larger_confirmed_usd"], 0.00125 * n)
+        self.assertEqual(data["larger_unconfirmed_usd"], 0.0)
+        self.assertEqual(data["max_spend_usd"], 2.5)
+        self.assertEqual(data["monthly_cap_usd"], 200.0)
+        self.assertAlmostEqual(data["month_to_date_usd"], 0.00125 * n)
+        self.assertIsNone(data["larger_stopped_by"])
+        self.assertEqual(data["larger_answered"], n)
+        self.assertEqual(set(data["larger_fallbacks"].values()), {0})
+        self.assertFalse(data["larger_post_merge_eval"])
+        self.assertEqual(data["split"], "dev")
+        self.assertIn(" larger=real spend_usd=", stdout)
+        self.assertIn(" stopped_by=none split=dev topics_loaded=2", stdout)
+        md = md_out.read_text(encoding="utf-8")
+        self.assertIn("## Model spend (API-equivalent USD)", md)
+        for row in ("confirmed_usd", "unconfirmed_usd", "monthly_cap_usd", "month_to_date_usd",
+                    "stopped_by", "larger_prompt_version"):
+            self.assertIn("| %s" % row, md)
+        reserves = [e for e in self.events() if e["event"] == "reserve"]
+        self.assertEqual(len(reserves), 2 * n)  # two runs, one reserve per call
+        self.assertEqual({e["split"] for e in reserves}, {"dev"})
+
+    def test_spend_log_has_no_thread_data(self):
+        code, _, err = self.main("--larger", "real", client=ScriptedClient())
+        self.assertEqual(code, 0, err)
+        content = self.log.read_text(encoding="utf-8")
+        import csv
+        import io
+        rows = list(csv.DictReader(io.StringIO(TWCS_HEADER + "\n".join(TWCS_ROWS) + "\n")))
+        for row in rows:
+            for value in (row["text"], row["author_id"]):
+                self.assertNotIn(value, content)
+        self.assertNotIn("SENTINEL", content)
+        self.assertNotIn("thread", content)
+        # fixture ids are single digits that also occur inside uuids and timestamps, so
+        # check that no id appears as a JSON value
+        for event in self.events():
+            for key, value in event.items():
+                for row in rows:
+                    self.assertNotEqual(str(value), row["tweet_id"], key)
+
+    def test_real_mode_trace(self):
+        from triage.trace import validate_record
+        row = '11,cust_SENTINELF,True,Tue Oct 31 22:16:47 +0000 2017,"thanks, quuxfrob SENTINEL_TEXT_11",,'
+        self.data = self.write("twcs_topic.csv", TWCS_HEADER + "\n".join(TWCS_ROWS + [row]) + "\n")
+        trace = self.dir / "t.jsonl"
+        code, _, err = self.main("--larger", "real", "--trace", str(trace),
+                                 client=ScriptedClient())
+        self.assertEqual(code, 0, err)
+        larger_steps = 0
+        for line in trace.read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            validate_record(rec)
+            for step in rec["tiers"]:
+                if step["tier"] == "larger":
+                    larger_steps += 1
+                    self.assertEqual(step["model_id"], "fixture-model")
+            if "escalate_always" in rec["reason_codes"]:
+                self.assertNotIn("larger", [t["tier"] for t in rec["tiers"]])
+                self.assertEqual(rec["thread_id"], 11)
+        self.assertGreaterEqual(larger_steps, 1)
+
+    def test_post_merge_eval_recorded(self):
+        eval_split = self.write("split_eval.json", json.dumps(SPLIT_ALL_EVAL))
+        client = ScriptedClient()
+        code, _, err = self.main("--larger", "real", "--split", "eval", "--post-merge-eval",
+                                 client=client, split=eval_split)
+        self.assertEqual(code, 0, err)
+        self.assertGreaterEqual(len(client.calls), 1)
+        data = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertEqual(data["split"], "eval")
+        self.assertTrue(data["larger_post_merge_eval"])
+        reserves = [e for e in self.events() if e["event"] == "reserve"]
+        self.assertGreaterEqual(len(reserves), 1)
+        self.assertEqual({e["split"] for e in reserves}, {"eval"})
+
+    def test_real_mode_metrics_shape(self):
+        eval_split = self.write("split_eval.json", json.dumps(SPLIT_ALL_EVAL))
+        shapes = {}
+        for mode in ("fake", "real"):
+            mpath = self.dir / ("m_%s.json" % mode)
+            extra = ("--split", "eval", "--post-merge-eval") if mode == "real" else \
+                ("--split", "eval")
+            code, _, err = self.main("--larger", mode, *extra, "--metrics-out", str(mpath),
+                                     "--cohort", "gold_random", "--run-at",
+                                     "2026-11-18T10:00:00Z", client=ScriptedClient(),
+                                     split=eval_split)
+            self.assertEqual(code, 0, err)
+            m = json.loads(mpath.read_text(encoding="utf-8"))
+            self.assertFalse(BANNED_KEYS & set(_keys(m)), mode)
+            shapes[mode] = (set(m), set(m["operations"]), set(m["config"]))
+        self.assertEqual(shapes["real"], shapes["fake"])
+
+
 if __name__ == "__main__":
     unittest.main()
