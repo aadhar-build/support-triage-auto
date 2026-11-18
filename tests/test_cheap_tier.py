@@ -150,5 +150,10 @@ class TestUrgencyAndAction(unittest.TestCase):
         self.assertEqual(LABEL(t), LABEL(t))
 
 
+class TestModelId(unittest.TestCase):
+    def test_model_id(self):
+        self.assertEqual(CheapTier().model_id, "keywords")
+
+
 if __name__ == "__main__":
     unittest.main()

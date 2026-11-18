@@ -1,6 +1,7 @@
 """Label vocabularies, the Labels record and the labelling-tier interfaces.
 
-Every tier has a `name` and a `price_per_call`. The fakes here exist so the
+Every tier has a `name`, a `model_id` and a `price_per_call`. The router refuses a tier
+whose `model_id` is missing or empty, so every later tier must set its own. The fakes here exist so the
 cascade can be exercised offline: no network code, no API client, no keys.
 """
 
@@ -43,6 +44,7 @@ class Labels:
 
 class LabellingTier(ABC):
     name: str
+    model_id: str  # required; checked by the router
     price_per_call: float
 
     @abstractmethod
@@ -52,6 +54,7 @@ class LabellingTier(ABC):
 
 class AgentTier(ABC):
     name: str
+    model_id: str  # required; checked by the router
     price_per_call: float
 
     @abstractmethod
@@ -64,6 +67,7 @@ class FakeLargerTier(LabellingTier):
     cheap tier's labels with confidence 1.0. Not a model of real quality."""
 
     name = "larger"
+    model_id = "fake-larger"
 
     def __init__(self, overrides: Optional[Mapping[int, Labels]] = None,
                  price_per_call: float = PLACEHOLDER_PRICES["larger"]):
@@ -84,6 +88,7 @@ class FakeAgentTier(AgentTier):
     """Stand-in for a tool-using agent. Returns the labels unchanged and counts calls."""
 
     name = "agent"
+    model_id = "fake-agent"
 
     def __init__(self, price_per_call: float = PLACEHOLDER_PRICES["agent"]):
         self.price_per_call = price_per_call

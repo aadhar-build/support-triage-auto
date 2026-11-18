@@ -109,6 +109,12 @@ class TestFakeTiers(unittest.TestCase):
         self.assertEqual(FakeAgentTier(price_per_call=0.7).price_per_call, 0.7)
 
 
+class TestModelIds(unittest.TestCase):
+    def test_fake_model_ids(self):
+        self.assertEqual(FakeLargerTier().model_id, "fake-larger")
+        self.assertEqual(FakeAgentTier().model_id, "fake-agent")
+
+
 class TestNoNetwork(unittest.TestCase):
     def test_no_network_imports(self):
         banned = {"urllib", "http", "socket", "requests", "ssl", "ftplib", "smtplib"}
