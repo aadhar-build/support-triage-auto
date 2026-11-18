@@ -4,7 +4,9 @@ Card numbers are well-known test numbers or numbers built from zeros, not real c
 The live policies/rules.json is loaded only as a schema smoke test, never as an oracle.
 """
 
+import ast
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -208,6 +210,76 @@ class TestPiiEcho(unittest.TestCase):
         phone_only = (Rule("t-phone", "pii_echo", (), ("phone_from_customer",)),)
         self.assertEqual(check(draft, customer, phone_only),
                          [Violation("t-phone", 39, 51, "07700 900123")])
+
+
+class TestCheck(unittest.TestCase):
+    def test_clean_draft_returns_empty(self):
+        customer = ["my order 12345 never came, mail jo.bloggs@example.com or ring 07700 900123"]
+        draft = "Sorry about order 12345. Please DM us and we'll look into it today."
+        self.assertEqual(check(draft, customer, RULES), [])
+        self.assertEqual(check("", customer, RULES), [])
+
+    def test_order_is_by_position(self):
+        draft = "cvv then 4111 1111 1111 1111 then we'll refund"
+        self.assertEqual(check(draft, [], RULES), [
+            Violation("t-secret", 0, 3, "cvv"),
+            Violation("t-pii", 9, 28, "4111 1111 1111 1111"),
+            Violation("t-promise", 34, 46, "we'll refund"),
+        ])
+
+    def test_same_span_different_rules_sorted_by_rule_id(self):
+        rules = (Rule("zz-b", "banned_phrase", ("cvv",), ()),
+                 Rule("aa-a", "banned_phrase", ("cvv",), ()))
+        self.assertEqual(check("the cvv", [], rules),
+                         [Violation("aa-a", 4, 7, "cvv"), Violation("zz-b", 4, 7, "cvv")])
+
+    def test_same_rule_same_span_reported_once(self):
+        # 13 digits: a Luhn-valid card number and also a phone the customer posted.
+        self.assertEqual(check("Is 4222222222222 right?", ["4222222222222"], RULES),
+                         [Violation("t-pii", 3, 16, "4222222222222")])
+        repeated = (Rule("t-twice", "banned_phrase", ("cvv", "CVV"), ()),)
+        self.assertEqual(check("cvv", [], repeated), [Violation("t-twice", 0, 3, "cvv")])
+
+    def test_no_rules_no_violations(self):
+        draft = "We'll refund you in full, full refund, compensation, card 4111 1111 1111 1111"
+        self.assertEqual(check(draft, ["4111 1111 1111 1111"], ()), [])
+
+    def test_inputs_not_modified(self):
+        customer = ["ring 07700 900123"]
+        check("ring 07700 900123", customer, RULES)
+        self.assertEqual(customer, ["ring 07700 900123"])
+
+
+class TestSafeToSend(unittest.TestCase):
+    def test_false_when_any_violation(self):
+        self.assertFalse(is_safe_to_send("We'll refund you.", [], RULES))
+        self.assertFalse(is_safe_to_send("Card 4111111111111111", [], RULES))
+        self.assertFalse(is_safe_to_send("Mail jo@example.com", ["jo@example.com"], RULES))
+
+    def test_true_when_clean(self):
+        self.assertTrue(is_safe_to_send("Please DM us your order number.", ["help!"], RULES))
+
+
+class TestModuleHygiene(unittest.TestCase):
+    def test_stdlib_only(self):
+        banned = {"urllib", "http", "socket", "requests", "ssl", "ftplib", "smtplib"}
+        stdlib = set(sys.stdlib_module_names)
+        src = (REPO_ROOT / "src" / "triage" / "policy_check.py").read_text(encoding="utf-8")
+        self.assertNotIn("os.environ", src)
+        self.assertNotIn("getenv", src)
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, ast.Import):
+                mods = [a.name for a in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                if node.level:
+                    continue
+                mods = [node.module or ""]
+            else:
+                continue
+            for mod in mods:
+                top = mod.split(".")[0]
+                self.assertNotIn(top, banned, mod)
+                self.assertTrue(top == "triage" or top in stdlib, "imports non-stdlib %s" % mod)
 
 
 if __name__ == "__main__":
