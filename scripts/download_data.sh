@@ -4,7 +4,7 @@
 #
 # Destination: $TRIAGE_DATA_DIR if set, otherwise <repo root>/data/raw.
 # Needs the Kaggle CLI (pip install kaggle) and either ~/.kaggle/kaggle.json
-# or both KAGGLE_USERNAME and KAGGLE_KEY.
+# or ~/.kaggle/access_token, or KAGGLE_API_TOKEN, or both KAGGLE_USERNAME and KAGGLE_KEY.
 set -euo pipefail
 set +x
 
@@ -35,7 +35,9 @@ if ! command -v kaggle >/dev/null 2>&1; then
 fi
 
 # 3. Credentials: check existence only, never read or print the values.
-if [[ -f "${HOME:-}/.kaggle/kaggle.json" ]]; then
+if [[ -f "${HOME:-}/.kaggle/kaggle.json" || -f "${HOME:-}/.kaggle/access_token" ]]; then
+  :
+elif [[ -n "${KAGGLE_API_TOKEN:-}" ]]; then
   :
 elif [[ -n "${KAGGLE_USERNAME:-}" && -n "${KAGGLE_KEY:-}" ]]; then
   :
@@ -43,8 +45,8 @@ else
   {
     echo "error: Kaggle credentials are missing."
     echo "Create an API token at https://www.kaggle.com (Account > API > Create New Token),"
-    echo "save it as ~/.kaggle/kaggle.json and run: chmod 600 ~/.kaggle/kaggle.json"
-    echo "or export KAGGLE_USERNAME and KAGGLE_KEY."
+    echo "save it as ~/.kaggle/kaggle.json (or ~/.kaggle/access_token) and chmod 600 it,"
+    echo "or export KAGGLE_API_TOKEN, or KAGGLE_USERNAME and KAGGLE_KEY."
   } >&2
   exit 1
 fi

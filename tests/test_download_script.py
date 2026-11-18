@@ -113,6 +113,23 @@ class TestDownloadScript(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn(KEY_SENTINEL, result.stdout + result.stderr)
 
+    def test_access_token_file_counts_as_credentials(self):
+        self.write_stub()
+        os.makedirs(os.path.join(self.home, ".kaggle"))
+        with open(os.path.join(self.home, ".kaggle", "access_token"), "w") as f:
+            f.write(KEY_SENTINEL)
+        result = self.run_script(self.env(f"{self.bin}:/usr/bin:/bin"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(KEY_SENTINEL, result.stdout + result.stderr)
+
+    def test_api_token_env_counts_as_credentials(self):
+        self.write_stub()
+        env = self.env(f"{self.bin}:/usr/bin:/bin")
+        env["KAGGLE_API_TOKEN"] = KEY_SENTINEL
+        result = self.run_script(env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(KEY_SENTINEL, result.stdout + result.stderr)
+
     def test_nested_csv_is_moved_up(self):
         path = os.path.join(self.bin, "kaggle")
         with open(path, "w") as f:
