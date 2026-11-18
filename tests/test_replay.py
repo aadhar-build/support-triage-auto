@@ -240,6 +240,210 @@ class TestEndToEnd(ReplayTestBase):
             self.assertIn(case_id, page)
 
 
+def fixture_inputs():
+    cases = run_synthetic.load_cases(FIXTURES / "cases.json")
+    report = json.loads((FIXTURES / "synthetic_report.json").read_text(encoding="utf-8"))
+    return cases, report["cases"], read_records(FIXTURES / "trace.jsonl")
+
+
+def section(page, case_id):
+    """The HTML of one thread's section."""
+    start = page.index('data-case="%s"' % case_id)
+    end = page.find("</section>", start)
+    return page[start:end]
+
+
+def panel(page, case_id, turn):
+    """The state panel of one turn of one thread."""
+    sec = section(page, case_id)
+    start = sec.index('<div class="state" data-turn="%d">' % turn)
+    end = sec.index("</li>", start)
+    return sec[start:end]
+
+
+def field(panel_html, name):
+    m = re.search(r'<div class="([a-z ]+)" data-field="%s">(.*?)</div>' % name, panel_html)
+    assert m, name
+    return m.group(1), m.group(2)
+
+
+def last_turn(case_id):
+    return {"rp-answer": 1, "rp-ask": 2, "rp-route3": 3, "rp-escalate": 1, "rp-held": 1}[case_id]
+
+
+class TestStateFromTrace(unittest.TestCase):
+    EXPECTED = {
+        # id: intent, urgency, action, confidence, reason code, tier, model id
+        "rp-answer": ("praise", "low", "answer", "0.75", "cheap_confident", "agent",
+                      "fake-agent"),
+        "rp-ask": ("delivery", "normal", "ask", "0.6", "cheap_confident", "agent",
+                   "fake-agent"),
+        "rp-route3": ("account_access", "normal", "route", "1.0", "high_risk_to_larger",
+                      "larger", "fake-larger"),
+        "rp-escalate": ("other", "high", "escalate", "1.0", "high_risk_to_larger", "larger",
+                        "fake-larger"),
+        "rp-held": ("praise", "low", "answer", "0.75", "cheap_confident", "agent",
+                    "fake-agent"),
+    }
+
+    def test_state_shows_trace_values(self):
+        page = replay.render(*fixture_inputs())
+        for case_id, exp in self.EXPECTED.items():
+            with self.subTest(case_id):
+                p = panel(page, case_id, last_turn(case_id))
+                intent, urgency, action, conf, code, tier, model_id = exp
+                self.assertEqual(field(p, "intent")[1], "intent: " + intent)
+                self.assertEqual(field(p, "urgency")[1], "urgency: " + urgency)
+                self.assertEqual(field(p, "action")[1], "action: " + action)
+                self.assertEqual(field(p, "confidence")[1], "confidence: " + conf)
+                self.assertIn("<code>%s</code>" % code, field(p, "reason_codes")[1])
+                self.assertEqual(field(p, "tier")[1], "deciding tier: " + tier)
+                self.assertIn(model_id, field(p, "model_id")[1])
+
+    def test_urgency_comes_from_trace(self):
+        cases, report_cases, records = fixture_inputs()
+        records[1]["final"]["urgency"] = "high"
+        page = replay.render(cases, report_cases, records)
+        self.assertEqual(field(panel(page, "rp-ask", 2), "urgency")[1], "urgency: high")
+        self.assertEqual(field(panel(page, "rp-answer", 1), "urgency")[1], "urgency: low")
+
+    def test_brand_and_customer_labels(self):
+        page = replay.render(*fixture_inputs())
+        route = section(page, "rp-route3")
+        self.assertEqual(re.findall(r'<span class="speaker">(.*?)</span>', route),
+                         ["Customer", "ExampleCo", "Customer"])
+        ask = section(page, "rp-ask")
+        self.assertEqual(re.findall(r'<span class="speaker">(.*?)</span>', ask),
+                         ["Customer", "Brand"])
+
+    def test_header_and_thread_list(self):
+        page = replay.render(*fixture_inputs())
+        head = page[:page.index("</nav>")]
+        self.assertIn("0123456789abcdef0123456789abcdef01234567", head)
+        self.assertIn("code_dirty false", head)
+        self.assertIn("threshold 0.5", head)
+        self.assertIn("split synthetic", head)
+        self.assertIn("rp-route3 &#8212; Made-up three-turn login trouble</a> (route, pass)",
+                      head)
+
+
+class TestNoLookAhead(unittest.TestCase):
+    def test_three_turn_thread(self):
+        page = replay.render(*fixture_inputs())
+        for turn in (1, 2):
+            p = panel(page, "rp-route3", turn)
+            self.assertIn("No decision recorded at this turn", p)
+            self.assertNotIn("route", p)
+            self.assertNotIn("Decided once", p)
+        p = panel(page, "rp-route3", 3)
+        self.assertEqual(field(p, "action")[1], "action: route")
+        self.assertIn("Decided once on the full thread; per-turn decisions arrive with #46", p)
+        self.assertNotIn("No decision recorded", p)
+
+
+class TestPolicyStates(unittest.TestCase):
+    def setUp(self):
+        self.page = replay.render(*fixture_inputs())
+
+    def test_violation_holds_reply(self):
+        p = panel(self.page, "rp-held", 1)
+        self.assertEqual(field(p, "policy")[1], "policy check: t-promise")
+        self.assertIn("Reply held: failed policy check (t-promise)", p)
+        self.assertNotIn("HELDDRAFTMARK", self.page)
+
+    def test_passed_shows_tagged_draft(self):
+        p = panel(self.page, "rp-answer", 1)
+        self.assertEqual(field(p, "policy")[1], "policy check: passed")
+        self.assertIn("Glad you like it, CLEANDRAFTMARK. <em>(draft from scenario file)</em>",
+                      field(p, "reply")[1])
+
+    def test_null_is_not_checked(self):
+        for case_id in ("rp-ask", "rp-route3", "rp-escalate"):
+            with self.subTest(case_id):
+                p = panel(self.page, case_id, last_turn(case_id))
+                self.assertEqual(field(p, "policy")[1], "policy check: not checked")
+                self.assertNotIn("passed", p)
+                self.assertEqual(field(p, "reply")[1], "reply: no draft")
+
+
+def hand_state(**changes):
+    state = {"intent": "delivery", "urgency": "normal", "action": "ask", "confidence": 0.6,
+             "reason_codes": ("cheap_confident",), "tier": "agent", "model_id": "fake-agent",
+             "policy": "not checked", "reply": None}
+    state.update(changes)
+    return state
+
+
+class TestStateChanges(unittest.TestCase):
+    def test_equal_states(self):
+        self.assertEqual(replay.state_changes(hand_state(), hand_state()), ())
+
+    def test_two_fields_differ(self):
+        cur = hand_state(action="route", reason_codes=("high_risk_to_larger",))
+        self.assertEqual(replay.state_changes(hand_state(), cur), ("action", "reason_codes"))
+
+    def test_first_state_is_all_fields(self):
+        self.assertEqual(replay.state_changes(None, hand_state()),
+                         ("intent", "urgency", "action", "confidence", "reason_codes", "tier",
+                          "model_id", "policy", "reply"))
+
+    def test_page_highlights_exactly_changed_fields(self):
+        case = {"id": "hand", "title": "Hand-built", "turns": [
+            {"inbound": True, "text": "one"}, {"inbound": False, "text": "two"},
+            {"inbound": True, "text": "three"}]}
+        steps = [
+            {"turn": case["turns"][0], "state": hand_state(), "note": None},
+            {"turn": case["turns"][1], "state": None, "note": None},
+            {"turn": case["turns"][2], "note": None, "state": hand_state(
+                action="route", reason_codes=("high_risk_to_larger",))},
+        ]
+        html_text = replay.render_thread(1, case, steps)
+        first, third = html_text.split('data-turn="3"', 1)
+        self.assertIn("first decision", first)
+        self.assertNotIn("changed", first)
+        self.assertNotIn("first decision", third)
+        self.assertEqual(re.findall(r'class="field changed" data-field="([a-z_]+)"', third),
+                         ["action", "reason_codes"])
+
+
+class TestTracePanel(unittest.TestCase):
+    def test_rows_in_trace_order(self):
+        page = replay.render(*fixture_inputs())
+        trace = section(page, "rp-escalate").split('<div class="trace">', 1)[1]
+        rows = re.findall(r"<tr><td>([a-z]+)</td><td><code>([a-z-]+)</code></td>"
+                          r"<td>([a-z_]+)</td><td>([a-z]+)</td><td>([a-z]+)</td>"
+                          r"<td>([0-9.]+)</td></tr>", trace)
+        self.assertEqual(rows, [("cheap", "keywords", "other", "high", "escalate", "0.2"),
+                                ("larger", "fake-larger", "other", "high", "escalate", "1.0")])
+        self.assertIn("final: intent other, urgency high, action escalate, confidence 1.0",
+                      trace)
+        self.assertIn("<code>high_risk_to_larger</code>", trace)
+
+
+class TestOffline(unittest.TestCase):
+    def test_no_network(self):
+        page = replay.render(*fixture_inputs())
+        for banned in ("http://", "https://", "fetch(", "XMLHttpRequest"):
+            self.assertNotIn(banned, page)
+
+
+class TestEscaping(unittest.TestCase):
+    def test_script_is_escaped(self):
+        payload = "<script>XSSMARK()</script>"
+        cases, report_cases, records = fixture_inputs()
+        case = cases[0]  # rp-answer: policy passed, so the draft is shown
+        case["title"] = "t " + payload
+        case["brand"] = "b " + payload
+        case["draft_reply"] = "d " + payload
+        case["turns"] = [{"inbound": True, "text": "c " + payload},
+                         {"inbound": False, "text": "r " + payload}]
+        page = replay.render(cases, report_cases, records)
+        self.assertNotIn(payload, page)
+        self.assertNotIn("<script>XSSMARK", page)
+        for prefix in ("t ", "b ", "d ", "c ", "r "):
+            self.assertIn(prefix + "&lt;script&gt;XSSMARK()&lt;/script&gt;", page)
+
+
 def test_tests_do_not_read_owner_files():
     source = Path(__file__).read_text(encoding="utf-8")
     assert ("evals/" + "gold") not in source
