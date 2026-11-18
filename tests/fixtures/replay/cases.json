@@ -1,0 +1,61 @@
+{
+  "version": "replay-fixture",
+  "status": "made-up cases for tests only",
+  "cases": [
+    {
+      "id": "rp-answer",
+      "title": "Made-up praise with a clean draft",
+      "brand": "ExampleCo",
+      "turns": [
+        {"inbound": true, "text": "thanks, love it"}
+      ],
+      "expected": {"intent": "praise", "action": "answer", "should_escalate": false},
+      "must_pass": true,
+      "draft_reply": "Glad you like it, CLEANDRAFTMARK."
+    },
+    {
+      "id": "rp-ask",
+      "title": "Made-up parcel with no draft",
+      "turns": [
+        {"inbound": true, "text": "my parcel never arrived"},
+        {"inbound": false, "text": "Sorry, which order is it?"}
+      ],
+      "expected": {"intent": "delivery", "action": "ask", "should_escalate": false},
+      "must_pass": true
+    },
+    {
+      "id": "rp-route3",
+      "title": "Made-up three-turn login trouble",
+      "brand": "ExampleCo",
+      "turns": [
+        {"inbound": true, "text": "I cannot log in to my account"},
+        {"inbound": false, "text": "Sorry to hear that, what do you see?"},
+        {"inbound": true, "text": "the password reset fails every time"}
+      ],
+      "expected": {"intent": "account_access", "action": "route", "should_escalate": false},
+      "must_pass": true
+    },
+    {
+      "id": "rp-escalate",
+      "title": "Made-up hacked account",
+      "brand": "OtherCo",
+      "turns": [
+        {"inbound": true, "text": "my account was hacked"}
+      ],
+      "expected": {"intent": "other", "action": "escalate", "should_escalate": true},
+      "must_pass": true
+    },
+    {
+      "id": "rp-held",
+      "title": "Made-up praise with a draft that breaks a rule",
+      "brand": "ExampleCo",
+      "turns": [
+        {"inbound": true, "text": "thanks, love it"}
+      ],
+      "expected": {"intent": "praise", "action": "answer", "should_escalate": false},
+      "must_pass": true,
+      "draft_reply": "HELDDRAFTMARK full refund on the way",
+      "expected_violations": ["t-promise"]
+    }
+  ]
+}
