@@ -1,10 +1,11 @@
 """Tests for triage.router. All threads are made up by hand; no real dataset rows."""
 
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from triage.cheap_tier import CheapTier
+from triage.context_signals import RepeatContactRule, contact_counts, contact_record
 from triage.policy_check import load_escalate_topics
 from triage.router import (
     CASCADE_CODES,
@@ -14,6 +15,7 @@ from triage.router import (
     HIGH_RISK_TO_LARGER,
     LOW_CONFIDENCE_TO_LARGER,
     REASON_CODES,
+    REPEAT_CONTACT,
     RoutedThread,
     TierStep,
     is_high_risk,
@@ -385,7 +387,7 @@ class TestEscalateAlways(unittest.TestCase):
 
     def test_registry_appends_code(self):
         self.assertEqual(ESCALATE_ALWAYS, "escalate_always")
-        self.assertEqual(REASON_CODES, CASCADE_CODES + ("escalate_always",))
+        self.assertEqual(REASON_CODES, CASCADE_CODES + ("escalate_always", "repeat_contact"))
 
     def test_brand_turn_never_forces(self):
         cheap = StubCheap(L("praise", "low", "answer", 0.9))
@@ -414,6 +416,131 @@ class TestEscalateAlways(unittest.TestCase):
             route_thread(thread(1), CheapTier(), FakeLargerTier(), FakeAgentTier())
         with self.assertRaises(TypeError):
             route_threads([], CheapTier(), FakeLargerTier(), FakeAgentTier())
+
+
+def rule(n, days=7):
+    return RepeatContactRule(window_days=days, min_conversations=n, effect="escalate",
+                             report_window_hours=72)
+
+
+def shopco_threads():
+    """One made-up customer, three conversations with ShopCo on days 0, 2 and 5, no replies."""
+    day0 = datetime(2021, 3, 1, 9, 0, tzinfo=timezone.utc)
+    out = []
+    for root_id, d in ((101, 0), (102, 2), (103, 5)):
+        turn = Turn(root_id, "made_up_customer_q", True, day0 + timedelta(days=d),
+                    "@ShopCo where is my parcel")
+        out.append(Thread(root_tweet_id=root_id, brand_ids=(), turns=(turn,),
+                          brand_replied=False))
+    return out
+
+
+def shopco_counts(threads, days=7):
+    records = [contact_record(t, {"ShopCo"}) for t in threads]
+    return contact_counts(records, timedelta(days=days))
+
+
+class TestRepeatContact(unittest.TestCase):
+    def test_third_in_seven_days_escalates(self):
+        threads = shopco_threads()
+        counts = shopco_counts(threads)
+        agent = FakeAgentTier()
+        out = route_threads(threads, CheapTier(), FakeLargerTier(), agent, topics=(),
+                            repeat_rule=rule(3), repeat_counts=counts)
+        third = out[2]
+        self.assertEqual(third.labels.action, "escalate")
+        self.assertEqual(third.labels.urgency, "high")
+        self.assertEqual(third.reason_codes.count("repeat_contact"), 1)
+        self.assertEqual(third.tiers, ("cheap",))
+        for r in out[:2]:
+            self.assertNotIn("repeat_contact", r.reason_codes)
+            self.assertEqual(r.labels.action, "ask")
+        for r in out:
+            for code in r.reason_codes:
+                self.assertTrue(is_known_reason_code(code), code)
+
+    def test_numbers_from_rules_file(self):
+        threads = shopco_threads()
+        counts = shopco_counts(threads)
+        three = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
+                              topics=(), repeat_rule=rule(3), repeat_counts=counts)
+        four = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
+                             topics=(), repeat_rule=rule(4), repeat_counts=counts)
+        self.assertEqual([r.labels.action for r in three], ["ask", "ask", "escalate"])
+        self.assertEqual([r.labels.action for r in four], ["ask", "ask", "ask"])
+
+    def test_agent_not_called_when_forced(self):
+        threads = shopco_threads()
+        counts = shopco_counts(threads)
+        agent = FakeAgentTier()
+        route_threads(threads[:2], CheapTier(), FakeLargerTier(), agent, topics=(),
+                      repeat_rule=rule(3), repeat_counts=counts)
+        self.assertEqual(agent.calls, 2)
+        route_thread(threads[2], CheapTier(), FakeLargerTier(), agent, topics=(),
+                     repeat_rule=rule(3), repeat_counts=counts)
+        self.assertEqual(agent.calls, 2)
+
+    def test_escalate_raises_urgency(self):
+        cheap = StubCheap(L("billing", "normal", "route", 0.3))
+        larger = StubLarger(L("billing", "normal", "escalate", 0.9))
+        agent = StubAgent()
+        r = route_thread(thread(5), cheap, larger, agent, topics=(), repeat_rule=rule(3),
+                         repeat_counts={5: 3})
+        self.assertEqual(r.labels, L("billing", "high", "escalate", 0.9))
+        self.assertEqual(r.reason_codes, (LOW_CONFIDENCE_TO_LARGER, "repeat_contact"))
+        self.assertEqual(r.tiers, ("cheap", "larger"))
+        self.assertEqual(r.cheap_labels, L("billing", "normal", "route", 0.3))
+        self.assertEqual(agent.calls, 0)
+
+    def test_no_code_when_unchanged(self):
+        cheap = StubCheap(L("billing", "normal", "route", 0.3))
+        larger = StubLarger(L("billing", "high", "escalate", 0.9))
+        r = route_thread(thread(5), cheap, larger, StubAgent(), topics=(), repeat_rule=rule(3),
+                         repeat_counts={5: 4})
+        self.assertEqual(r.labels, L("billing", "high", "escalate", 0.9))
+        self.assertEqual(r.reason_codes, (LOW_CONFIDENCE_TO_LARGER,))
+        below = route_thread(thread(6, "my parcel never arrived"), CheapTier(),
+                             FakeLargerTier(), FakeAgentTier(), topics=(),
+                             repeat_rule=rule(3), repeat_counts={6: 2})
+        self.assertEqual(below.reason_codes, (CHEAP_CONFIDENT,))
+        self.assertEqual(below.labels.action, "ask")
+
+    def test_with_escalate_always_topic(self):
+        cheap = StubCheap(L("praise", "low", "answer", 0.9))
+        agent = StubAgent()
+        r = route_thread(thread(3, "hi, quuxfrob"), cheap, RaisingLarger(L()), agent,
+                         topics=TOPICS, repeat_rule=rule(3), repeat_counts={3: 3})
+        self.assertEqual(r.labels, Labels("praise", "high", "escalate", 0.9))
+        self.assertIn(ESCALATE_ALWAYS, r.reason_codes)
+        self.assertIn("repeat_contact", r.reason_codes)
+        self.assertEqual(r.reason_codes.count("repeat_contact"), 1)
+        self.assertEqual(r.topic_id, ("t-zorblax",))
+        self.assertEqual(r.tiers, ("cheap", "agent"))
+        self.assertEqual(agent.calls, 1)
+
+    def test_registry_holds_repeat_contact(self):
+        self.assertEqual(REPEAT_CONTACT, "repeat_contact")
+        self.assertIn(REPEAT_CONTACT, REASON_CODES)
+        self.assertTrue(is_known_reason_code("repeat_contact"))
+
+    def test_rule_and_counts_together(self):
+        t = thread(1)
+        for kwargs in ({"repeat_rule": rule(3)}, {"repeat_counts": {1: 3}}):
+            with self.subTest(sorted(kwargs)):
+                with self.assertRaises(ValueError):
+                    route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=(),
+                                 **kwargs)
+                with self.assertRaises(ValueError):
+                    route_threads([t], CheapTier(), FakeLargerTier(), FakeAgentTier(),
+                                  topics=(), **kwargs)
+
+    def test_no_rule_is_unchanged(self):
+        threads = shopco_threads()
+        plain = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=())
+        explicit = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
+                                 topics=(), repeat_rule=None, repeat_counts=None)
+        self.assertEqual(plain, explicit)
+        self.assertEqual([r.labels.action for r in plain], ["ask", "ask", "ask"])
 
 
 if __name__ == "__main__":
