@@ -153,5 +153,26 @@ class TestCardNumber(unittest.TestCase):
         self.assertEqual(check("Order A4111111111111111", [], CARD_ONLY), [])
 
 
+class TestEmailEcho(unittest.TestCase):
+    CUSTOMER = ["reach me at jo.bloggs@example.com"]
+
+    def test_customer_email_echo_flagged_case_insensitive(self):
+        draft = "Thanks JO.Bloggs@Example.com, or write to help@brand.example."
+        self.assertEqual(check(draft, self.CUSTOMER, RULES),
+                         [Violation("t-pii", 7, 28, "JO.Bloggs@Example.com")])
+
+    def test_brand_email_not_flagged(self):
+        draft = "Please write to help@brand.example."
+        self.assertEqual(check(draft, self.CUSTOMER, RULES), [])
+        # The address stops before the trailing dot, so it still matches when the customer posts it.
+        self.assertEqual(check(draft, ["I wrote to help@brand.example already"], RULES),
+                         [Violation("t-pii", 16, 34, "help@brand.example")])
+
+    def test_digits_inside_email_are_not_card_or_phone(self):
+        customer = ["call 4111111111111111 or mail 4111111111111111@example.com"]
+        draft = "We saw 4111111111111111@example.org"
+        self.assertEqual(check(draft, customer, RULES), [])
+
+
 if __name__ == "__main__":
     unittest.main()

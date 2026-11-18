@@ -36,6 +36,10 @@ class Violation:
 
 CURLY_APOSTROPHE = "\u2019"
 # A maximal run of digits joined by nothing, one space or one dash.
+EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+# Stands in for email characters so card and phone detectors skip them; not a digit,
+# letter or separator, and one character long so offsets stay the same.
+EMAIL_MASK = "\x00"
 CARD_RUN = re.compile(r"[0-9](?:[ -]?[0-9])*")
 
 
@@ -132,9 +136,17 @@ def _phrase_spans(draft, phrases):
 
 def _pii_spans(draft, customer_turns, detect):
     spans = set()
+    masked = _mask_emails(draft)
     if "card_number" in detect:
-        spans |= _card_spans(draft)
+        spans |= _card_spans(masked)
+    if "email_from_customer" in detect:
+        posted = {m.group().lower() for turn in customer_turns for m in EMAIL.finditer(turn)}
+        spans |= {m.span() for m in EMAIL.finditer(draft) if m.group().lower() in posted}
     return spans
+
+
+def _mask_emails(text):
+    return EMAIL.sub(lambda m: EMAIL_MASK * len(m.group()), text)
 
 
 def _card_spans(text):
