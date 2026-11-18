@@ -20,16 +20,24 @@ Standard library only.
 
 from __future__ import annotations
 
+import argparse
 import bisect
 import json
 import math
 import re
+import sys
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from triage.cheap_tier import CheapTier
 from triage.context_signals import contact_record
-from triage.threads import Thread
+from triage.drift import DEFAULT_CONFIG, DEFAULT_DATA, RESIDUAL_LOOK_AHEAD
+from triage.loader import HeaderError
+from triage.pick_hard_cases import REPO_ROOT
+from triage.split import DEFAULT_SPLIT_PATH, SplitConfigError, load_split_config, split_threads
+from triage.threads import Thread, build_threads
 from triage.tiers import LabellingTier
 
 _UTC = timezone.utc
@@ -298,3 +306,158 @@ def find_incidents(threads: Sequence[Thread], labeller: LabellingTier,
                           unattributed_outage_threads=unattributed,
                           warm_up_outage_threads=warm_up_threads,
                           warm_up_events_at_min_burst=warm_up_events)
+
+
+# ---------------------------------------------------------------- report
+
+def build_report(result: IncidentResult, config: IncidentConfig, split: str) -> dict:
+    """Aggregates only: no text, thread ids, author ids, brand names or top terms."""
+    sizes = sorted(i.members for i in result.incidents)
+    return {
+        "config_version": config.version, "split": split,
+        "window_hours": config.window_hours, "min_burst": config.min_burst,
+        "baseline_factor": config.baseline_factor,
+        "baseline_lookback_hours": config.baseline_lookback_hours, "label": config.label,
+        "look_ahead": {"labels": "first_turn_only", "brands": "known_at_event_time",
+                       "baseline": "earlier_unassigned_only",
+                       "residual": list(RESIDUAL_LOOK_AHEAD)},
+        "incidents": len(result.incidents),
+        "members_per_incident": sizes,
+        "members_total": sum(sizes),
+        "drafts_avoided": sum(n - 1 for n in sizes),
+        "minutes_first_message_to_incident": sorted(i.minutes_to_open
+                                                    for i in result.incidents),
+        "reopens": sum(i.reopens for i in result.incidents),
+        "incidents_awaiting_approval": sum(
+            1 for i in result.incidents if i.status_reply["state"] == "awaiting_reply"),
+        "outage_threads": result.outage_threads,
+        "unattributed_outage_threads": result.unattributed_outage_threads,
+        "warm_up": {"hours": config.window_hours + config.baseline_lookback_hours,
+                    "outage_threads": result.warm_up_outage_threads,
+                    "events_at_min_burst": result.warm_up_events_at_min_burst},
+    }
+
+
+def _fmt(v) -> str:
+    if v is None:
+        return "-"
+    if isinstance(v, float):
+        return "%.4g" % v
+    if isinstance(v, list):
+        return "[" + ", ".join(_fmt(x) for x in v) + "]"
+    return str(v)
+
+
+def report_markdown(report: dict) -> str:
+    out = ["# Incident report", "", "| field | value |", "|---|---|"]
+    for key, value in report.items():
+        if isinstance(value, dict):
+            for sub, v in value.items():
+                out.append("| %s.%s | %s |" % (key, sub, _fmt(v)))
+        else:
+            out.append("| %s | %s |" % (key, _fmt(value)))
+    return "\n".join(out) + "\n"
+
+
+def incident_record(inc: Incident) -> dict:
+    return {"id": inc.id, "brand": inc.brand, "start": inc.start.isoformat(),
+            "opened_at": inc.opened_at.isoformat(), "end": inc.end.isoformat(),
+            "minutes_to_open": inc.minutes_to_open, "member_ids": list(inc.member_ids),
+            "members": inc.members, "reopens": inc.reopens, "top_terms": list(inc.top_terms),
+            "status_reply": dict(inc.status_reply)}
+
+
+# ---------------------------------------------------------------- command line
+
+class _Fail(Exception):
+    pass
+
+
+def _parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="python3 -m triage.incidents",
+                                description=__doc__.splitlines()[0])
+    p.add_argument("--split", required=True, choices=("dev", "eval", "full"))
+    p.add_argument("--report-out", required=True)
+    p.add_argument("--format", default="json", choices=("json", "md"))
+    p.add_argument("--config", default=str(DEFAULT_CONFIG))
+    p.add_argument("--data", default=DEFAULT_DATA)
+    p.add_argument("--split-config", default=str(DEFAULT_SPLIT_PATH))
+    p.add_argument("--incidents-out")
+    return p
+
+
+def _check_outside_repo(out) -> None:
+    resolved = Path(out).resolve()
+    if resolved == REPO_ROOT or REPO_ROOT in resolved.parents:
+        raise _Fail("--incidents-out %s is inside the repository %s; write incidents "
+                    "outside it" % (resolved, REPO_ROOT))
+
+
+def _write(path, text: str) -> None:
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError as e:
+        raise _Fail("cannot write %s: %s" % (path, e.strerror or e))
+
+
+def _load_threads(path) -> List[Thread]:
+    try:
+        threads, _ = build_threads(path)
+    except FileNotFoundError:
+        raise _Fail("data file not found: %s (hint: run scripts/download_data.sh)" % path)
+    except OSError as e:
+        raise _Fail("cannot read data file %s: %s" % (path, e.strerror or e))
+    except HeaderError as e:
+        raise _Fail("bad header in %s: %s" % (path, e))
+    except UnicodeDecodeError as e:
+        raise _Fail("%s is not valid UTF-8 (byte offset %d)" % (path, e.start))
+    return threads
+
+
+def _run(args) -> str:
+    if args.incidents_out is not None:
+        if args.split == "eval":
+            raise _Fail("--incidents-out is refused for the eval split: eval threads never "
+                        "feed labelling or tuning")
+        _check_outside_repo(args.incidents_out)
+    try:
+        config = load_incident_config(args.config)
+    except IncidentConfigError as e:
+        raise _Fail(str(e))
+    try:
+        split_config = load_split_config(args.split_config)
+    except SplitConfigError as e:
+        raise _Fail("bad split config: %s" % e)
+
+    threads = _load_threads(args.data)
+    mapping, _ = split_threads(threads, split_config)
+    chosen = [t for t in threads if mapping[t.root_tweet_id] == args.split]
+    result = find_incidents(chosen, CheapTier(), config)
+
+    report = build_report(result, config, args.split)
+    text = (report_markdown(report) if args.format == "md"
+            else json.dumps(report, indent=2, sort_keys=True) + "\n")
+    _write(args.report_out, text)
+    if args.incidents_out is not None:
+        _write(args.incidents_out, "".join(
+            json.dumps(incident_record(i), ensure_ascii=False, sort_keys=True) + "\n"
+            for i in result.incidents))
+    return "incidents=%d members=%d drafts_avoided=%d unattributed=%d split=%s" % (
+        report["incidents"], report["members_total"], report["drafts_avoided"],
+        report["unattributed_outage_threads"], args.split)
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    args = _parser().parse_args(argv)
+    try:
+        line = _run(args)
+    except _Fail as e:
+        print("error: %s" % e, file=sys.stderr)
+        return 2
+    print(line)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

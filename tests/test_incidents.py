@@ -5,7 +5,9 @@ data/split.json or the owner's evals/drift.json (except the opt-in conformance t
 """
 
 import ast
+import contextlib
 import copy
+import io
 import json
 import os
 import sys
@@ -373,6 +375,168 @@ class TestLoadIncidentConfig(unittest.TestCase):
                 self.assertIsInstance(ctx.exception, ValueError)
                 self.assertTrue(str(ctx.exception).startswith(
                     "incident config %s: " % path), str(ctx.exception))
+
+
+TWCS_HEADER = ("tweet_id,author_id,inbound,created_at,text,response_tweet_id,"
+               "in_response_to_tweet_id\n")
+CLI_BASE = 9900000
+_DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _twitter_date(dt):
+    return "%s %s %02d %02d:%02d:%02d +0000 %d" % (
+        _DAYS[dt.weekday()], _MONTHS[dt.month - 1], dt.day, dt.hour, dt.minute, dt.second,
+        dt.year)
+
+
+def _row(n, author, inbound, when, text, parent=""):
+    return "%d,%s,%s,%s,\"%s\",,%s" % (
+        CLI_BASE + n, author, "True" if inbound else "False", _twitter_date(when), text,
+        "" if parent == "" else CLI_BASE + parent)
+
+
+def _cli_rows():
+    """Directory thread at hour 0 answered by both planted brands, then a 60-thread
+    burst for one and a 40-thread burst for the other inside the same 2 hours."""
+    rows = [_row(1, "custSENTINEL1", True, hours(0), "hello SENTINELTEXT1"),
+            _row(2, "SENTINELBRANDA", False, hours(0) + MIN, "DM us SENTINELTEXT2", 1),
+            _row(3, "SENTINELBRANDB", False, hours(0) + MIN, "DM us SENTINELTEXT3", 1)]
+    for i in range(60):
+        n = 100 + i
+        rows.append(_row(n, "custSENTINEL%d" % n, True, BURST_AT + i * MIN,
+                         "@SENTINELBRANDA app is down SENTINELTERM SENTINELTEXT%d" % n))
+    for i in range(40):
+        n = 300 + i
+        rows.append(_row(n, "custSENTINEL%d" % n, True, BURST_AT + i * MIN + timedelta(seconds=30),
+                         "@SENTINELBRANDB app is down SENTINELTERM SENTINELTEXT%d" % n))
+    return rows
+
+
+CLI_IDS = [CLI_BASE + n for n in [1, 2, 3] + list(range(100, 160)) + list(range(300, 340))]
+
+
+class TestCli(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+        self.data = self.dir / "twcs.csv"
+        self.data.write_text(TWCS_HEADER + "\n".join(_cli_rows()) + "\n", encoding="utf-8")
+        self.split = self.dir / "split.json"
+        self.split.write_text(json.dumps({"seed": 0, "unit": "thread", "fractions": {
+            "dev": 1.0, "eval": 0.0, "full": 0.0}}), encoding="utf-8")
+        self.report = self.dir / "report.json"
+
+    def main(self, *extra, config=FIXTURE_CONFIG, split="dev", report=None):
+        argv = ["--split", split, "--report-out", str(report or self.report),
+                "--config", str(config), "--data", str(self.data),
+                "--split-config", str(self.split)] + list(extra)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = incidents.main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    def assert_no_planted(self, text):
+        self.assertNotIn("sentinel", text.lower())
+        for i in CLI_IDS:
+            self.assertNotIn(str(i), text)
+        for term in ("inc-0", "sentinelterm"):
+            self.assertNotIn(term, text.lower())
+
+    def test_report_counts_and_no_ids(self):
+        code, out, err = self.main()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(out, "incidents=2 members=100 drafts_avoided=98 unattributed=0 "
+                              "split=dev\n")
+        text = self.report.read_text(encoding="utf-8")
+        report = json.loads(text)
+        self.assertEqual(report["incidents"], 2)
+        self.assertEqual(report["members_per_incident"], [40, 60])
+        self.assertEqual(report["members_total"], 100)
+        self.assertEqual(report["drafts_avoided"], 98)
+        self.assertEqual(report["incidents_awaiting_approval"], 2)
+        self.assertEqual(report["reopens"], 0)
+        self.assertEqual(report["outage_threads"], 100)
+        self.assertEqual(report["unattributed_outage_threads"], 0)
+        self.assertEqual(report["minutes_first_message_to_incident"], [29.0, 29.0])
+        self.assertEqual(report["look_ahead"], {
+            "labels": "first_turn_only", "brands": "known_at_event_time",
+            "baseline": "earlier_unassigned_only",
+            "residual": ["thread_links_from_full_file", "dataset_snapshot"]})
+        self.assertEqual(report["warm_up"], {"hours": 170, "outage_threads": 0,
+                                             "events_at_min_burst": 0})
+        self.assertEqual((report["config_version"], report["split"]), ("fixture-v1", "dev"))
+        self.assertEqual((report["window_hours"], report["min_burst"],
+                          report["baseline_factor"], report["baseline_lookback_hours"],
+                          report["label"]), (2, 30, 3.0, 168, "outage_technical"))
+        self.assert_no_planted(text)
+        md = self.dir / "report.md"
+        code, _, err = self.main("--format", "md", report=md)
+        self.assertEqual((code, err), (0, ""))
+        md_text = md.read_text(encoding="utf-8")
+        self.assertIn("drafts_avoided", md_text)
+        self.assertIn("98", md_text)
+        self.assert_no_planted(md_text)
+
+    def test_incidents_out_inside_repo_refused(self):
+        inside = REPO_ROOT / ("incidents_test_%d.jsonl" % os.getpid())
+        self.addCleanup(lambda: inside.unlink() if inside.exists() else None)
+        code, out, err = self.main("--incidents-out", str(inside))
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertTrue(err.startswith("error: "))
+        self.assertEqual(len(err.strip().splitlines()), 1)
+        self.assertFalse(inside.exists())
+        self.assertFalse(self.report.exists())
+
+    def test_eval_split_incidents_out_refused(self):
+        path = self.dir / "incidents.jsonl"
+        code, out, err = self.main("--incidents-out", str(path), split="eval")
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("error: "))
+        self.assertFalse(path.exists())
+        self.assertFalse(self.report.exists())
+
+    def test_missing_incidents_section_clear_error(self):
+        config = self.dir / "no_incidents.json"
+        data = json.loads(FIXTURE_CONFIG.read_text(encoding="utf-8"))
+        del data["incidents"]
+        config.write_text(json.dumps(data), encoding="utf-8")
+        code, out, err = self.main(config=config)
+        self.assertEqual(code, 2)
+        self.assertEqual(out, "")
+        self.assertEqual(len(err.strip().splitlines()), 1)
+        self.assertTrue(err.startswith("error: "))
+        self.assertIn(str(config), err)
+        self.assertFalse(self.report.exists())
+
+    def test_incidents_out_written_outside_repo(self):
+        path = self.dir / "incidents.jsonl"
+        code, _, err = self.main("--incidents-out", str(path))
+        self.assertEqual((code, err), (0, ""))
+        lines = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(lines), 2)
+        self.assertEqual([x["id"] for x in lines], ["inc-0001", "inc-0002"])
+        self.assertEqual({x["brand"] for x in lines}, {"SENTINELBRANDA", "SENTINELBRANDB"})
+        by_brand = {x["brand"]: x for x in lines}
+        self.assertEqual(by_brand["SENTINELBRANDA"]["member_ids"],
+                         [CLI_BASE + n for n in range(100, 160)])
+        self.assertEqual(len(by_brand["SENTINELBRANDB"]["member_ids"]), 40)
+        for x in lines:
+            self.assertEqual(x["status_reply"], STATUS)
+            self.assertIn("sentinelterm", x["top_terms"])
+            datetime.fromisoformat(x["start"])
+        self.assert_no_planted(self.report.read_text(encoding="utf-8"))
+
+    def test_bad_data_exits_2(self):
+        code, out, err = self.main()
+        self.assertEqual(code, 0)
+        self.data.unlink()
+        code, out, err = self.main(report=self.dir / "r2.json")
+        self.assertEqual(code, 2)
+        self.assertTrue(err.startswith("error: data file not found: "))
+        self.assertFalse((self.dir / "r2.json").exists())
 
 
 class TestLiveConformance(unittest.TestCase):
