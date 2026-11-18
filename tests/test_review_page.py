@@ -263,6 +263,21 @@ class TestReviewPage(ReviewTestBase):
         self.assertEqual([c["topic_id"] for c in loaded], [[], [], [], [], ["t-zorblax"]])
         self.assertIn("escalate_always", loaded[4]["reason_codes"])
 
+    def test_load_run_accepts_repeat_contact_summary(self):
+        from triage.review_page import load_run
+        self.rules.write_bytes((REPO_ROOT / "tests" / "fixtures"
+                                / "repeat_contact_rules.json").read_bytes())
+        cases = json.loads((REPO_ROOT / "tests" / "fixtures" / "repeat_contact_cases.json")
+                           .read_text(encoding="utf-8"))["cases"]
+        _, run_dir = self.make_run(cases)
+        report = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["summary"]["repeat_contact_rule_loaded"], 1)
+        self.assertEqual(report["summary"]["repeat_contact_triggers"], 1)
+        self.assertEqual(report["summary"]["repeat_contact_triggers_report_window"], 0)
+        loaded, _ = load_run(run_dir)
+        self.assertEqual([c["id"] for c in loaded], ["rc-01", "rc-02", "rc-03"])
+        self.assertIn("repeat_contact", loaded[2]["reason_codes"])
+
     def test_load_run_refuses_missing_topic_id(self):
         from triage.review_page import ReportError, load_run
         _, run_dir = self.make_run(standard_cases())
