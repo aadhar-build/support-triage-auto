@@ -1,6 +1,6 @@
 {
-  "version": "v1-draft",
-  "status": "DRAFT for Aadhar's approval (18 Nov 2026). Owner-owned and protected. Used by #20 (drift) and later #21 (incidents).",
+  "version": "v1.1-draft",
+  "status": "DRAFT for Aadhar's approval (18 Nov 2026). Owner-owned and protected. Used by #20 (drift) and #21 (incidents).",
   "drift": {
     "reference": {
       "start_week": "2017-W40",
@@ -22,6 +22,20 @@
       "mean_confidence": "Absolute change in the cheap tier's mean confidence.",
       "escalated_share": "Absolute change in the share escalated (3 points on a ~12% base is a large relative move).",
       "other_share": "Absolute change in the share labelled other, the first sign of a new topic."
+    }
+  },
+  "incidents": {
+    "window_hours": 2,
+    "min_burst": 30,
+    "baseline_factor": 3.0,
+    "baseline_lookback_hours": 168,
+    "label": "outage_technical",
+    "notes": {
+      "window_hours": "Sliding window in which outage-labelled threads for one brand are counted.",
+      "min_burst": "Threads in a window needed to open an incident. Chosen for AmazonHelp first; ordinary hourly traffic should never reach it.",
+      "baseline_factor": "The window's count must also be at least this multiple of the brand's recent per-window rate.",
+      "baseline_lookback_hours": "How far back the recent rate looks (7 days covers a weekly cycle). Missing history is reported as warm-up, never treated as zero.",
+      "label": "Detection uses this label only; keyword clustering is a later slice."
     }
   }
 }
