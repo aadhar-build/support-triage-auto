@@ -103,6 +103,170 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertTrue(md.startswith("# Synthetic regression report\n"))
         self.assertIn("| parcel | Title of parcel |", md)
 
+    def test_label_mismatch_fails_case(self):
+        path = self.write_cases([case("parcel", PARCEL[0], "billing", "ask", False,
+                                      must_pass=False)])
+        proc = self.run_cli(path)
+        report = self.report_json()
+        item = report["cases"][0]
+        self.assertFalse(item["passed"])
+        self.assertEqual(item["expected"]["intent"], "billing")
+        self.assertEqual(item["actual"]["intent"], "delivery")
+        self.assertEqual(report["summary"]["failed"], 1)
+        self.assertEqual(report["summary"]["passed"], 0)
+        row = [l for l in self.report_md().splitlines() if l.startswith("| parcel |")][0]
+        self.assertIn("billing", row)
+        self.assertIn("delivery", row)
+        self.assertTrue(row.endswith("| FAIL |"))
+        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0\n")
+
+    def _failing_case(self, must_pass):
+        return self.write_cases([
+            case("good", *PRAISE),
+            case("bad", HACKED[0], "other", "answer", False, must_pass=must_pass),
+        ])
+
+    def test_must_pass_failure_exits_1(self):
+        proc = self.run_cli(self._failing_case(must_pass=True))
+        self.assertEqual(proc.returncode, 1, proc.stderr)
+        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1\n")
+        self.assertEqual(self.report_json()["summary"]["must_pass_failures"], 1)
+        self.assertTrue((self.out / "synthetic_report.md").is_file())
+
+    def test_non_must_pass_failure_exits_0(self):
+        proc = self.run_cli(self._failing_case(must_pass=False))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        summary = self.report_json()["summary"]
+        self.assertEqual(summary["failed"], 1)
+        self.assertEqual(summary["must_pass_failures"], 0)
+        self.assertEqual(summary["must_pass_cases"], 1)
+        self.assertTrue((self.out / "synthetic_report.md").is_file())
+
+    def test_policy_violation_match_and_mismatch(self):
+        path = self.write_cases([
+            case("refund-ok", *PARCEL, draft_reply=REFUND_DRAFT,
+                 expected_violations=["t-promise"]),
+            case("refund-bad", *PARCEL, must_pass=False, draft_reply=REFUND_DRAFT,
+                 expected_violations=[]),
+            case("clean", *PARCEL, draft_reply=CLEAN_DRAFT),
+        ])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        report = self.report_json()
+        by_id = {c["id"]: c for c in report["cases"]}
+        self.assertTrue(by_id["refund-ok"]["passed"])
+        self.assertEqual(by_id["refund-ok"]["actual_violations"], ["t-promise"])
+        self.assertFalse(by_id["refund-bad"]["passed"])
+        self.assertEqual(by_id["refund-bad"]["expected_violations"], [])
+        self.assertEqual(by_id["refund-bad"]["actual_violations"], ["t-promise"])
+        self.assertTrue(by_id["clean"]["passed"])
+        self.assertEqual(by_id["clean"]["expected_violations"], [])
+        self.assertEqual(by_id["clean"]["actual_violations"], [])
+        self.assertEqual(report["summary"]["policy_violations"], 2)
+        self.assertEqual(report["summary"]["policy_mismatches"], 1)
+        self.assertEqual(report["summary"]["failed"], 1)
+        md = self.report_md()
+        self.assertIn("t-promise", md)
+
+    def test_missed_and_false_escalation_counts(self):
+        path = self.write_cases([
+            case("missed", LOCKED[0], "account_access", "escalate", True, must_pass=False),
+            case("false", URGENT[0], "complaint", "answer", False, must_pass=False),
+            case("fine", *PARCEL),
+        ])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        summary = self.report_json()["summary"]
+        self.assertEqual(summary["missed_escalations"], 1)
+        self.assertEqual(summary["false_escalations"], 1)
+        self.assertEqual(summary["failed"], 2)
+
+    def test_reports_hold_no_conversation_text(self):
+        path = self.dir / "cases.json"
+        path.write_text(FIXTURE_CASES.read_text(encoding="utf-8"), encoding="utf-8")
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        texts = {"json": (self.out / "synthetic_report.json").read_text(encoding="utf-8"),
+                 "md": self.report_md(), "stdout": proc.stdout, "stderr": proc.stderr}
+        for name, text in texts.items():
+            self.assertNotIn("SENTINEL", text, name)
+        for name in ("json", "md"):
+            self.assertIn("fx-parcel", texts[name])
+            self.assertIn("Made-up parcel that never came", texts[name])
+        self.assertTrue(self.report_json()["cases"][0]["passed"])
+
+    def test_empty_cases_list(self):
+        proc = self.run_cli(self.write_cases([]))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0\n")
+        report = self.report_json()
+        self.assertEqual(report["cases"], [])
+        self.assertEqual(report["summary"], {
+            "cases_run": 0, "passed": 0, "failed": 0, "must_pass_cases": 0,
+            "must_pass_failures": 0, "missed_escalations": 0, "false_escalations": 0,
+            "policy_violations": 0, "policy_mismatches": 0,
+        })
+        self.assertTrue((self.out / "synthetic_report.md").is_file())
+
+    def test_bad_input_exits_2(self):
+        good = case("parcel", *PARCEL)
+
+        def without(key):
+            c = json.loads(json.dumps(good))
+            del c[key]
+            return c
+
+        no_escalate = json.loads(json.dumps(good))
+        del no_escalate["expected"]["should_escalate"]
+        bad_intent = json.loads(json.dumps(good))
+        bad_intent["expected"]["intent"] = "not_an_intent"
+        empty_turns = dict(good, turns=[])
+        orphan_violations = dict(good, expected_violations=["t-promise"])
+
+        def cases_file(name, text):
+            p = self.dir / name
+            p.write_text(text, encoding="utf-8")
+            return p
+
+        bad_rules = cases_file("bad_rules.json", "{ not json")
+        good_cases = json.dumps({"cases": [good]})
+        variants = {
+            "missing cases file": (self.dir / "nope.json", None),
+            "invalid JSON": (cases_file("c1.json", "{ not json"), None),
+            "cases not a list": (cases_file("c2.json", json.dumps({"cases": {}})), None),
+            "case missing id": (cases_file("c3.json", json.dumps({"cases": [without("id")]})),
+                                None),
+            "missing should_escalate": (cases_file("c4.json",
+                                                   json.dumps({"cases": [no_escalate]})), None),
+            "unknown intent": (cases_file("c5.json", json.dumps({"cases": [bad_intent]})),
+                               None),
+            "duplicate id": (cases_file("c6.json", json.dumps({"cases": [good, good]})), None),
+            "turns empty": (cases_file("c7.json", json.dumps({"cases": [empty_turns]})), None),
+            "violations without draft": (cases_file(
+                "c8.json", json.dumps({"cases": [orphan_violations]})), None),
+            "missing rules file": (cases_file("c9.json", good_cases), self.dir / "norules.json"),
+            "malformed rules file": (cases_file("c10.json", good_cases), bad_rules),
+        }
+        for name, (cases_path, rules) in variants.items():
+            with self.subTest(name):
+                out = self.dir / ("out-" + name.replace(" ", "-"))
+                proc = self.run_cli(cases_path, rules=rules, out=out)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                lines = proc.stderr.splitlines()
+                self.assertEqual(len(lines), 1, proc.stderr)
+                self.assertTrue(lines[0].strip())
+                self.assertNotIn("Traceback", proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertFalse((out / "synthetic_report.json").exists())
+                self.assertFalse((out / "synthetic_report.md").exists())
+
+    def test_tests_do_not_read_owner_files(self):
+        source = Path(__file__).read_text(encoding="utf-8")
+        self.assertNotIn("evals/" + "gold", source)
+        self.assertNotIn("policies/" + "rules.json", source)
+        self.assertIn('"--cases", str(cases_path)', source)
+        self.assertIn('"--rules", str(rules or self.rules)', source)
+
 
 if __name__ == "__main__":
     unittest.main()
