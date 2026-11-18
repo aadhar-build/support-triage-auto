@@ -1,0 +1,46 @@
+{
+  "version": "v1",
+  "jobs": 4,
+  "merged": 4,
+  "rejected": 0,
+  "merges_per_week": 4.0,
+  "agent_minutes_median": 7.38,
+  "lead_hours_median": 9.91,
+  "first_pass_gate": [
+    4,
+    4
+  ],
+  "rounds_mean": 1.0,
+  "escalated": [
+    2,
+    4
+  ],
+  "auto_merged": [
+    0,
+    4
+  ],
+  "accepted_as_built": [
+    4,
+    4
+  ],
+  "change_fail": [
+    1,
+    4
+  ],
+  "owner_minutes_median": null,
+  "cost_usd_median": null,
+  "notes": {
+    "frozen": "2026-11-18, before the planning and shipping skills (software-factory-mvp#2, support-triage-auto#11)",
+    "jobs": "support-triage-auto jobs 001-004 (PRs #5-#8), all built 15 Nov 2026 at concurrency 1. Job 010 is excluded: its intake ran on v1 and the rest will run on v1.1.",
+    "change_fail": "PR #5's download script rejected newer Kaggle tokens; fixed by PR #9 (not a factory job). Rework rate 1 of 5 merges.",
+    "recovery_hours": "About 11.2: PR #9 opened 17 Nov 16:38 UTC, merged 18 Nov 03:52 UTC.",
+    "merged": "All 4 were merged by Claude on Aadhar's instruction on 16 Nov; none auto-merged (2 escalated by the approver, 1 security surface, 1 stacked).",
+    "owner_minutes_median": "Not measured in v1.",
+    "cost_usd_median": "Not measured in v1."
+  },
+  "recovery_hours": 11.2,
+  "rework": [
+    1,
+    5
+  ]
+}

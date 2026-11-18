@@ -1,4 +1,6 @@
 {
+  "version": "v1.1-skills",
+  "baseline": "factory/baseline-v1.json",
   "owner_name": "Aadhar",
   "concurrency": 1,
   "max_rounds": 2,

@@ -16,6 +16,8 @@ Each command prints one line, so the orchestrator's context stays small.
   job decide <id>             act on decision.md: merging | needs-human
   job merge <id>              sync with base, gate again, merge only if on the allowlist
   job reject <id>             reason on stdin; comments, unlabels, closes the PR
+  job record <id> <key> <v>   owner-reported numbers for the scorecard: owner_minutes,
+                              cost_usd, escaped (true/false), owner_changes (true/false)
 """
 
 from __future__ import annotations
@@ -65,7 +67,9 @@ def cmd_create(root: Path, cfg: dict, args: list[str]) -> str:
         if who in trusted:
             lines += ["", f"## Comment by {who}", ""] + ["> " + l for l in c["body"].splitlines()]
     (d / "issue.md").write_text("\n".join(lines) + "\n")
-    F.write_job(d, F.new_job(job_id, issue, data["title"]))
+    job = F.new_job(job_id, issue, data["title"])
+    job["factory_version"] = cfg.get("version", F.BASE_VERSION)
+    F.write_job(d, job)
     return f"created {job_id}"
 
 
@@ -289,12 +293,25 @@ def cmd_labels(root: Path, cfg: dict, args: list[str]) -> str:
     return "labels created: " + (", ".join(made) or "none (already exist)")
 
 
+RECORDABLE = {"owner_minutes": float, "cost_usd": float,
+              "escaped": lambda v: v.lower() == "true", "owner_changes": lambda v: v.lower() == "true"}
+
+
+def cmd_record(root: Path, cfg: dict, args: list[str]) -> str:
+    d, job = _load(root, args[0])
+    if len(args) < 3 or args[1] not in RECORDABLE:
+        raise F.FactoryError("usage: job record <id> <" + "|".join(RECORDABLE) + "> <value>")
+    job[args[1]] = RECORDABLE[args[1]](args[2])
+    F.write_job(d, job)
+    return f"{job['id']}: {args[1]} = {job[args[1]]}"
+
+
 COMMANDS = {
     "queue": (cmd_queue, 0), "labels": (cmd_labels, 0),
     "create": (cmd_create, 1), "list": (cmd_list, 0), "show": (cmd_show, 1),
     "advance": (cmd_advance, 2), "intake": (cmd_intake, 1), "worktree": (cmd_worktree, 1),
     "pr": (cmd_pr, 1), "tally": (cmd_tally, 1), "decide": (cmd_decide, 1),
-    "merge": (cmd_merge, 1), "reject": (cmd_reject, 1),
+    "merge": (cmd_merge, 1), "reject": (cmd_reject, 1), "record": (cmd_record, 3),
 }
 
 
