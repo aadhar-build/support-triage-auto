@@ -51,6 +51,7 @@
     "evals/drift.json",
     "evals/gold/",
     "policies/",
+    "brands/",
     "scenarios/"
   ],
   "always_in_scope": [],

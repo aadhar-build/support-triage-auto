@@ -3,7 +3,7 @@
   "status": "DRAFT for Aadhar's approval (18 Nov 2026). Owner-owned and protected. Used by #20 (drift) and #21 (incidents).",
   "drift": {
     "reference": {
-      "start_week": "2017-W40",
+      "start_week": "2017-W41",
       "end_week": "2017-W43",
       "note": "Four weeks early in the densest stretch of the data. Confirm with the weekly volume counts before approving."
     },
