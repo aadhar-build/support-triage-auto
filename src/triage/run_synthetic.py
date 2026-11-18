@@ -4,8 +4,9 @@ Usage: python3 -m triage.run_synthetic --cases CASES.json --out DIR [--rules RUL
 
 Writes DIR/synthetic_report.json and DIR/synthetic_report.md. Reports and stdout hold only
 case ids, titles, labels, tier names, confidences, rule ids and counts, never turn, draft or
-brand text. No network
-calls. Exit 0 when every must_pass case passes, 1 when one fails, 2 on bad input.
+brand text. No network calls. Stdout and the reports' summary give rules_loaded, the number of
+policy rules read from --rules. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
+bad input.
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ SYNTHETIC_TIME = datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 SUMMARY_KEYS = ("cases_run", "passed", "failed", "must_pass_cases", "must_pass_failures",
                 "missed_escalations", "false_escalations", "policy_violations",
-                "policy_mismatches")
+                "policy_mismatches", "rules_loaded")
 
 
 class _Fail(Exception):
@@ -178,7 +179,7 @@ def _results(cases: list, rules) -> list:
     return results
 
 
-def _summary(results: list) -> dict:
+def _summary(results: list, rules_loaded: int) -> dict:
     drafts = [r for r in results if r["actual_violations"] is not None]
     return {
         "cases_run": len(results),
@@ -193,6 +194,7 @@ def _summary(results: list) -> dict:
         "policy_violations": sum(len(r["actual_violations"]) for r in drafts),
         "policy_mismatches": sum(r["expected_violations"] != r["actual_violations"]
                                  for r in drafts),
+        "rules_loaded": rules_loaded,
     }
 
 
@@ -245,7 +247,7 @@ def _run(args) -> dict:
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
     results = _results(cases, rules)
-    summary = _summary(results)
+    summary = _summary(results, len(rules))
     _write(Path(args.out), results, summary)
     return summary
 
@@ -257,9 +259,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except _Fail as e:
         print("error: %s" % " ".join(str(e).split()), file=sys.stderr)
         return 2
-    print("cases=%d passed=%d failed=%d must_pass_failures=%d"
+    print("cases=%d passed=%d failed=%d must_pass_failures=%d rules_loaded=%d"
           % (summary["cases_run"], summary["passed"], summary["failed"],
-             summary["must_pass_failures"]))
+             summary["must_pass_failures"], summary["rules_loaded"]))
     return 1 if summary["must_pass_failures"] else 0
 
 

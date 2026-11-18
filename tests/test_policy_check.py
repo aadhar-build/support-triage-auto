@@ -34,6 +34,7 @@ class TestLoadRules(unittest.TestCase):
             ("missing file", None, None),
             ("invalid json", "{not json", None),
             ("no public_reply_rules", json.dumps({"version": "x"}), None),
+            ("empty public_reply_rules", json.dumps({"public_reply_rules": []}), None),
             ("rule with no id", json.dumps({"public_reply_rules": [
                 phrase_rule, {"type": "banned_phrase", "phrases": ["x"]}]}), "index 1"),
             ("duplicate id", json.dumps({"public_reply_rules": [phrase_rule, phrase_rule]}), "p1"),
@@ -62,11 +63,27 @@ class TestLoadRules(unittest.TestCase):
                     if named is not None:
                         self.assertIn(named, message)
 
-    def test_empty_rule_list_is_valid(self):
+    def test_empty_rule_list_is_refused(self):
+        # Owner decision (feedback-1): fail closed, so a blanked file can't make every draft safe.
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "rules.json"
-            path.write_text(json.dumps({"public_reply_rules": []}), encoding="utf-8")
-            self.assertEqual(load_rules(path), ())
+            path.write_text(json.dumps({"version": "x", "public_reply_rules": []}),
+                            encoding="utf-8")
+            with self.assertRaises(RulesError) as ctx:
+                load_rules(path)
+            message = str(ctx.exception)
+            self.assertIn(str(path), message)
+            self.assertIn("public_reply_rules", message)
+            self.assertIn("empty", message)
+
+    def test_rule_count_is_length_of_result(self):
+        # Owner decision (feedback-1): callers read the number of loaded rules as len(...).
+        self.assertEqual(len(load_rules(FIXTURE)), 3)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rules.json"
+            path.write_text(json.dumps({"public_reply_rules": [
+                {"id": "only", "type": "banned_phrase", "phrases": ["x"]}]}), encoding="utf-8")
+            self.assertEqual(len(load_rules(path)), 1)
 
     def test_live_rules_file_loads(self):
         # Schema-compatibility smoke test only: no assertions about the owner's content.

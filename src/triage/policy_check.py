@@ -35,11 +35,11 @@ class Violation:
 
 
 CURLY_APOSTROPHE = "\u2019"
-# A maximal run of digits joined by nothing, one space or one dash.
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # Stands in for email characters so card and phone detectors skip them; not a digit,
 # letter or separator, and one character long so offsets stay the same.
 EMAIL_MASK = "\x00"
+# A maximal run of digits joined by nothing, one space or one dash.
 CARD_RUN = re.compile(r"[0-9](?:[ -]?[0-9])*")
 # Optional "+" and "(", then digits joined by at most two of: space - . ( )
 PHONE_RUN = re.compile(r"\+?\(?[0-9](?:[ .()-]{0,2}[0-9])*")
@@ -48,7 +48,12 @@ PHONE_RUN = re.compile(r"\+?\(?[0-9](?:[ .()-]{0,2}[0-9])*")
 def load_rules(path):
     """Read the rules file at `path` and return its public reply rules in file order.
 
-    Raises RulesError, naming the file and the problem, for any missing or malformed file.
+    The result is a non-empty tuple of `Rule` records, so callers get the number of
+    loaded rules as `len(load_rules(path))` (for example, to log or display it).
+
+    Raises RulesError, naming the file and the problem, for any missing or malformed
+    file. An empty `public_reply_rules` list is refused too (fail closed), so a blanked
+    rules file can never make every draft safe to send.
     """
     path = Path(path)
 
@@ -68,6 +73,8 @@ def load_rules(path):
     raw_rules = data.get("public_reply_rules")
     if not isinstance(raw_rules, list):
         raise fail("'public_reply_rules' is missing or is not a list")
+    if not raw_rules:
+        raise fail("'public_reply_rules' is empty; at least one rule is required")
 
     rules = []
     seen = set()
