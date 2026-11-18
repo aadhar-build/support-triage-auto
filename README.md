@@ -70,6 +70,17 @@ PYTHONPATH=src python3 -m triage.replay --cases CASES.json --run DIR --trace /tm
 
 `run_synthetic --trace` writes one audit record per case (split `synthetic`, `thread_id` = case position) before any report, and adds ` trace_records=<n>` to its summary line; without `--trace` nothing changes. `replay` writes one offline HTML page (no server, no network requests): pick a thread, step through its turns with Next and Back, and see the triage state (intent, urgency, action, confidence, reason codes, deciding tier and model id, policy result, drafted or held reply) next to the thread's trace. Until per-turn re-triage (#46) lands, the one recorded decision is shown only at the last turn, labelled as decided once on the full thread. It refuses (exit 2, one line, no file) anything but a synthetic trace and run, and a cases file, run report or trace that don't belong together; edit the cases file in any way and you must re-run `run_synthetic` first.
 
+## Performance report
+
+To read one eval run's performance as a page, point the report at a `metrics/1` file (`run_eval --metrics-out` or `run_synthetic`'s `DIR/metrics.json`):
+
+```
+PYTHONPATH=src python3 -m triage.report DIR/metrics.json -o report.html
+PYTHONPATH=src python3 -m triage.report this_week.json --compare last_week.json -o report.html
+```
+
+It writes one offline HTML page (no server, no network requests) and prints `page=<path>`. The page shows each headline rate with its value, "num of n", 95% range and a "directional" badge when the evidence is thin; the escalation detail; confusion matrices and sortable per-class tables for action and intent; and, with `--compare`, both runs side by side with the delta and a literal "ranges don't overlap" mark. Green and red come only from the targets in `evals/thresholds.json` (read, never written; `--thresholds PATH` points elsewhere); a missing key shows "target not set". Compare refuses only truly unlike runs (a different kind, cohort, split, gold revision or brand population); a different `run_at`, sample or config is fine. A gold-run page carries aggregates only; on a synthetic run, clicking a confusion cell lists its case ids. Any refusal exits 2 with one `error:` line and writes no file.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:
