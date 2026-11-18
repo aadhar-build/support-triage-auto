@@ -128,3 +128,153 @@ def weekly_signals(buckets: Sequence[WeekBucket], labeller: LabellingTier) -> Li
             escalated_count=esc, escalated_share=_share(esc, n),
             other_count=counts["other"], other_share=_share(counts["other"], n)))
     return out
+
+
+SIGNAL_ORDER: Tuple[str, ...] = ("intent_psi", "volume", "mean_confidence", "escalated_share",
+                                 "other_share")
+
+
+class DriftConfigError(ValueError):
+    """The drift config file is missing or malformed."""
+
+
+class DriftDataError(ValueError):
+    """The replayed data cannot support a drift check (for example, an empty reference)."""
+
+
+@dataclass(frozen=True)
+class DriftConfig:
+    path: str
+    version: Optional[str]
+    start_week: str
+    end_week: str
+    min_volume: int
+    samples_per_callout: int
+    thresholds: Dict[str, float]
+
+
+@dataclass(frozen=True)
+class Reference:
+    start_week: str
+    end_week: str
+    weeks_used: Tuple[str, ...]
+    weeks_missing: Tuple[str, ...]
+    volume: float
+    intent_shares: Dict[str, float]
+    mean_confidence: float
+    escalated_share: float
+    other_share: float
+
+
+@dataclass(frozen=True)
+class WeekResult:
+    week: str
+    phase: str
+    partial: bool
+    checked: bool
+    low_volume: bool
+    signals: WeekSignals
+    volume_ratio: Optional[float] = None
+    intent_psi: Optional[float] = None
+    mean_confidence_delta: Optional[float] = None
+    escalated_share_delta: Optional[float] = None
+    other_share_delta: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class CallOut:
+    week: str
+    signal: str
+    value: float
+    reference_value: float
+    threshold: float
+
+
+@dataclass(frozen=True)
+class DriftResult:
+    reference: Reference
+    weeks: Tuple[WeekResult, ...]
+    callouts: Tuple[CallOut, ...]
+
+
+def _week_monday(label: str) -> date:
+    year, week = label.split("-W")
+    return date.fromisocalendar(int(year), int(week), 1)
+
+
+def _reference(signals: Sequence[WeekSignals], config: DriftConfig) -> Reference:
+    by_week = {s.week: s for s in signals}
+    used: List[WeekSignals] = []
+    missing: List[str] = []
+    monday, last = _week_monday(config.start_week), _week_monday(config.end_week)
+    while monday <= last:
+        label = _week_label(monday)
+        s = by_week.get(label)
+        if s is None or s.partial:
+            missing.append(label)
+        else:
+            used.append(s)
+        monday += _WEEK
+    total = sum(s.volume for s in used)
+    if not total:
+        raise DriftDataError("reference range %s..%s holds no usable threads"
+                             % (config.start_week, config.end_week))
+    counts = {i: sum(s.intent_counts[i] for s in used) for i in INTENTS}
+    return Reference(
+        start_week=config.start_week, end_week=config.end_week,
+        weeks_used=tuple(s.week for s in used), weeks_missing=tuple(missing),
+        volume=total / len(used),
+        intent_shares={i: counts[i] / total for i in INTENTS},
+        mean_confidence=sum(s.confidence_sum for s in used) / total,
+        escalated_share=sum(s.escalated_count for s in used) / total,
+        other_share=counts["other"] / total)
+
+
+def check_drift(signals: Sequence[WeekSignals], config: DriftConfig) -> DriftResult:
+    """Compare every non-partial week after the reference range with the reference,
+    which is computed once from the reference weeks only."""
+    ref = _reference(signals, config)
+    start, end = _week_monday(config.start_week), _week_monday(config.end_week)
+    th = config.thresholds
+    weeks: List[WeekResult] = []
+    found: List[CallOut] = []
+    for s in signals:
+        monday = _week_monday(s.week)
+        phase = ("before_reference" if monday < start
+                 else "reference" if monday <= end else "monitored")
+        checked = phase == "monitored" and not s.partial
+        if not checked:
+            weeks.append(WeekResult(week=s.week, phase=phase, partial=s.partial,
+                                    checked=False, low_volume=False, signals=s))
+            continue
+        low = s.volume < config.min_volume
+        ratio = s.volume / ref.volume
+        values: Dict[str, Optional[float]] = {"volume": ratio, "intent_psi": None,
+                                              "mean_confidence": None,
+                                              "escalated_share": None, "other_share": None}
+        if s.volume:
+            values["intent_psi"] = psi(ref.intent_shares, s.intent_shares)
+            values["mean_confidence"] = abs(s.mean_confidence - ref.mean_confidence)
+            values["escalated_share"] = abs(s.escalated_share - ref.escalated_share)
+            values["other_share"] = abs(s.other_share - ref.other_share)
+        ref_values = {"intent_psi": 0.0, "volume": 1.0,
+                      "mean_confidence": ref.mean_confidence,
+                      "escalated_share": ref.escalated_share, "other_share": ref.other_share}
+        for name in SIGNAL_ORDER:
+            v = values[name]
+            if v is None:
+                continue
+            if name == "volume":
+                breach = v >= th["volume"] or v <= 1 / th["volume"]
+            else:
+                breach = not low and v > th[name]
+            if breach:
+                found.append(CallOut(week=s.week, signal=name, value=v,
+                                     reference_value=ref_values[name], threshold=th[name]))
+        weeks.append(WeekResult(
+            week=s.week, phase=phase, partial=s.partial, checked=True, low_volume=low,
+            signals=s, volume_ratio=ratio, intent_psi=values["intent_psi"],
+            mean_confidence_delta=values["mean_confidence"],
+            escalated_share_delta=values["escalated_share"],
+            other_share_delta=values["other_share"]))
+    return DriftResult(reference=ref, weeks=tuple(weeks), callouts=tuple(found))
