@@ -21,7 +21,8 @@ from pathlib import Path
 TRANSITIONS: dict[str, set[str]] = {
     "intake": {"spec", "needs-info", "rejected"},
     "needs-info": {"intake", "rejected"},
-    "spec": {"build", "needs-human"},
+    "spec": {"build", "needs-input", "needs-human"},
+    "needs-input": {"spec", "rejected"},
     "build": {"gate", "needs-human"},
     "gate": {"review", "build", "recovery"},
     "review": {"approve", "build", "recovery"},
@@ -129,6 +130,50 @@ def move(job: dict, to: str, note: str = "") -> dict:
     return job
 
 
+PRODUCT_MARK = "PRODUCT DECISION"
+_SECTION_RE = re.compile(r"^##\s+(.*?)\s*$")
+_OPEN_ITEM_RE = re.compile(r"^\s*[-*]\s*\[\s\]\s*(.+?)\s*$")
+
+
+def _sections(text: str) -> dict[str, list[str]]:
+    """Split a Markdown file into {heading: lines} by its level-2 headings."""
+    out: dict[str, list[str]] = {}
+    current = ""
+    for line in text.splitlines():
+        m = _SECTION_RE.match(line)
+        if m:
+            current = m.group(1).strip().lower()
+            out.setdefault(current, [])
+        else:
+            out.setdefault(current, []).append(line)
+    return out
+
+
+def section_text(text: str, heading: str) -> str:
+    """The body of one "## heading" section, stripped; "" if it isn't there."""
+    return "\n".join(_sections(text).get(heading.strip().lower(), [])).strip()
+
+
+def open_product_questions(spec_text: str) -> list[str]:
+    """Every product question a spec still leaves open; [] means it may be built.
+
+    Open means: an unticked "- [ ]" item under "## Product questions", or the
+    words PRODUCT DECISION anywhere outside "## Owner decisions" (an assumption
+    the spec-writer flagged but did not lift into a question).
+    """
+    found: list[str] = []
+    for heading, lines in _sections(spec_text).items():
+        if heading == "owner decisions":
+            continue
+        for line in lines:
+            m = _OPEN_ITEM_RE.match(line) if heading == "product questions" else None
+            if m:
+                found.append(m.group(1))
+            elif PRODUCT_MARK in line:
+                found.append(line.strip().lstrip("-* ").strip())
+    return found
+
+
 def enter_build(job: dict, d: Path, note: str = "") -> dict:
     """Move a job into build by hand (`job advance <id> build`), always into a fresh round.
 
@@ -136,10 +181,19 @@ def enter_build(job: dict, d: Path, note: str = "") -> dict:
     from needs-human, a CI failure while merging, a retry from recovery) is the next
     round, so the earlier round's gate and review files are never overwritten or
     counted again. Owner-driven rounds are not capped by max_rounds. Refuses, changing
-    nothing, if the move is illegal or the new round's folder already exists.
+    nothing, if the move is illegal, the new round's folder already exists, or (from
+    spec) the spec still has an open product question.
     """
     if "build" not in TRANSITIONS.get(job["stage"], set()):
         raise FactoryError(f"illegal move {job['stage']} -> build for job {job['id']}")
+    if job["stage"] == "spec":
+        spec = d / "spec.md"
+        if not spec.exists():
+            raise FactoryError(f"no spec.md for job {job['id']}; write the spec first")
+        open_qs = open_product_questions(spec.read_text())
+        if open_qs:
+            raise FactoryError(f"spec for job {job['id']} has {len(open_qs)} open product "
+                               "question(s); run `job clarify` and wait for the owner")
     new_round = job["round"] + 1
     if (d / f"round-{new_round}").exists():
         raise FactoryError(f"round-{new_round} already exists for job {job['id']}; "

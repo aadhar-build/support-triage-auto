@@ -49,10 +49,24 @@ If the change touches the eval surface: which metric may move, in which directio
 ## Out of scope
 What this job deliberately doesn't do, including intake's "Left for later slices".
 
+## Product questions
+- [ ] Q1: <the decision, one or two sentences> Recommended: <your answer and why, one line>
+- one unticked item per open product decision (policy, pricing, public copy, thresholds, taxonomy, metric definitions, what counts as pass or fail). Write "None." if there are none.
+
+## Owner decisions
+- Q1: <the decision> Answer: <the owner's answer, quoted from issue.md>
+- every product question the owner has answered on the issue. Leave the section out if there are none.
+
 ## Assumptions
-Anything you decided that the issue didn't say. Mark any that is really a product decision (policy, pricing, public copy, thresholds, taxonomy) with **PRODUCT DECISION**, so the approver sends it to a human.
+Technical choices only (structure, naming, libraries, seams), which the builder may revisit.
 ```
+
+**Product decisions are never assumptions.** The factory builds only from a spec with no open product question: `job clarify` posts the unticked items on the issue and waits for the owner, and the build refuses while any is open. So:
+- Any product decision the issue and the owner's comments in `issue.md` don't settle goes under **Product questions** as an unticked item, with your recommended answer. Don't guess it.
+- When `issue.md` holds the owner's answer to a question, move it to **Owner decisions**, quoting the answer, and build the rest of the spec on it. An answer that opens a new decision is a new unticked question.
+- The words "PRODUCT DECISION" anywhere outside **Owner decisions** count as an open question, so don't use them elsewhere.
+- Technical doubts aren't product questions: settle them yourself and note them under Assumptions.
 
 Never list protected paths (factory/, .claude/, AGENTS.md, CLAUDE.md, LICENSE, .github/, or any the repo's config adds) under ## Files.
 
-Reply with one line: `spec written: <n> criteria, <m> files`.
+Reply with one line: `spec written: <n> criteria, <m> files, <q> open product questions`.
