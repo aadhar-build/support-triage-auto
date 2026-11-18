@@ -20,6 +20,7 @@
 - **Stage**: intake, spec, build, gate, review, approve, merging, recovery, needs-info, needs-input, needs-human, merged, rejected.
 - **Clarify phase**: intake and spec only. It ends when the spec has no open product question (`job clarify`); open questions go on the issue with the `needs-input` label.
 - **Build phase**: build, gate, review, approve and PR. It never starts while a product question is open.
+- **Lane**: the clarify and build phases run as two independent lanes, side by side, so specs and owner questions move while other issues build.
 - **Round**: one build plus its gate and reviews.
 - **Gate**: the scripted check after each build: protected paths, spec scope, `factory/checks.sh`.
 - **Seam**: the public boundary a test runs against. The spec names the seams; the builder tests only there.

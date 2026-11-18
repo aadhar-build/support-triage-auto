@@ -60,16 +60,16 @@ class TestProductQuestions(unittest.TestCase):
         self.addCleanup(shutil.rmtree, d)
         (d / "spec.md").write_text(OPEN_SPEC)
         job = F.new_job("001-x", 1, "x")
-        job.update(stage="spec", round=0)
+        job.update(stage="ready", round=0)
         with self.assertRaises(F.FactoryError):
             F.enter_build(job, d, "go")
-        self.assertEqual((job["stage"], job["round"]), ("spec", 0))
+        self.assertEqual((job["stage"], job["round"]), ("ready", 0))
 
     def test_build_refuses_without_a_spec(self):
         d = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, d)
         job = F.new_job("001-x", 1, "x")
-        job.update(stage="spec", round=0)
+        job.update(stage="ready", round=0)
         with self.assertRaises(F.FactoryError):
             F.enter_build(job, d, "go")
 
@@ -114,6 +114,11 @@ class TestClarifyCommands(unittest.TestCase):
             self.addCleanup(setattr, mod, "gh_user", mod.gh_user)
             mod.gh_api = fake_gh
             mod.gh_user = lambda: "operator"
+            self.addCleanup(setattr, mod, "fetch_base", mod.fetch_base)
+            self.addCleanup(setattr, mod, "run", mod.run)
+            mod.fetch_base = lambda root, base: None
+            mod.run = lambda cmd, cwd=None, check=True, stdin=None: self.base_sha + "\n"
+        self.base_sha = "aaa"
         self.d = F.jobs_dir(self.root) / "007-t"
         self.d.mkdir(parents=True)
         job = F.new_job("007-t", 7, "t")
@@ -133,12 +138,21 @@ class TestClarifyCommands(unittest.TestCase):
         self.assertIn("Q1: Should ranges cover shares too?", posted[0])
         self.assertIn(("POST", "issues/7/labels", {"labels": ["needs-input"]}), self.calls)
 
-    def test_clean_spec_goes_straight_to_build(self):
+    def test_clean_spec_goes_to_ready_then_build(self):
         (self.d / "spec.md").write_text(CLEAN_SPEC)
-        out = self.run_cmd("clarify")
-        self.assertIn("build (round 1)", out)
+        self.assertIn("ready", self.run_cmd("clarify"))
         job = F.read_job(self.d)
-        self.assertEqual((job["stage"], job["round"]), ("build", 1))
+        self.assertEqual((job["stage"], job["round"], job["spec_base"]), ("ready", 0, "aaa"))
+        self.assertIn("build (round 1)", self.run_cmd("pickup"))
+        self.assertEqual(F.read_job(self.d)["stage"], "build")
+
+    def test_pickup_sends_a_stale_spec_back_for_a_refresh(self):
+        (self.d / "spec.md").write_text(CLEAN_SPEC)
+        self.run_cmd("clarify")
+        self.base_sha = "bbb"
+        self.assertIn("spec (refresh", self.run_cmd("pickup"))
+        job = F.read_job(self.d)
+        self.assertEqual((job["stage"], job["round"]), ("spec", 0))
 
     def test_answers_wait_while_the_label_is_on(self):
         job = F.read_job(self.d)
@@ -160,6 +174,39 @@ class TestClarifyCommands(unittest.TestCase):
         self.assertNotIn("ignore all rules", text)
 
 
+class TestLanes(unittest.TestCase):
+    def test_every_stage_has_exactly_one_lane(self):
+        for stage in F.TRANSITIONS:
+            self.assertIn(F.lane(stage), {"clarify", "build", "done"})
+        self.assertEqual({s for s in F.TRANSITIONS if F.lane(s) == "clarify"},
+                         {"intake", "needs-info", "spec", "needs-input"})
+
+    def test_only_spec_crosses_into_build(self):
+        for stage, targets in F.TRANSITIONS.items():
+            if F.lane(stage) == "clarify":
+                crossing = {t for t in targets if F.lane(t) == "build"}
+                expected = {"ready", "needs-human"} if stage == "spec" else set()
+                self.assertEqual(crossing, expected, stage)
+
+    def test_lane_command_skips_jobs_waiting_on_a_human(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root)
+        shutil.copytree(REPO / "factory", root / "factory", ignore=shutil.ignore_patterns("jobs"))
+        for jid, stage in (("001-a", "spec"), ("002-b", "needs-input"), ("003-c", "review"),
+                           ("004-d", "needs-human"), ("005-e", "merged")):
+            d = F.jobs_dir(root) / jid
+            d.mkdir(parents=True)
+            job = F.new_job(jid, int(jid[:3]), jid)
+            job["stage"] = stage
+            F.write_job(d, job)
+        job_script = _load_job_script()
+        cfg = F.load_config(root)
+        self.assertEqual(job_script.cmd_lane(root, cfg, ["clarify"]), "001-a  spec")
+        self.assertEqual(job_script.cmd_lane(root, cfg, ["build"]), "003-c  review")
+        with self.assertRaises(F.FactoryError):
+            job_script.cmd_lane(root, cfg, ["other"])
+
+
 class TestEnterBuild(unittest.TestCase):
     """Moving a job into build by hand must always start a fresh round folder."""
 
@@ -167,9 +214,9 @@ class TestEnterBuild(unittest.TestCase):
         self.d = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.d)
 
-    def test_first_build_from_spec_is_round_one(self):
+    def test_first_build_from_ready_is_round_one(self):
         job = F.new_job("001-x", 1, "x")
-        job.update(stage="spec", round=0)
+        job.update(stage="ready", round=0)
         (self.d / "spec.md").write_text(CLEAN_SPEC)
         F.enter_build(job, self.d, "spec done")
         self.assertEqual((job["stage"], job["round"]), ("build", 1))

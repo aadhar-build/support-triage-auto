@@ -12,7 +12,9 @@ Each command prints one line, so the orchestrator's context stays small.
   job intake <id>             act on intake.md: spec | needs-info | rejected
   job worktree <id>           create the job's worktree and branch from origin/<base>
   job pr <id>                 push the branch; on the first round open a PR: problem, fix, proof, "Closes #n"
-  job clarify <id>            phase 1 exit: open product questions -> needs-input; none -> build
+  job lane <clarify|build>    jobs that lane can work on now (not waiting on a human)
+  job clarify <id>            clarify exit: open product questions -> needs-input; none -> ready
+  job pickup <id>             build entry: ready -> build, or back to spec if the base moved
   job answers <id>            needs-input -> spec once the owner answered and removed the label
   job tally <id>              read this round's reviews: approve | build | recovery
   job decide <id>             act on decision.md: merging | needs-human
@@ -84,8 +86,22 @@ def cmd_list(root: Path, cfg: dict, args: list[str]) -> str:
     rows = []
     for p in sorted(F.jobs_dir(root).glob("*/job.json")):
         j = json.loads(p.read_text())
-        rows.append(f"{j['id']}  {j['stage']}  round {j['round']}  risk {j['risk']}  pr {j['pr']}")
+        rows.append(f"{j['id']}  {F.lane(j['stage'])}  {j['stage']}  round {j['round']}  "
+                    f"risk {j['risk']}  pr {j['pr']}")
     return "\n".join(rows) or "no jobs"
+
+
+def cmd_lane(root: Path, cfg: dict, args: list[str]) -> str:
+    """Jobs a lane can work on now: in that lane and not waiting on a human."""
+    want = args[0]
+    if want not in ("clarify", "build"):
+        raise F.FactoryError("lane must be clarify or build")
+    ids = []
+    for p in sorted(F.jobs_dir(root).glob("*/job.json")):
+        j = json.loads(p.read_text())
+        if F.lane(j["stage"]) == want and j["stage"] not in F.WAITING_STAGES:
+            ids.append(f"{j['id']}  {j['stage']}")
+    return "\n".join(ids) or f"nothing to do in the {want} lane"
 
 
 def cmd_show(root: Path, cfg: dict, args: list[str]) -> str:
@@ -209,7 +225,25 @@ def cmd_clarify(root: Path, cfg: dict, args: list[str]) -> str:
         F.write_job(d, job)
         return f"{job['id']} -> needs-input ({len(open_qs)} question(s))"
     _remove_label(root, job["issue"], label)
-    F.enter_build(job, d, "spec has no open product questions")
+    F.fetch_base(root, cfg["base_branch"])
+    job["spec_base"] = F.run(["git", "rev-parse", f"origin/{cfg['base_branch']}"], cwd=root).strip()
+    F.move(job, "ready", "spec has no open product questions")
+    F.write_job(d, job)
+    return f"{job['id']} -> ready (waiting for the build lane)"
+
+
+def cmd_pickup(root: Path, cfg: dict, args: list[str]) -> str:
+    """Build lane entry. If the base moved since the spec was written, send it back to spec."""
+    d, job = _load(root, args[0])
+    if job["stage"] != "ready":
+        raise F.FactoryError(f"job {job['id']} is at {job['stage']}, not ready")
+    F.fetch_base(root, cfg["base_branch"])
+    now = F.run(["git", "rev-parse", f"origin/{cfg['base_branch']}"], cwd=root).strip()
+    if job.get("spec_base") and job["spec_base"] != now:
+        F.move(job, "spec", f"{cfg['base_branch']} moved since the spec; refresh it")
+        F.write_job(d, job)
+        return f"{job['id']} -> spec (refresh against {cfg['base_branch']}, then job clarify)"
+    F.enter_build(job, d, "picked up by the build lane")
     F.write_job(d, job)
     return f"{job['id']} -> build (round {job['round']})"
 
@@ -359,9 +393,9 @@ def cmd_record(root: Path, cfg: dict, args: list[str]) -> str:
 
 COMMANDS = {
     "queue": (cmd_queue, 0), "labels": (cmd_labels, 0),
-    "create": (cmd_create, 1), "list": (cmd_list, 0), "show": (cmd_show, 1),
+    "create": (cmd_create, 1), "list": (cmd_list, 0), "lane": (cmd_lane, 1), "show": (cmd_show, 1),
     "advance": (cmd_advance, 2), "intake": (cmd_intake, 1), "worktree": (cmd_worktree, 1),
-    "pr": (cmd_pr, 1), "clarify": (cmd_clarify, 1), "answers": (cmd_answers, 1),
+    "pr": (cmd_pr, 1), "clarify": (cmd_clarify, 1), "pickup": (cmd_pickup, 1), "answers": (cmd_answers, 1),
     "tally": (cmd_tally, 1), "decide": (cmd_decide, 1),
     "merge": (cmd_merge, 1), "reject": (cmd_reject, 1), "record": (cmd_record, 3),
 }

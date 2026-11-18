@@ -21,7 +21,8 @@ from pathlib import Path
 TRANSITIONS: dict[str, set[str]] = {
     "intake": {"spec", "needs-info", "rejected"},
     "needs-info": {"intake", "rejected"},
-    "spec": {"build", "needs-input", "needs-human"},
+    "spec": {"ready", "needs-input", "needs-human"},
+    "ready": {"build", "spec", "rejected"},
     "needs-input": {"spec", "rejected"},
     "build": {"gate", "needs-human"},
     "gate": {"review", "build", "recovery"},
@@ -34,6 +35,15 @@ TRANSITIONS: dict[str, set[str]] = {
     "rejected": set(),
 }
 TERMINAL = {"merged", "rejected"}
+CLARIFY_STAGES = {"intake", "needs-info", "spec", "needs-input"}
+WAITING_STAGES = {"needs-info", "needs-input", "needs-human"}
+
+
+def lane(stage: str) -> str:
+    """Which independent lane owns a stage: clarify (no code), build, or done."""
+    if stage in TERMINAL:
+        return "done"
+    return "clarify" if stage in CLARIFY_STAGES else "build"
 
 
 class FactoryError(Exception):
@@ -177,16 +187,16 @@ def open_product_questions(spec_text: str) -> list[str]:
 def enter_build(job: dict, d: Path, note: str = "") -> dict:
     """Move a job into build by hand (`job advance <id> build`), always into a fresh round.
 
-    The first build after spec is round 1. Any later move into build (owner feedback
+    The first build after the spec is cleared is round 1. Any later move into build (owner feedback
     from needs-human, a CI failure while merging, a retry from recovery) is the next
     round, so the earlier round's gate and review files are never overwritten or
     counted again. Owner-driven rounds are not capped by max_rounds. Refuses, changing
     nothing, if the move is illegal, the new round's folder already exists, or (from
-    spec) the spec still has an open product question.
+    ready) the spec still has an open product question.
     """
     if "build" not in TRANSITIONS.get(job["stage"], set()):
         raise FactoryError(f"illegal move {job['stage']} -> build for job {job['id']}")
-    if job["stage"] == "spec":
+    if job["stage"] in ("spec", "ready"):
         spec = d / "spec.md"
         if not spec.exists():
             raise FactoryError(f"no spec.md for job {job['id']}; write the spec first")
