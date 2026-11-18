@@ -212,6 +212,90 @@ class TestTrace(CliTestBase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertNotIn("trace_records", proc.stdout)
 
+    def test_metrics_out(self):
+        import hashlib
+        base = ("--sample-size", "10", "--seed", "3")
+        plain = self.run_cli(*base, out=self.dir / "plain.json")
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        mpath = self.dir / "m.json"
+        proc = self.run_cli(*base, "--metrics-out", str(mpath), "--cohort", "hard_case",
+                            "--run-at", "2026-11-18T10:00:00Z")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, plain.stdout)
+        report = json.loads(self.out.read_text(encoding="utf-8"))
+        raw = mpath.read_text(encoding="utf-8")
+        m = json.loads(raw)
+        self.assertEqual(m["kind"], "gold")
+        self.assertEqual(m["run_at"], "2026-11-18T10:00:00Z")
+        self.assertEqual(m["cohort"], {
+            "name": "hard_case", "split": "dev", "brand_population": "all",
+            "gold_revision": "sha256:" + hashlib.sha256(self.gold.read_bytes()).hexdigest()})
+        self.assertEqual(m["n"], report["threads_scored"])
+        self.assertEqual(m["coverage"]["threads_routed"], report["threads_routed"])
+        self.assertEqual(m["coverage"], {k: report[k] for k in (
+            "threads_routed", "threads_scored", "threads_without_gold",
+            "gold_rows_unmatched")})
+        self.assertEqual(m["sample"], {"size": 10, "seed": 3})
+        self.assertEqual(m["config"]["threshold"], 0.5)
+        self.assertEqual(m["config"]["prices"], report["prices"])
+        ops = m["operations"]
+        self.assertEqual(set(ops["tier_shares"]), set(report["tier_shares"]))
+        for tier, share in ops["tier_shares"].items():
+            self.assertEqual(share["value"], report["tier_shares"][tier], tier)
+            self.assertEqual(share["n"], report["threads_routed"], tier)
+            self.assertEqual(share["ci"], report["tier_shares_ci"][tier], tier)
+        self.assertEqual(ops["cost_per_1000_usd"], report["cost_per_1000_threads"])
+        self.assertTrue(ops["prices_are_placeholders"])
+        self.assertEqual(m["escalation"]["counts"]["fn"], report["missed_escalations"])
+        self.assertNotIn('"ids"', raw)
+        self.assertNotIn("SENTINEL", raw)
+        # the fixture's thread ids are small numbers that also occur as counts, so check
+        # that no id-bearing key or string id appears, plus the distinctive gold-only id
+        self.assertNotIn("thread_id", raw)
+        for line in TWCS_ROWS:
+            self.assertNotIn('"%s"' % line.split(",")[0], raw)
+        self.assertNotIn("424242", raw)
+
+        # together with --trace: trace, report and metrics are all written
+        trace, out2, m2 = self.dir / "t.jsonl", self.dir / "r2.json", self.dir / "m2.json"
+        proc = self.run_cli("--trace", str(trace), "--metrics-out", str(m2), "--cohort",
+                            "gold_random", out=out2)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(proc.stdout.strip().endswith(" trace_records=5"), proc.stdout)
+        for path in (trace, out2, m2):
+            self.assertTrue(path.is_file(), path)
+        self.assertEqual(json.loads(m2.read_text(encoding="utf-8"))["cohort"]["name"],
+                         "gold_random")
+
+    def test_metrics_out_refused_before_anything_is_written(self):
+        trace = self.dir / "t.jsonl"
+        mpath = self.dir / "m.json"
+        variants = {
+            "no cohort": ("--metrics-out", str(mpath)),
+            "bad run-at": ("--metrics-out", str(mpath), "--cohort", "hard_case",
+                           "--run-at", "2026-11-18 10:00:00"),
+            "bad run-at without metrics": ("--run-at", "tomorrow"),
+        }
+        for name, extra in variants.items():
+            with self.subTest(name):
+                proc = self.run_cli("--trace", str(trace), *extra,
+                                    data=self.dir / "missing.csv")
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertTrue(proc.stderr.startswith("error: "), proc.stderr)
+                self.assertEqual(len(proc.stderr.strip().splitlines()), 1, proc.stderr)
+                self.assertNotIn("data file not found", proc.stderr)
+                self.assertFalse(trace.exists())
+                self.assertFalse(self.out.exists())
+                self.assertFalse(mpath.exists())
+
+    def test_metrics_write_failure_exits_2(self):
+        mpath = self.dir / "no_such_dir" / "m.json"
+        proc = self.run_cli("--metrics-out", str(mpath), "--cohort", "gold_random")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(len(proc.stderr.strip().splitlines()), 1, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertFalse(mpath.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
