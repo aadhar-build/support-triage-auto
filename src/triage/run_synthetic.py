@@ -2,7 +2,8 @@
 
 Usage: python3 -m triage.run_synthetic --cases CASES.json --out DIR [--rules RULES.json]
 
-Writes DIR/synthetic_report.json and DIR/synthetic_report.md. Reports and stdout hold only
+Writes DIR/synthetic_report.json, DIR/synthetic_report.md and DIR/metrics.json (synthetic-kind
+`triage.metrics`, stamped with --run-at, default now in UTC). Reports and stdout hold only
 case ids, titles, labels, tier names, confidences, rule ids and counts, never turn, draft or
 brand text. No network calls. Stdout and the reports' summary give rules_loaded, the number of
 policy rules read from --rules. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
@@ -12,12 +13,14 @@ bad input.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from triage import metrics as metrics_mod
 from triage.cheap_tier import CheapTier
 from triage.policy_check import RulesError, check, load_rules
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
@@ -27,6 +30,7 @@ from triage.tiers import ACTIONS, INTENTS, FakeAgentTier, FakeLargerTier
 DEFAULT_RULES_PATH = Path(__file__).resolve().parents[2] / "policies" / "rules.json"
 JSON_NAME = "synthetic_report.json"
 MD_NAME = "synthetic_report.md"
+METRICS_NAME = "metrics.json"
 
 # Made-up values for the in-memory threads. The cheap tier reads only inbound turn text.
 SYNTHETIC_AUTHOR = "synthetic_customer"
@@ -51,7 +55,20 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--cases", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--rules", default=str(DEFAULT_RULES_PATH))
+    p.add_argument("--run-at", default=None,
+                   help="ISO 8601 UTC time ending in Z for metrics.json (default: now)")
     return p
+
+
+def resolve_run_at(value: Optional[str]) -> str:
+    """The given --run-at, checked, or the current UTC time to the second."""
+    if value is None:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        metrics_mod.check_run_at(value)
+    except ValueError as e:
+        raise _Fail("bad --run-at: %s" % e)
+    return value
 
 
 # ---------------------------------------------------------------- loading and validation
@@ -229,7 +246,7 @@ def report_to_markdown(results: list, summary: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write(out_dir: Path, results: list, summary: dict) -> None:
+def _write(out_dir: Path, results: list, summary: dict, metrics_text: str) -> None:
     json_text = json.dumps({"cases": results, "summary": summary},
                            sort_keys=True, indent=2) + "\n"
     md_text = report_to_markdown(results, summary)
@@ -237,11 +254,27 @@ def _write(out_dir: Path, results: list, summary: dict) -> None:
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / JSON_NAME).write_text(json_text, encoding="utf-8")
         (out_dir / MD_NAME).write_text(md_text, encoding="utf-8")
+        (out_dir / METRICS_NAME).write_text(metrics_text, encoding="utf-8")
     except OSError as e:
         raise _Fail("cannot write reports to %s: %s" % (out_dir, e.strerror or e))
 
 
+def _metrics_text(cases_path, results: list, run_at: str) -> str:
+    try:
+        with open(cases_path, "rb") as f:
+            digest = hashlib.sha256(f.read()).hexdigest()
+    except OSError as e:
+        raise _Fail("cannot read cases file %s: %s" % (cases_path, e.strerror or e))
+    cohort = {"name": "synthetic", "split": None, "gold_revision": "sha256:" + digest,
+              "brand_population": "all"}
+    m = metrics_mod.compute(metrics_mod.cases_from_synthetic(results), "synthetic",
+                            run_at=run_at, cohort=cohort, sample={"size": None, "seed": None},
+                            config={"threshold": DEFAULT_CONFIDENCE_THRESHOLD, "prices": None})
+    return metrics_mod.to_json(m)
+
+
 def _run(args) -> dict:
+    run_at = resolve_run_at(args.run_at)
     cases = load_cases(args.cases)
     try:
         rules = load_rules(args.rules)
@@ -249,7 +282,7 @@ def _run(args) -> dict:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
     results = _results(cases, rules)
     summary = _summary(results, len(rules))
-    _write(Path(args.out), results, summary)
+    _write(Path(args.out), results, summary, _metrics_text(args.cases, results, run_at))
     return summary
 
 

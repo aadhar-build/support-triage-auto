@@ -32,6 +32,10 @@ The gold CSV has the columns `thread_id,intent,action,should_escalate`. By defau
 
 Add `--trace PATH` to also write an audit trace: one JSON line per routed thread with the git commit (and a `code_dirty` flag), the threshold, split and seed, each tier's model id and labels, the final labels and the reason codes (`cheap_confident`, `low_confidence_to_larger`, `high_risk_to_larger`). It holds conversation ids only, never tweet text, author ids or brand ids. The path must be outside the repository; the run exits 2 and writes nothing if any record is incomplete.
 
+### Full metrics (`metrics.json`)
+
+Add `--metrics-out PATH --cohort {gold_random,hard_case}` to also write the full metrics as one JSON file (schema `metrics/1`, from `triage.metrics`): escalation counts, rates and F1/F2/F0.5, MCC and balanced accuracy, plus confusion matrices, per-class metrics, macro and weighted averages, accuracy and kappa for action and intent. Every rate carries its n, a Wilson 95% interval and a `directional` mark below n = 30. `--cohort` is required with `--metrics-out`, so one file holds one gold set; the hard-case and random sets are never pooled. `--run-at` (ISO 8601 UTC ending in `Z`, default now) stamps the file. Gold-kind metrics hold no conversation, author or brand ids. `run_synthetic` always writes `DIR/metrics.json` (synthetic kind, with the case ids per confusion cell) and takes the same `--run-at`. `triage.metrics.comparison_key` says whether two files may be compared.
+
 ## Reviewing a synthetic run
 
 After `python3 -m triage.run_synthetic --cases CASES.json --out DIR`, a person can review what the cascade decided for each made-up case:

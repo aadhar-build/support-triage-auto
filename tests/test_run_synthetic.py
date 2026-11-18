@@ -54,13 +54,14 @@ class RunSyntheticTestBase(unittest.TestCase):
         path.write_text(json.dumps({"version": "test", "cases": cases}), encoding="utf-8")
         return path
 
-    def run_cli(self, cases_path, rules=None, out=None):
+    def run_cli(self, cases_path, rules=None, out=None, extra=()):
         env = dict(os.environ)
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
         args = [sys.executable, "-m", "triage.run_synthetic",
                 "--cases", str(cases_path),
                 "--out", str(out or self.out),
                 "--rules", str(rules or self.rules)]
+        args.extend(extra)
         return subprocess.run(args, cwd=str(self.dir), env=env, capture_output=True,
                               text=True, timeout=60)
 
@@ -309,6 +310,43 @@ class TestRunSynthetic(RunSyntheticTestBase):
                 self.assertEqual(proc.stdout, "")
                 self.assertFalse((out / "synthetic_report.json").exists())
                 self.assertFalse((out / "synthetic_report.md").exists())
+
+    def test_writes_metrics(self):
+        import hashlib
+        path = self.dir / "fixture_cases.json"
+        path.write_bytes(FIXTURE_CASES.read_bytes())
+        plain_out = self.dir / "plain"
+        plain = self.run_cli(path, out=plain_out)
+        proc = self.run_cli(path, extra=("--run-at", "2026-11-18T10:00:00Z"))
+        self.assertEqual(proc.returncode, plain.returncode, proc.stderr)
+        self.assertEqual(proc.stdout, plain.stdout)
+        report = self.report_json()
+        metrics = json.loads((self.out / "metrics.json").read_text(encoding="utf-8"))
+        self.assertEqual(metrics["kind"], "synthetic")
+        self.assertEqual(metrics["schema_version"], "metrics/1")
+        self.assertEqual(metrics["run_at"], "2026-11-18T10:00:00Z")
+        self.assertEqual(metrics["n"], report["summary"]["cases_run"])
+        self.assertEqual(metrics["cohort"], {
+            "name": "synthetic", "split": None, "brand_population": "all",
+            "gold_revision": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()})
+        self.assertEqual(metrics["sample"], {"size": None, "seed": None})
+        self.assertEqual(metrics["config"], {"threshold": 0.5, "prices": None})
+        self.assertIsNone(metrics["coverage"])
+        self.assertIsNone(metrics["operations"])
+        self.assertIn("ids", metrics["action"])
+        # the existing report files are unchanged by the metrics file
+        for name in ("synthetic_report.json", "synthetic_report.md"):
+            self.assertEqual((self.out / name).read_bytes(), (plain_out / name).read_bytes())
+        self.assertTrue((plain_out / "metrics.json").is_file())
+
+        for bad in ("2026-11-18T10:00:00", "yesterday", "2026-13-40T10:00:00Z"):
+            with self.subTest(run_at=bad):
+                out = self.dir / ("bad-" + bad.replace(":", "-"))
+                proc = self.run_cli(path, out=out, extra=("--run-at", bad))
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertEqual(len(proc.stderr.splitlines()), 1, proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertFalse(out.exists())
 
     def test_tests_do_not_read_owner_files(self):
         source = Path(__file__).read_text(encoding="utf-8")
