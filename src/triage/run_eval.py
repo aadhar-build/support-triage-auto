@@ -7,14 +7,21 @@ No network calls and no keys. The only file written is --out, plus the audit tra
 written before the report), plus gold-kind `triage.metrics` when --metrics-out PATH is given
 (with a required --cohort; written last). Default prices are placeholders, not real prices.
 The always-escalate topics come from --rules (default policies/rules.json), loaded before any
-data; a missing or empty topic list exits 2. Stdout ends with topics_loaded=<n> (before
-trace_records=<n> when a trace is written).
+data; a missing or empty topic list exits 2. Stdout gives topics_loaded=<n>, then
+brand=<name|none> rules_loaded=<n> repeat_contact=<on|off> (before trace_records=<n> when a
+trace is written).
+With --brand NAME the rules come from brands/NAME/guidelines.md instead of --rules, and only
+the split's threads attributed to NAME at their last inbound turn are sampled and routed
+(context_signals.brand_attribution). Stdout then also gives brand_threads, excluded_threads,
+excluded_other_brand and excluded_unattributed (over the whole split, before sampling), and
+the report gains a "brand" object. --brand cannot be combined with --metrics-out.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
 import random
 import sys
@@ -22,10 +29,12 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from triage import metrics as metrics_mod
+from triage.brand_rules import add_rules_args, load_rules_source
 from triage.cheap_tier import CheapTier
+from triage.context_signals import brand_attribution
 from triage.evaluate import GoldFileError, load_gold, report_to_json, report_to_markdown, score
 from triage.loader import HeaderError
-from triage.policy_check import RulesError, load_escalate_topics, rules_version
+from triage.policy_check import RulesError
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
 from triage.split import DEFAULT_SPLIT_PATH, SPLIT_NAMES, SplitConfigError, load_split_config, \
     split_threads
@@ -36,6 +45,7 @@ from triage.trace import REPO_ROOT, RunInfo, TraceError, build_record, check_tra
 
 DEFAULT_DATA = "data/raw/twcs.csv"
 DEFAULT_RULES_PATH = REPO_ROOT / "policies" / "rules.json"
+ATTRIBUTION = "first-tweet mention or brand reply known at the last inbound turn"
 
 
 class _Fail(Exception):
@@ -53,8 +63,7 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--format", choices=("json", "md"), default="json")
     p.add_argument("--split", choices=SPLIT_NAMES, default="dev")
     p.add_argument("--split-config", default=str(DEFAULT_SPLIT_PATH))
-    p.add_argument("--rules", default=str(DEFAULT_RULES_PATH),
-                   help="rules file whose escalate_always topics force escalation")
+    add_rules_args(p, DEFAULT_RULES_PATH)
     p.add_argument("--threshold", type=float, default=DEFAULT_CONFIDENCE_THRESHOLD)
     p.add_argument("--price-cheap", type=float, default=PLACEHOLDER_PRICES["cheap"])
     p.add_argument("--price-larger", type=float, default=PLACEHOLDER_PRICES["larger"])
@@ -100,6 +109,38 @@ def _metrics_text(args, routed, gold, report, prices, run_at: str, gold_digest: 
     return metrics_mod.to_json(m)
 
 
+BRAND_COUNT_KEYS = ("brand_threads", "excluded_threads", "excluded_other_brand",
+                    "excluded_unattributed")
+
+
+def _select_brand(kept, threads, brand):
+    """The split's threads attributed to `brand`, and the counts over the whole split."""
+    known = set()
+    for t in threads:
+        known.update(t.brand_ids)
+    labels = [brand_attribution(t, brand, known) for t in kept]
+    selected = [t for t, label in zip(kept, labels) if label == "brand"]
+    other = labels.count("other_brand")
+    unattributed = labels.count("unattributed")
+    counts = {"name": brand, "brand_threads": len(selected),
+              "excluded_threads": other + unattributed, "excluded_other_brand": other,
+              "excluded_unattributed": unattributed, "attribution": ATTRIBUTION}
+    return selected, counts
+
+
+def _with_brand(text: str, fmt: str, counts: dict) -> str:
+    """Add the brand population to a rendered report."""
+    if fmt == "json":
+        data = json.loads(text)
+        data["brand"] = counts
+        return json.dumps(data, sort_keys=True, indent=2) + "\n"
+    lines = ["", "## Brand population", "", "| field | value |", "| --- | --- |",
+             "| brand | %s |" % counts["name"]]
+    lines += ["| %s | %d |" % (k, counts[k]) for k in BRAND_COUNT_KEYS]
+    lines += ["| attribution | %s |" % counts["attribution"]]
+    return text.rstrip("\n") + "\n" + "\n".join(lines) + "\n"
+
+
 def _run(args) -> str:
     if args.sample_size < 1:
         raise _Fail("--sample-size must be at least 1, got %d" % args.sample_size)
@@ -111,12 +152,16 @@ def _run(args) -> str:
             raise _Fail("--price-%s must be a finite number >= 0, got %r" % (name, price))
     if args.metrics_out is not None and args.cohort is None:
         raise _Fail("--cohort is required with --metrics-out")
+    if args.metrics_out is not None and args.brand is not None:
+        raise _Fail("--metrics-out is not supported with --brand (metrics cohorts cover "
+                    "brand_population \"all\" only)")
     run_at = _resolve_run_at(args.run_at)
     if args.trace is not None:
         check_trace_path(args.trace)
     try:
-        topics = load_escalate_topics(args.rules)
-        rules_ver = rules_version(args.rules) if args.trace is not None else None
+        label, effective = load_rules_source(args)
+        topics = effective.topics
+        rules_ver = effective.version if args.trace is not None else None
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
 
@@ -152,6 +197,12 @@ def _run(args) -> str:
     mapping, _ = split_threads(threads, config)
     kept = sorted((t for t in threads if mapping[t.root_tweet_id] == args.split),
                   key=lambda t: t.root_tweet_id)
+    brand_counts = None
+    if args.brand is not None:
+        kept, brand_counts = _select_brand(kept, threads, args.brand)
+        if not kept:
+            raise _Fail("no threads in split %s are attributed to brand %s"
+                        % (args.split, args.brand))
     sample = random.Random(args.seed).sample(kept, min(args.sample_size, len(kept)))
 
     routed = route_threads(sample, CheapTier(prices["cheap"]), FakeLargerTier(
@@ -160,6 +211,8 @@ def _run(args) -> str:
     report = score(routed, gold, prices, sample_size=args.sample_size, seed=args.seed,
                    split=args.split, threshold=args.threshold)
     text = report_to_json(report) if args.format == "json" else report_to_markdown(report)
+    if brand_counts is not None:
+        text = _with_brand(text, args.format, brand_counts)
     trace_records = None
     if args.trace is not None:
         commit, dirty = code_version(REPO_ROOT)
@@ -184,6 +237,10 @@ def _run(args) -> str:
                % (report.threads_routed, report.threads_scored, report.threads_without_gold,
                   report.gold_rows_unmatched, args.split))
     summary += " topics_loaded=%d" % len(topics)
+    summary += " brand=%s rules_loaded=%d repeat_contact=%s" % (
+        label, len(effective.rules), "on" if effective.repeat_contact is not None else "off")
+    if brand_counts is not None:
+        summary += "".join(" %s=%d" % (k, brand_counts[k]) for k in BRAND_COUNT_KEYS)
     if trace_records is not None:
         summary += " trace_records=%d" % trace_records
     return summary
