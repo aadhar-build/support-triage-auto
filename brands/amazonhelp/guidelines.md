@@ -1,0 +1,202 @@
+# AmazonHelp guidelines
+
+Draft rules, not official and not affiliated with the brand.
+
+## Voice and tone
+
+## Always say
+
+## Never say
+
+## When to escalate
+
+## Enforced rules
+
+Only the rules block below is enforced; the prose above never changes behaviour.
+
+```rules
+{
+  "version": "v1.2-draft",
+  "status": "DRAFT for Aadhar's approval (18 Nov 2026): escalate_always as matchable topics (#37), repeat_contact rule (#22). Owner-owned and protected: agents never edit this file.",
+  "public_reply_rules": [
+    {
+      "id": "no-refund-promise",
+      "type": "banned_phrase",
+      "description": "A public reply never promises a refund, compensation, credit or replacement. A person decides those.",
+      "phrases": [
+        "we will refund",
+        "we'll refund",
+        "you will get a refund",
+        "you'll get a refund",
+        "full refund",
+        "we will compensate",
+        "we'll compensate",
+        "compensation",
+        "we will credit",
+        "we'll credit",
+        "free replacement",
+        "we will replace",
+        "we'll replace"
+      ]
+    },
+    {
+      "id": "no-liability-admission",
+      "type": "banned_phrase",
+      "description": "A public reply never admits legal fault or liability.",
+      "phrases": [
+        "our fault",
+        "we are liable",
+        "we're liable",
+        "we accept liability",
+        "we admit"
+      ]
+    },
+    {
+      "id": "no-pii-echo",
+      "type": "pii_echo",
+      "description": "A public reply never contains a card number (13-19 digits, Luhn-valid), and never repeats an email address or phone number the customer posted. The brand's own support contacts are allowed.",
+      "detect": [
+        "card_number",
+        "email_from_customer",
+        "phone_from_customer"
+      ]
+    },
+    {
+      "id": "no-sensitive-request",
+      "type": "banned_phrase",
+      "description": "A public reply never asks for card details, a password, a PIN or a security code. Ask the customer to DM instead.",
+      "phrases": [
+        "card number",
+        "card details",
+        "your password",
+        "your pin",
+        "security code",
+        "cvv",
+        "cvc"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "legal-regulator-press",
+      "description": "A threat of legal action, a regulator complaint or press involvement",
+      "phrases": [
+        "lawyer",
+        "attorney",
+        "solicitor",
+        "sue you",
+        "suing",
+        "lawsuit",
+        "legal action",
+        "small claims",
+        "court",
+        "regulator",
+        "ombudsman",
+        "trading standards",
+        "better business bureau",
+        "ftc",
+        "fcc",
+        "journalist",
+        "reporter",
+        "going to the press",
+        "contact the media"
+      ]
+    },
+    {
+      "id": "fraud-hacked-charges",
+      "description": "A hacked account, fraud, or unrecognised charges",
+      "phrases": [
+        "hacked",
+        "hacker",
+        "fraud",
+        "fraudulent",
+        "scam",
+        "scammed",
+        "stolen",
+        "identity theft",
+        "unauthorised charge",
+        "unauthorized charge",
+        "unrecognised charge",
+        "unrecognized charge",
+        "didn't authorise",
+        "didn't authorize",
+        "someone used my card",
+        "someone logged into my account"
+      ]
+    },
+    {
+      "id": "safety-risk",
+      "description": "A safety risk to a person (injury, danger, self-harm)",
+      "phrases": [
+        "injured",
+        "injury",
+        "hurt me",
+        "burned",
+        "caught fire",
+        "on fire",
+        "smoke coming",
+        "exploded",
+        "electric shock",
+        "dangerous",
+        "unsafe",
+        "choking",
+        "allergic reaction",
+        "hospital",
+        "self harm",
+        "self-harm",
+        "suicide",
+        "kill myself"
+      ]
+    },
+    {
+      "id": "refund-compensation-demand",
+      "description": "A demand for a refund or compensation",
+      "phrases": [
+        "i want a refund",
+        "want a full refund",
+        "want my refund",
+        "demand a refund",
+        "demanding a refund",
+        "refund me",
+        "give me a refund",
+        "want my money back",
+        "give me my money back",
+        "demand compensation",
+        "expect compensation",
+        "want compensation",
+        "compensate me",
+        "reimburse me",
+        "credit my account",
+        "file a chargeback",
+        "filing a chargeback",
+        "dispute the charge"
+      ]
+    },
+    {
+      "id": "credentials-posted-publicly",
+      "description": "The customer posted a card number, password or ID in public",
+      "phrases": [
+        "my card number is",
+        "card number:",
+        "my password is",
+        "password:",
+        "my pin is",
+        "security code is",
+        "cvv",
+        "my passport number",
+        "my ssn",
+        "social security number",
+        "my id number is"
+      ],
+      "note": "Phrases catch the wording; an actual card number in the text is also caught by the card_number detector of no-pii-echo, reused by the router."
+    }
+  ],
+  "repeat_contact": {
+    "window_days": 7,
+    "min_conversations": 3,
+    "effect": "escalate",
+    "report_window_hours": 72,
+    "note": "Owner decisions 18 Nov: 7-day window, 72h reported alongside. 3 or more conversations from the same customer to the same brand inside the window escalates the latest one."
+  }
+}
+```
