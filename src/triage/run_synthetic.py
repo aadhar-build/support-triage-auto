@@ -1,6 +1,7 @@
 """Run made-up conversations through the cascade and check them against expected labels.
 
 Usage: python3 -m triage.run_synthetic --cases CASES.json --out DIR [--rules RULES.json]
+                                       [--run-at TIME] [--trace PATH]
 
 Writes DIR/synthetic_report.json, DIR/synthetic_report.md and DIR/metrics.json (synthetic-kind
 `triage.metrics`, stamped with --run-at, default now in UTC). Reports and stdout hold only
@@ -8,6 +9,9 @@ case ids, titles, labels, tier names, confidences, rule ids and counts, never tu
 brand text. No network calls. Stdout and the reports' summary give rules_loaded, the number of
 policy rules read from --rules. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
 bad input.
+With --trace PATH it also writes one audit trace record per case (split "synthetic",
+thread_id = 1-based case position) to PATH outside the repository, before any report; if the
+trace can't be written, no report is written either.
 """
 
 from __future__ import annotations
@@ -26,6 +30,8 @@ from triage.policy_check import RulesError, check, load_rules
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
 from triage.threads import Thread, Turn
 from triage.tiers import ACTIONS, INTENTS, FakeAgentTier, FakeLargerTier
+from triage.trace import REPO_ROOT, RunInfo, TraceError, build_record, check_trace_path, \
+    code_version, write_trace
 
 DEFAULT_RULES_PATH = Path(__file__).resolve().parents[2] / "policies" / "rules.json"
 JSON_NAME = "synthetic_report.json"
@@ -57,6 +63,8 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--rules", default=str(DEFAULT_RULES_PATH))
     p.add_argument("--run-at", default=None,
                    help="ISO 8601 UTC time ending in Z for metrics.json (default: now)")
+    p.add_argument("--trace", default=None,
+                   help="write an audit trace (JSON lines) to this path outside the repo")
     return p
 
 
@@ -168,10 +176,13 @@ def _thread(position: int, c: dict) -> Thread:
                   brand_replied=any(not t.inbound for t in turns))
 
 
-def _results(cases: list, rules) -> list:
+def _route(cases: list) -> list:
     threads = [_thread(i, c) for i, c in enumerate(cases, start=1)]
-    routed = route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
-                           threshold=DEFAULT_CONFIDENCE_THRESHOLD)
+    return route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
+                         threshold=DEFAULT_CONFIDENCE_THRESHOLD)
+
+
+def _results(cases: list, rules, routed: list) -> list:
     results = []
     for c, r in zip(cases, routed):
         exp = c["expected"]
@@ -273,29 +284,48 @@ def _metrics_text(cases_path, results: list, run_at: str) -> str:
     return metrics_mod.to_json(m)
 
 
-def _run(args) -> dict:
+def _trace(path, routed: list) -> int:
+    commit, dirty = code_version(REPO_ROOT)
+    # Synthetic runs sample nothing (seed 0); no rules version yet and no drift config.
+    run = RunInfo(code_version=commit, code_dirty=dirty, rules_version=None,
+                  drift_config_version=None, threshold=DEFAULT_CONFIDENCE_THRESHOLD,
+                  split="synthetic", seed=0)
+    return write_trace(path, (build_record(r, run) for r in routed))
+
+
+def _run(args) -> tuple:
+    if args.trace is not None:
+        check_trace_path(args.trace)
     run_at = resolve_run_at(args.run_at)
     cases = load_cases(args.cases)
     try:
         rules = load_rules(args.rules)
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
-    results = _results(cases, rules)
+    routed = _route(cases)
+    results = _results(cases, rules, routed)
     summary = _summary(results, len(rules))
-    _write(Path(args.out), results, summary, _metrics_text(args.cases, results, run_at))
-    return summary
+    metrics_text = _metrics_text(args.cases, results, run_at)
+    trace_records = None
+    if args.trace is not None:
+        trace_records = _trace(args.trace, routed)
+    _write(Path(args.out), results, summary, metrics_text)
+    return summary, trace_records
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        summary = _run(args)
-    except _Fail as e:
+        summary, trace_records = _run(args)
+    except (_Fail, TraceError) as e:
         print("error: %s" % " ".join(str(e).split()), file=sys.stderr)
         return 2
-    print("cases=%d passed=%d failed=%d must_pass_failures=%d rules_loaded=%d"
-          % (summary["cases_run"], summary["passed"], summary["failed"],
-             summary["must_pass_failures"], summary["rules_loaded"]))
+    line = ("cases=%d passed=%d failed=%d must_pass_failures=%d rules_loaded=%d"
+            % (summary["cases_run"], summary["passed"], summary["failed"],
+               summary["must_pass_failures"], summary["rules_loaded"]))
+    if trace_records is not None:
+        line += " trace_records=%d" % trace_records
+    print(line)
     return 1 if summary["must_pass_failures"] else 0
 
 
