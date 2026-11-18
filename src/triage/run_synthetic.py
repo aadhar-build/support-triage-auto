@@ -179,7 +179,7 @@ def _thread(position: int, c: dict) -> Thread:
 def _route(cases: list) -> list:
     threads = [_thread(i, c) for i, c in enumerate(cases, start=1)]
     return route_threads(threads, CheapTier(), FakeLargerTier(), FakeAgentTier(),
-                         threshold=DEFAULT_CONFIDENCE_THRESHOLD)
+                         threshold=DEFAULT_CONFIDENCE_THRESHOLD, topics=())
 
 
 def _results(cases: list, rules, routed: list) -> list:

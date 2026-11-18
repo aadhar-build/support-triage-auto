@@ -144,7 +144,7 @@ def _run(args) -> str:
 
     routed = route_threads(sample, CheapTier(prices["cheap"]), FakeLargerTier(
         price_per_call=prices["larger"]), FakeAgentTier(prices["agent"]),
-        threshold=args.threshold)
+        threshold=args.threshold, topics=())
     report = score(routed, gold, prices, sample_size=args.sample_size, seed=args.seed,
                    split=args.split, threshold=args.threshold)
     text = report_to_json(report) if args.format == "json" else report_to_markdown(report)

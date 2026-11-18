@@ -6,12 +6,14 @@ The live policies/rules.json is loaded only as a schema smoke test, never as an 
 
 import ast
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from triage.policy_check import Rule, RulesError, Violation, check, is_safe_to_send, load_rules
+from triage.policy_check import Rule, RulesError, Topic, Violation, check, is_safe_to_send, \
+    load_escalate_topics, load_rules, matched_topics, rules_version
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "policy_rules.json"
@@ -88,6 +90,117 @@ class TestLoadRules(unittest.TestCase):
     def test_live_rules_file_loads(self):
         # Schema-compatibility smoke test only: no assertions about the owner's content.
         load_rules(REPO_ROOT / "policies" / "rules.json")
+
+
+def _topic(topic_id, *phrases, **extra):
+    return dict({"id": topic_id, "description": "made up", "phrases": list(phrases)}, **extra)
+
+
+class TestLoadTopics(unittest.TestCase):
+    def test_loads_fixture_in_file_order(self):
+        topics = load_escalate_topics(FIXTURE)
+        self.assertEqual([(t.id, t.phrases) for t in topics], [
+            ("t-zorblax", ("zorblax claim", "quuxfrob")),
+            ("t-florp", ("can't florp", "wibblewarp")),
+        ])
+        self.assertTrue(all(isinstance(t, Topic) for t in topics))
+        self.assertEqual(load_escalate_topics(str(FIXTURE)), topics)
+
+    def test_extra_keys_ignored(self):
+        # The fixture's second topic carries a 'note' key.
+        self.assertEqual(load_escalate_topics(FIXTURE)[1].id, "t-florp")
+
+    def test_errors(self):
+        good = _topic("t-ok", "x")
+        cases = [
+            # (name, file text or None for a missing file, text the message must also name)
+            ("missing file", None, None),
+            ("invalid json", "{not json", None),
+            ("top level not an object", json.dumps([good]), None),
+            ("no escalate_always", json.dumps({"version": "x"}), "escalate_always"),
+            ("empty escalate_always", json.dumps({"escalate_always": []}),
+             "'escalate_always' is empty; at least one topic is required"),
+            ("escalate_always not a list", json.dumps({"escalate_always": {"id": "t-ok"}}),
+             "escalate_always"),
+            ("item not an object", json.dumps({"escalate_always": [good, "free text"]}),
+             "index 1"),
+            ("missing id", json.dumps({"escalate_always": [{"phrases": ["x"]}]}), "index 0"),
+            ("empty id", json.dumps({"escalate_always": [_topic("", "x")]}), "index 0"),
+            ("duplicate id", json.dumps({"escalate_always": [good, good]}), "t-ok"),
+            ("non-kebab id", json.dumps({"escalate_always": [_topic("Bad_Id", "x")]}), "Bad_Id"),
+            ("id starting with a dash", json.dumps({"escalate_always": [_topic("-x", "x")]}),
+             "-x"),
+            ("missing phrases", json.dumps({"escalate_always": [{"id": "t-np"}]}), "t-np"),
+            ("phrases not a list", json.dumps({"escalate_always": [
+                {"id": "t-np", "phrases": "x"}]}), "t-np"),
+            ("empty phrases", json.dumps({"escalate_always": [_topic("t-np")]}), "t-np"),
+            ("empty phrase", json.dumps({"escalate_always": [_topic("t-np", "x", "")]}), "t-np"),
+            ("non-string phrase", json.dumps({"escalate_always": [_topic("t-np", "x", 3)]}),
+             "t-np"),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            for i, (name, text, named) in enumerate(cases):
+                with self.subTest(name):
+                    path = Path(tmp) / ("rules_%d.json" % i)
+                    if text is not None:
+                        path.write_text(text, encoding="utf-8")
+                    with self.assertRaises(RulesError) as ctx:
+                        load_escalate_topics(path)
+                    message = str(ctx.exception)
+                    self.assertIn(str(path), message)
+                    if named is not None:
+                        self.assertIn(named, message)
+
+    def test_rules_version(self):
+        self.assertEqual(rules_version(FIXTURE), "test-fixture")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "rules.json"
+            path.write_text(json.dumps({"escalate_always": []}), encoding="utf-8")
+            self.assertIsNone(rules_version(path))
+            with self.assertRaises(RulesError):
+                rules_version(Path(tmp) / "missing.json")
+
+
+class TestLiveConformance(unittest.TestCase):
+    @unittest.skipUnless(os.environ.get("TRIAGE_CONFORMANCE") == "1",
+                         "set TRIAGE_CONFORMANCE=1 to check the live owner files")
+    def test_live_topics_load(self):
+        # Schema check only, never an oracle for the owner's content.
+        self.assertTrue(load_escalate_topics(REPO_ROOT / "policies" / "rules.json"))
+
+
+TOPICS = load_escalate_topics(FIXTURE)
+
+
+class TestMatchedTopics(unittest.TestCase):
+    def test_inbound_phrase_matches(self):
+        self.assertEqual(matched_topics(["hello, quuxfrob please"], TOPICS), ("t-zorblax",))
+
+    def test_no_match(self):
+        self.assertEqual(matched_topics(["hello there"], TOPICS), ())
+        self.assertEqual(matched_topics([], TOPICS), ())
+        self.assertEqual(matched_topics(["quuxfrob"], ()), ())
+
+    def test_case_insensitive(self):
+        self.assertEqual(matched_topics(["QuuxFROB now"], TOPICS), ("t-zorblax",))
+
+    def test_word_boundary(self):
+        self.assertEqual(matched_topics(["superquuxfrob", "quuxfrobs", "xzorblax claim"],
+                                        TOPICS), ())
+
+    def test_apostrophe_style(self):
+        self.assertEqual(matched_topics(["I can\u2019t florp"], TOPICS), ("t-florp",))
+
+    def test_whitespace_run(self):
+        self.assertEqual(matched_topics(["a zorblax \n\t  claim"], TOPICS), ("t-zorblax",))
+
+    def test_each_id_once_in_file_order(self):
+        turns = ["wibblewarp quuxfrob", "zorblax claim", "can't florp"]
+        self.assertEqual(matched_topics(turns, TOPICS), ("t-zorblax", "t-florp"))
+
+    def test_only_given_turns_are_checked(self):
+        # The caller passes inbound turns only; brand text never reaches this function.
+        self.assertEqual(matched_topics(["thanks"], TOPICS), ())
 
 
 RULES = load_rules(FIXTURE)
@@ -297,6 +410,17 @@ class TestModuleHygiene(unittest.TestCase):
                 top = mod.split(".")[0]
                 self.assertNotIn(top, banned, mod)
                 self.assertTrue(top == "triage" or top in stdlib, "imports non-stdlib %s" % mod)
+
+    def test_no_topic_strings_in_source(self):
+        fixture_strings = [s for path in (FIXTURE, FIXTURE.parent / "policy_rules_alt_topics.json")
+                           for t in load_escalate_topics(path) for s in (t.id,) + t.phrases]
+        live_ids = ["legal-regulator-press", "fraud-hacked-charges", "safety-risk",
+                    "refund-compensation-demand", "credentials-posted-publicly"]
+        for name in ("policy_check.py", "router.py"):
+            src = (REPO_ROOT / "src" / "triage" / name).read_text(encoding="utf-8").lower()
+            for text in fixture_strings + live_ids:
+                with self.subTest(module=name, text=text):
+                    self.assertNotIn(text.lower(), src)
 
 
 if __name__ == "__main__":

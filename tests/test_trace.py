@@ -37,7 +37,7 @@ RUN = RunInfo(code_version="a" * 40, code_dirty=False, rules_version=None,
 def routed(root_id=21, text="hello SENTINEL_TEXT"):
     turn = Turn(root_id, "cust_SENTINEL", True, T0, text)
     t = Thread(root_tweet_id=root_id, brand_ids=(99,), turns=(turn,), brand_replied=False)
-    return route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier())
+    return route_thread(t, CheapTier(), FakeLargerTier(), FakeAgentTier(), topics=())
 
 
 def record(root_id=21):
