@@ -60,6 +60,8 @@ class FakeChangeClient(pc.ChangeClient):
         self.calls = []
         self.worktree = None
         self.pr_body = None
+        self.committed = {}
+        self.base_overrides = {}  # rel path -> bytes at the captured base, if not the repo's
 
     def _record(self, name, *args):
         self.calls.append((name,) + args)
@@ -78,10 +80,14 @@ class FakeChangeClient(pc.ChangeClient):
             if src.exists():
                 (self.worktree / rel).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, self.worktree / rel)
+        for rel, data in self.base_overrides.items():
+            (self.worktree / rel).parent.mkdir(parents=True, exist_ok=True)
+            (self.worktree / rel).write_bytes(data)
         return self.worktree
 
     def commit(self, paths, message):
         self._record("commit", tuple(paths))
+        self.committed = {p: (self.worktree / p).read_bytes() for p in paths}
 
     def verify(self, branch, base_sha, paths):
         self._record("verify", branch, base_sha, tuple(paths))
@@ -94,10 +100,13 @@ class FakeChangeClient(pc.ChangeClient):
         self.pr_body = body
         return "https://example.invalid/pr/1"
 
-    def remove_worktree(self):
-        self._record("remove_worktree")
+    def remove_worktree(self, force=False):
+        self._record("remove_worktree", force)
         if self.worktree is not None:
             shutil.rmtree(self.worktree, ignore_errors=True)
+
+    def delete_branch(self, branch, base_sha):
+        self._record("delete_branch", branch, base_sha)
 
     def names(self):
         return [c[0] for c in self.calls]
@@ -556,6 +565,78 @@ class TestFailure(Base):
         self.assertEqual(self.snapshot(), files_before)
 
 
+class TestCommittedBytes(Base):
+    """Round 2: the bytes committed are the bytes validated and previewed, even if the
+    proposed file changes on disk while the owner is being asked to confirm."""
+
+    def test_file_rewritten_during_confirm_is_not_committed(self):
+        proposed = self.tmp / "proposed.json"
+        shutil.copyfile(REPEAT, proposed)
+        validated = proposed.read_bytes()
+
+        def confirm_then_tamper(prompt):
+            proposed.write_text('{"public_reply_rules": []}', encoding="utf-8")
+            return True
+
+        code, _, err = self.run_main("--rules", str(proposed), confirm=confirm_then_tamper)
+        self.assertEqual(code, 0, err)
+        self.assertEqual(self.client.committed["policies/rules.json"], validated)
+
+
+class TestStaleCheckout(Base):
+    """Round 2: the preview is computed from the owner's checkout but the commit is built on
+    the captured base; refuse when a file being changed differs between the two."""
+
+    def test_refuses_when_changed_file_differs_at_base(self):
+        for name, rel, argv in (
+                ("rules", "policies/rules.json", ("--rules", str(REPEAT))),
+                ("thresholds", "evals/thresholds.json", ("--threshold", "0.7"))):
+            with self.subTest(name):
+                self.client = FakeChangeClient(self.repo)
+                self.client.base_overrides = {rel: b'{"newer": "on main"}\n'}
+                before = self.snapshot()
+                code, _, err = self.run_main(*argv)
+                self.assertEqual(code, 2)
+                self.assertEqual(len(err.strip().splitlines()), 1, err)
+                self.assertIn("update your checkout", err)
+                self.assertIn(rel, err)
+                self.assertEqual(self.client.names(), ["capture_base", "add_worktree",
+                                                       "remove_worktree", "delete_branch"])
+                self.assertEqual(self.snapshot(), before)
+
+    def test_file_not_being_changed_may_differ_at_base(self):
+        for name, rel, argv in (
+                ("threshold-only, rules newer", "policies/rules.json", ("--threshold", "0.7")),
+                ("rules-only, thresholds newer", "evals/thresholds.json",
+                 ("--rules", str(REPEAT)))):
+            with self.subTest(name):
+                self.client = FakeChangeClient(self.repo)
+                self.client.base_overrides = {rel: b'{"newer": "on main"}\n'}
+                code, _, err = self.run_main(*argv)
+                self.assertEqual(code, 0, err)
+                self.assertIn("create_draft_pr", self.client.names())
+
+
+class TestFailedCommitCleanup(Base):
+    """Round 2: a failed commit force-removes the temp worktree and deletes the local
+    policy-change branch it created; a failure after the commit keeps the branch."""
+
+    def test_failed_commit(self):
+        self.client.fail_on = {"commit"}
+        code, _, err = self.run_main("--threshold", "0.7")
+        self.assertEqual(code, 2)
+        _, branch, base = self.client.calls[1]
+        self.assertEqual(self.client.calls[-2:], [("remove_worktree", True),
+                                                  ("delete_branch", branch, base)])
+
+    def test_failure_after_commit_keeps_branch(self):
+        self.client.fail_on = {"push"}
+        code, _, _ = self.run_main("--threshold", "0.7")
+        self.assertEqual(code, 2)
+        self.assertEqual(self.client.calls[-1], ("remove_worktree", False))
+        self.assertNotIn("delete_branch", self.client.names())
+
+
 class TestRealClientArgs(unittest.TestCase):
     BRANCH = "factory/policy-change-20261119T101500Z"
 
@@ -600,6 +681,23 @@ class TestRealClientArgs(unittest.TestCase):
         names = [n.lower() for n in dir(pc.ChangeClient)] + \
             [n.lower() for n in dir(pc.GitGhClient)]
         self.assertFalse([n for n in names if "merge" in n or "approve" in n])
+
+    def test_cleanup_argv(self):
+        base = "f" * 40
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("triage.propose_change.subprocess.run") as run:
+            run.side_effect = lambda argv, **kw: subprocess.CompletedProcess(argv, 0, "", "")
+            client = pc.GitGhClient(Path(tmp) / "repo")
+            client._tmp_parent = Path(tmp) / "policy-change-x"
+            client.worktree = client._tmp_parent / "worktree"
+            client.remove_worktree(force=True)
+            client.delete_branch(self.BRANCH, base)
+            with self.assertRaises(pc.ChangeError):
+                client.delete_branch("main", base)
+        argvs = [c.args[0] for c in run.call_args_list]
+        self.assertEqual(argvs, [
+            ["git", "worktree", "remove", "--force", str(client.worktree)],
+            ["git", "update-ref", "-d", "refs/heads/" + self.BRANCH, base]])
 
     def test_push_refuses_main(self):
         with mock.patch("triage.propose_change.subprocess.run") as run:

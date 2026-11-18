@@ -93,8 +93,13 @@ class ChangeClient(ABC):
         """Open a draft PR from `branch` into `base`; return its URL."""
 
     @abstractmethod
-    def remove_worktree(self) -> None:
-        """Remove the temporary worktree."""
+    def remove_worktree(self, force: bool = False) -> None:
+        """Remove the temporary worktree; `force` only after a failed commit (it is dirty)."""
+
+    @abstractmethod
+    def delete_branch(self, branch: str, base_sha: str) -> None:
+        """Delete the local policy-change `branch` only while it still points at `base_sha`
+        (nothing was committed on it). Used only after a failed commit."""
 
 
 def check_push_ready(head_ref, parents, changed_paths, base_sha, branch, written_paths) -> None:
@@ -200,14 +205,24 @@ class GitGhClient(ChangeClient):
             Path(body_file).unlink(missing_ok=True)
         return out.stdout.strip()
 
-    def remove_worktree(self) -> None:
+    def remove_worktree(self, force=False) -> None:
         if self.worktree is None or self._tmp_parent is None:
             return
-        self._run(["git", "worktree", "remove", str(self.worktree)], self.repo)
+        if self.worktree != self._tmp_parent / "worktree":
+            raise ChangeError("refusing to remove %s: not this run's temporary worktree"
+                              % self.worktree)
+        self._run(["git", "worktree", "remove"] + (["--force"] if force else [])
+                  + [str(self.worktree)], self.repo)
         try:
             self._tmp_parent.rmdir()
         except OSError:
             pass
+
+    def delete_branch(self, branch, base_sha) -> None:
+        if not BRANCH_RE.fullmatch(branch or ""):
+            raise ChangeError("refusing to delete branch %r" % (branch,))
+        # update-ref with the old value deletes only if the branch still points at the base
+        self._run(["git", "update-ref", "-d", "refs/heads/" + branch, base_sha], self.repo)
 
 
 # ---------------------------------------------------------------- thresholds file
@@ -438,15 +453,23 @@ def main(argv=None, client: Optional[ChangeClient] = None, confirm=None, tiers=N
     """The CLI. `client`, `confirm` and `tiers` are test seams."""
     args = _parser().parse_args(argv)
     try:
-        return _main(args, client, confirm, tiers)
+        with tempfile.TemporaryDirectory(prefix="policy-proposal-") as private:
+            return _main(args, client, confirm, tiers, Path(private))
     except (ChangeError, CasesError, RulesError, OSError, ValueError) as e:
         print("error: %s" % _one_line(e), file=sys.stderr)
         return 2
 
 
-def _main(args, client, confirm, tiers) -> int:
+def _main(args, client, confirm, tiers, private: Path) -> int:
     if args.rules is None and args.threshold is None:
         raise ChangeError("nothing proposed: give --rules or --threshold")
+    # Read the proposed file once. Validation, preview, brand check, PR body and commit all
+    # use these bytes (through a private copy), never the owner's path again.
+    proposed_bytes, proposed_path = None, None
+    if args.rules is not None:
+        proposed_bytes = Path(args.rules).read_bytes()
+        proposed_path = private / Path(args.rules).name
+        proposed_path.write_bytes(proposed_bytes)
     repo = Path(args.repo)
     now = datetime.now(timezone.utc)
     run_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -461,7 +484,7 @@ def _main(args, client, confirm, tiers) -> int:
     proposed, new_threshold = current, old_threshold
     if args.rules is not None:
         try:
-            proposed = load_effective(args.rules)
+            proposed = load_effective(proposed_path)
         except RulesError as e:
             raise ChangeError("proposed rules refused: %s" % _one_line(e))
         if proposed.repeat_contact is None and any("customer" in c for c in cases):
@@ -471,7 +494,8 @@ def _main(args, client, confirm, tiers) -> int:
         new_threshold = parse_threshold(args.threshold)
 
     old_data = _raw_json(repo / RULES_PATH)
-    new_data = _raw_json(args.rules) if args.rules is not None else old_data
+    new_data = json.loads(proposed_bytes.decode("utf-8")) if proposed_bytes is not None \
+        else old_data
     written = []
     if new_data != old_data:
         written.append(RULES_PATH)
@@ -501,7 +525,7 @@ def _main(args, client, confirm, tiers) -> int:
     for line in changes:
         print("- %s" % line)
     print(table)
-    brand = brand_line(repo, args.rules)
+    brand = brand_line(repo, proposed_path)
     if brand is not None:
         print(brand)
     if args.dry_run:
@@ -519,7 +543,7 @@ def _main(args, client, confirm, tiers) -> int:
 
     body = _pr_body(changes, table, brand, threshold_change is not None)
     client = client if client is not None else GitGhClient(repo)
-    url = _change(client, branch, written, args.rules, new_threshold, body)
+    url = _change(client, repo, branch, written, proposed_bytes, new_threshold, body)
     print("draft PR opened: %s (branch %s)" % (url, branch))
     return 0
 
@@ -534,29 +558,58 @@ def _pr_body(changes, table, brand, threshold_changed) -> str:
     return "\n".join(parts) + "\n"
 
 
-def _change(client, branch, written, rules_path, threshold, body) -> str:
+def _read_or_none(path) -> Optional[bytes]:
+    try:
+        return Path(path).read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def _change(client, repo, branch, written, rules_bytes, threshold, body) -> str:
     base_sha = client.capture_base()
     worktree = None
+    committed = False
     try:
         worktree = Path(client.add_worktree(branch, base_sha))
+        # The preview and "what changed" came from the owner's checkout; the new worktree
+        # holds the captured base. Refuse if a file being changed differs between them.
+        stale = [rel for rel in written
+                 if _read_or_none(worktree / rel) != _read_or_none(Path(repo) / rel)]
+        if stale:
+            raise ChangeError("%s in your checkout differs from origin main; update your "
+                              "checkout and run the command again" % ", ".join(stale))
         if RULES_PATH in written:
             target = worktree / RULES_PATH
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(Path(rules_path).read_bytes())
+            target.write_bytes(rules_bytes)
         if THRESHOLDS_PATH in written:
             write_threshold(worktree / THRESHOLDS_PATH, threshold)
         client.commit(list(written), "Propose policy change (%s)" % ", ".join(written))
+        committed = True
         client.verify(branch, base_sha, list(written))
         client.push(branch)
         return client.create_draft_pr(branch, "main", "Policy change proposal %s"
                                       % branch[len(BRANCH_PREFIX):], body)
     finally:
         if worktree is not None:
-            try:
-                client.remove_worktree()
-            except Exception as e:  # report and keep the original outcome
-                print("temporary worktree not removed: %s (%s)" % (worktree, _one_line(e)),
-                      file=sys.stderr)
+            _clean_up(client, worktree, branch, base_sha, failed_before_commit=not committed)
+
+
+def _clean_up(client, worktree, branch, base_sha, failed_before_commit) -> None:
+    """Remove the temp worktree. If nothing was committed, force the removal (the worktree
+    may hold the written file) and delete the local branch it created."""
+    try:
+        client.remove_worktree(force=failed_before_commit)
+    except Exception as e:  # report and keep the original outcome
+        print("temporary worktree not removed: %s (%s)" % (worktree, _one_line(e)),
+              file=sys.stderr)
+        return
+    if failed_before_commit:
+        try:
+            client.delete_branch(branch, base_sha)
+        except Exception as e:  # report and keep the original outcome
+            print("local branch not deleted: %s (%s)" % (branch, _one_line(e)),
+                  file=sys.stderr)
 
 
 if __name__ == "__main__":
