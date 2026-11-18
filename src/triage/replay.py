@@ -230,7 +230,7 @@ def _state_html(state: dict, changed: tuple, first: bool, note: Optional[str]) -
     return "".join(parts)
 
 
-def render_thread(index: int, case: dict, steps: list) -> str:
+def render_thread(case: dict, steps: list) -> str:
     """The replay steps for one thread. Each step is {"turn", "state" or None, "note"}."""
     brand = case.get("brand") or "Brand"
     items, prev = [], None
@@ -288,7 +288,7 @@ def render(cases: list, report_cases: list, records: list) -> str:
         sections.append('<section class="thread" id="%s" data-case="%s"><h2>%s &#8212; %s</h2>'
                         '%s%s</section>'
                         % (anchor, _e(case["id"]), _e(case["id"]), _e(case["title"]),
-                           render_thread(i, case, steps), _trace_html(record)))
+                           render_thread(case, steps), _trace_html(record)))
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8">'
             '<meta name="viewport" content="width=device-width, initial-scale=1">'
             '<title>Triage replay</title><style>%s</style></head><body>'

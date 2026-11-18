@@ -397,7 +397,7 @@ class TestStateChanges(unittest.TestCase):
             {"turn": case["turns"][2], "note": None, "state": hand_state(
                 action="route", reason_codes=("high_risk_to_larger",))},
         ]
-        html_text = replay.render_thread(1, case, steps)
+        html_text = replay.render_thread(case, steps)
         first, third = html_text.split('data-turn="3"', 1)
         self.assertIn("first decision", first)
         self.assertNotIn("changed", first)
