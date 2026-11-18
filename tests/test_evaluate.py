@@ -440,5 +440,66 @@ class TestReportOutput(unittest.TestCase):
                     self.assertNotIn(str(turn.tweet_id), out)
 
 
+class TestLargerUsage(unittest.TestCase):
+    ROUTED = [rt(1, "billing", "ask", CL), rt(2, "praise", "answer", C)]
+    GOLD = {1: g("billing", "ask", False), 2: g("praise", "answer", False)}
+
+    def test_larger_usage_fields(self):
+        plain = score(self.ROUTED, self.GOLD, PLACEHOLDER_PRICES, split="dev")
+        data = json.loads(report_to_json(plain))
+        self.assertEqual(data["larger_mode"], "fake")
+        for key in ("larger_input_tokens", "larger_output_tokens", "larger_cache_write_tokens",
+                    "larger_cache_read_tokens", "larger_answered",
+                    "larger_reservation_exceeded"):
+            self.assertEqual(data[key], 0, key)
+        self.assertEqual((data["larger_confirmed_usd"], data["larger_unconfirmed_usd"]),
+                         (0.0, 0.0))
+        for key in ("max_spend_usd", "monthly_cap_usd", "month_to_date_usd",
+                    "larger_stopped_by"):
+            self.assertIsNone(data[key], key)
+        self.assertFalse(data["larger_post_merge_eval"])
+        self.assertEqual(set(data["larger_fallbacks"]), {
+            "spend_cap", "monthly_cap", "spend_log", "unknown_bill", "reservation_exceeded",
+            "api_error", "too_long", "parse_error", "invalid_labels"})
+        self.assertEqual(set(data["larger_fallbacks"].values()), {0})
+        md = report_to_markdown(plain)
+        self.assertIn("placeholder", md.lower())
+        self.assertNotIn("Model spend", md)
+
+        usage = {"larger_mode": "real", "larger_model": "fixture-model",
+                 "larger_prompt_version": "larger-tier-v1", "larger_post_merge_eval": False,
+                 "larger_input_tokens": 3000, "larger_output_tokens": 150,
+                 "larger_cache_write_tokens": 7, "larger_cache_read_tokens": 9,
+                 "larger_confirmed_usd": 0.00375, "larger_unconfirmed_usd": 0.0125,
+                 "max_spend_usd": 2.5, "monthly_cap_usd": 200.0, "month_to_date_usd": 1.25,
+                 "larger_stopped_by": "unknown_bill", "larger_answered": 2,
+                 "larger_reservation_exceeded": 0,
+                 "larger_fallbacks": {"api_error": 1, "unknown_bill": 3}}
+        real = score(self.ROUTED, self.GOLD, PLACEHOLDER_PRICES, split="dev",
+                     larger_usage=usage)
+        rdata = json.loads(report_to_json(real))
+        for key, value in usage.items():
+            if key != "larger_fallbacks":
+                self.assertEqual(rdata[key], value, key)
+        self.assertEqual(rdata["larger_fallbacks"]["api_error"], 1)
+        self.assertEqual(rdata["larger_fallbacks"]["unknown_bill"], 3)
+        self.assertEqual(rdata["larger_fallbacks"]["too_long"], 0)
+        # flat per-call fields keep their meaning in both modes
+        for key in ("cost_per_1000_threads", "prices", "prices_are_placeholders",
+                    "action_accuracy", "tier_shares"):
+            self.assertEqual(rdata[key], data[key], key)
+        md = report_to_markdown(real)
+        self.assertIn("placeholder", md.lower())
+        self.assertIn("## Model spend (API-equivalent USD)", md)
+        self.assertIn("| confirmed_usd | 0.0037 |", md)
+        self.assertIn("| unconfirmed_usd | 0.0125 |", md)
+        self.assertIn("| monthly_cap_usd | 200.0000 |", md)
+        self.assertIn("| month_to_date_usd | 1.2500 |", md)
+        self.assertIn("| stopped_by | unknown_bill |", md)
+        self.assertIn("max_spend_usd", md)
+        with self.assertRaises(ValueError):
+            score(self.ROUTED, self.GOLD, PLACEHOLDER_PRICES, larger_usage={"bogus": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

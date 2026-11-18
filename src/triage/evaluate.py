@@ -10,7 +10,7 @@ import csv
 import json
 import math
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import Dict, List, Mapping, Optional, Sequence
 
 from triage.router import RoutedThread
@@ -22,6 +22,13 @@ _TRUE = ("true", "1")
 _FALSE = ("false", "0")
 _ID_RE = re.compile(r"\d+", re.ASCII)
 _Z95 = 1.96
+LARGER_FALLBACK_REASONS = ("spend_cap", "monthly_cap", "spend_log", "unknown_bill",
+                           "reservation_exceeded", "api_error", "too_long", "parse_error",
+                           "invalid_labels")
+
+
+def _zero_fallbacks() -> Dict[str, int]:
+    return {k: 0 for k in LARGER_FALLBACK_REASONS}
 
 
 class GoldFileError(ValueError):
@@ -62,6 +69,25 @@ class Report:
     false_escalation_rate_ci: Optional[List[float]] = None
     needs_person_share_ci: Optional[List[float]] = None
     tier_shares_ci: Dict[str, Optional[List[float]]] = field(default_factory=dict)
+    # Larger-tier model spend, in API-equivalent USD (tokens times owner list prices).
+    # Separate from the flat per-call cost_per_1000_threads above.
+    larger_mode: str = "fake"
+    larger_model: Optional[str] = None
+    larger_prompt_version: Optional[str] = None
+    larger_post_merge_eval: bool = False
+    larger_input_tokens: int = 0
+    larger_output_tokens: int = 0
+    larger_cache_write_tokens: int = 0
+    larger_cache_read_tokens: int = 0
+    larger_confirmed_usd: float = 0.0
+    larger_unconfirmed_usd: float = 0.0
+    max_spend_usd: Optional[float] = None
+    monthly_cap_usd: Optional[float] = None
+    month_to_date_usd: Optional[float] = None
+    larger_stopped_by: Optional[str] = None
+    larger_answered: int = 0
+    larger_reservation_exceeded: int = 0
+    larger_fallbacks: Dict[str, int] = field(default_factory=_zero_fallbacks)
 
 
 def load_gold(path) -> Dict[int, GoldRow]:
@@ -123,7 +149,9 @@ def wilson_interval(successes: int, total: int) -> Optional[List[float]]:
 def score(routed: Sequence[RoutedThread], gold: Mapping[int, GoldRow],
           prices: Optional[Mapping[str, float]] = None, *, sample_size: Optional[int] = None,
           seed: Optional[int] = None, split: Optional[str] = None,
-          threshold: Optional[float] = None) -> Report:
+          threshold: Optional[float] = None,
+          larger_usage: Optional[Mapping[str, object]] = None) -> Report:
+    """Score routed threads. `larger_usage` fills the larger_* spend fields by name."""
     prices = dict(PLACEHOLDER_PRICES if prices is None else prices)
     tier_names = list(TIER_NAMES)
     for r in routed:
@@ -152,7 +180,7 @@ def score(routed: Sequence[RoutedThread], gold: Mapping[int, GoldRow],
     tier_shares = {t: _rate(c, n) for t, c in tier_counts.items()}
     total_cost = sum(prices[t] for r in routed for t in r.tiers)
 
-    return Report(
+    report = Report(
         threads_routed=n,
         threads_scored=len(scored),
         threads_without_gold=n - len(scored),
@@ -179,6 +207,22 @@ def score(routed: Sequence[RoutedThread], gold: Mapping[int, GoldRow],
         needs_person_share_ci=wilson_interval(escalated, n),
         tier_shares_ci={t: wilson_interval(c, n) for t, c in tier_counts.items()},
     )
+    if larger_usage:
+        unknown = [k for k in larger_usage if k not in _USAGE_FIELDS]
+        if unknown:
+            raise ValueError("unknown larger_usage field(s): %s" % ", ".join(sorted(unknown)))
+        usage = dict(larger_usage)
+        if "larger_fallbacks" in usage:
+            fb = _zero_fallbacks()
+            fb.update(usage["larger_fallbacks"])
+            usage["larger_fallbacks"] = fb
+        report = replace(report, **usage)
+    return report
+
+
+_USAGE_FIELDS = tuple(f.name for f in fields(Report)
+                      if f.name.startswith("larger_")
+                      or f.name in ("max_spend_usd", "monthly_cap_usd", "month_to_date_usd"))
 
 
 def report_to_json(report: Report) -> str:
@@ -230,4 +274,27 @@ def report_to_markdown(report: Report) -> str:
     rows += [("price.%s" % t, v) for t, v in report.prices.items()]
     rows += [("prices_are_placeholders", report.prices_are_placeholders)]
     lines += ["| %s | %s |" % (k, _fmt(v)) for k, v in rows]
+    if report.larger_mode == "real":
+        lines += ["", "## Model spend (API-equivalent USD)", "",
+                  "Tokens each call reported, times the owner's list prices. Not a bill.", "",
+                  "| item | value |", "| --- | --- |"]
+        spend = [
+            ("larger_model", report.larger_model),
+            ("larger_prompt_version", report.larger_prompt_version),
+            ("larger_post_merge_eval", report.larger_post_merge_eval),
+            ("confirmed_usd", report.larger_confirmed_usd),
+            ("unconfirmed_usd", report.larger_unconfirmed_usd),
+            ("max_spend_usd (per run cap)", report.max_spend_usd),
+            ("monthly_cap_usd", report.monthly_cap_usd),
+            ("month_to_date_usd", report.month_to_date_usd),
+            ("stopped_by", report.larger_stopped_by or "none"),
+            ("answered", report.larger_answered),
+            ("reservation_exceeded", report.larger_reservation_exceeded),
+            ("input_tokens", report.larger_input_tokens),
+            ("output_tokens", report.larger_output_tokens),
+            ("cache_write_tokens", report.larger_cache_write_tokens),
+            ("cache_read_tokens", report.larger_cache_read_tokens),
+        ]
+        spend += [("fallback.%s" % k, v) for k, v in report.larger_fallbacks.items()]
+        lines += ["| %s | %s |" % (k, _fmt(v)) for k, v in spend]
     return "\n".join(lines) + "\n"
