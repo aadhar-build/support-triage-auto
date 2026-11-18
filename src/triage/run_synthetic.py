@@ -1,6 +1,7 @@
 """Run made-up conversations through the cascade and check them against expected labels.
 
-Usage: python3 -m triage.run_synthetic --cases CASES.json --out DIR [--rules RULES.json]
+Usage: python3 -m triage.run_synthetic --cases CASES.json --out DIR
+                                       [--rules RULES.json | --brand NAME [--brands-dir DIR]]
                                        [--run-at TIME] [--trace PATH]
 
 Writes DIR/synthetic_report.json, DIR/synthetic_report.md and DIR/metrics.json (synthetic-kind
@@ -13,7 +14,11 @@ the topics that forced it to escalate in topic_id.
 Cases with a made-up `customer` (plus `brand` and `started_at`) are counted per customer and
 brand; when any case has one, the `repeat_contact` rule is read from --rules (bad input when
 missing) and the reports' summary gives the trigger counts at its window and report window.
-Customer values never leave memory. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
+Customer values never leave memory.
+--brand NAME takes the rules from the rules block of brands/NAME/guidelines.md instead of
+--rules, applies them to every case (no case is filtered), and adds a top-level "brand" key
+to the JSON report and a "Brand: NAME" line to the Markdown report. Stdout names the brand
+(none for --rules) and whether the rules have a repeat_contact block. Exit 0 when every must_pass case passes, 1 when one fails, 2 on
 bad input.
 With --trace PATH it also writes one audit trace record per case (split "synthetic",
 thread_id = 1-based case position) to PATH outside the repository, before any report; if the
@@ -32,10 +37,10 @@ from typing import List, Optional
 
 from triage import metrics as metrics_mod
 from triage.cheap_tier import CheapTier
-from triage.context_signals import ContactRecord, RepeatContactError, contact_counts, \
-    load_repeat_contact_rule
-from triage.policy_check import RulesError, check, load_escalate_topics, load_rules, \
-    rules_version
+from triage.brand_rules import add_rules_args, load_rules_source, repeat_contact_token, \
+    rules_path_of
+from triage.context_signals import ContactRecord, contact_counts
+from triage.policy_check import RulesError, check
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
 from triage.threads import Thread, Turn
 from triage.tiers import ACTIONS, INTENTS, FakeAgentTier, FakeLargerTier
@@ -71,7 +76,7 @@ def _parser() -> argparse.ArgumentParser:
                                 description=__doc__.splitlines()[0])
     p.add_argument("--cases", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--rules", default=str(DEFAULT_RULES_PATH))
+    add_rules_args(p, DEFAULT_RULES_PATH)
     p.add_argument("--run-at", default=None,
                    help="ISO 8601 UTC time ending in Z for metrics.json (default: now)")
     p.add_argument("--trace", default=None,
@@ -313,8 +318,11 @@ def _md_violations(v) -> str:
     return ", ".join(v) if v else "none"
 
 
-def report_to_markdown(results: list, summary: dict) -> str:
-    lines = ["# Synthetic regression report", "",
+def report_to_markdown(results: list, summary: dict, brand: Optional[str] = None) -> str:
+    lines = ["# Synthetic regression report", ""]
+    if brand is not None:
+        lines += ["Brand: %s" % brand, ""]
+    lines += [
              "| id | title | must_pass | expected intent | expected action | expected escalate"
              " | actual intent | actual action | actual escalate | violations expected"
              " | violations actual | result |",
@@ -331,10 +339,13 @@ def report_to_markdown(results: list, summary: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _write(out_dir: Path, results: list, summary: dict, metrics_text: str) -> None:
-    json_text = json.dumps({"cases": results, "summary": summary},
-                           sort_keys=True, indent=2) + "\n"
-    md_text = report_to_markdown(results, summary)
+def _write(out_dir: Path, results: list, summary: dict, metrics_text: str,
+           brand: Optional[str] = None) -> None:
+    report = {"cases": results, "summary": summary}
+    if brand is not None:
+        report["brand"] = brand
+    json_text = json.dumps(report, sort_keys=True, indent=2) + "\n"
+    md_text = report_to_markdown(results, summary, brand)
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / JSON_NAME).write_text(json_text, encoding="utf-8")
@@ -373,17 +384,17 @@ def _run(args) -> tuple:
     run_at = resolve_run_at(args.run_at)
     cases = load_cases(args.cases)
     try:
-        rules = load_rules(args.rules)
-        topics = load_escalate_topics(args.rules)
-        rules_ver = rules_version(args.rules) if args.trace is not None else None
+        label, effective = load_rules_source(args)
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
+    rules, topics = effective.rules, effective.topics
+    rules_ver = effective.version if args.trace is not None else None
     rule = None
     if any("customer" in c for c in cases):
-        try:
-            rule = load_repeat_contact_rule(args.rules)
-        except RepeatContactError as e:
-            raise _Fail("bad repeat_contact rule: %s" % e)
+        rule = effective.repeat_contact
+        if rule is None:
+            raise _Fail("bad repeat_contact rule: repeat_contact rule in %s: "
+                        "'repeat_contact' is missing or is not an object" % rules_path_of(args))
     routed, triggers, triggers_report = _route(cases, topics, rule)
     results = _results(cases, rules, routed)
     summary = _summary(results, len(rules), len(topics), int(rule is not None), triggers,
@@ -392,20 +403,21 @@ def _run(args) -> tuple:
     trace_records = None
     if args.trace is not None:
         trace_records = _trace(args.trace, routed, rules_ver)
-    _write(Path(args.out), results, summary, metrics_text)
-    return summary, trace_records
+    _write(Path(args.out), results, summary, metrics_text, args.brand)
+    return summary, trace_records, label, effective
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        summary, trace_records = _run(args)
+        summary, trace_records, label, effective = _run(args)
     except (_Fail, TraceError) as e:
         print("error: %s" % " ".join(str(e).split()), file=sys.stderr)
         return 2
     line = ("cases=%d passed=%d failed=%d must_pass_failures=%d rules_loaded=%d topics_loaded=%d"
             % (summary["cases_run"], summary["passed"], summary["failed"],
                summary["must_pass_failures"], summary["rules_loaded"], summary["topics_loaded"]))
+    line += " brand=%s %s" % (label, repeat_contact_token(effective))
     if trace_records is not None:
         line += " trace_records=%d" % trace_records
     print(line)

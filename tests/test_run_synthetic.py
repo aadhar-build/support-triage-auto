@@ -59,8 +59,9 @@ class RunSyntheticTestBase(unittest.TestCase):
         env["PYTHONPATH"] = str(REPO_ROOT / "src")
         args = [sys.executable, "-m", "triage.run_synthetic",
                 "--cases", str(cases_path),
-                "--out", str(out or self.out),
-                "--rules", str(rules or self.rules)]
+                "--out", str(out or self.out)]
+        if rules is not False:
+            args += ["--rules", str(rules or self.rules)]
         args.extend(extra)
         return subprocess.run(args, cwd=str(self.dir), env=env, capture_output=True,
                               text=True, timeout=60)
@@ -78,7 +79,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
                                  case("hacked", *HACKED)])
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
+        self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         self.assertTrue((self.out / "synthetic_report.md").is_file())
         raw = (self.out / "synthetic_report.json").read_text(encoding="utf-8")
         self.assertTrue(raw.endswith("}\n"))
@@ -117,7 +118,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
         proc = self.run_cli(self.write_cases([case("parcel", *PARCEL)]), rules=one_rule)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout,
-                         "cases=1 passed=1 failed=0 must_pass_failures=0 rules_loaded=1 topics_loaded=2\n")
+                         "cases=1 passed=1 failed=0 must_pass_failures=0 rules_loaded=1 topics_loaded=2 brand=none repeat_contact=off\n")
         self.assertEqual(self.report_json()["summary"]["rules_loaded"], 1)
         self.assertIn("| rules_loaded | 1 |", self.report_md())
 
@@ -126,7 +127,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
                                  case("hacked", *HACKED), case("locked", *LOCKED)])
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
+        self.assertEqual(proc.stdout, "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         got = {c["id"]: (c["tiers"], c["confidence"]) for c in self.report_json()["cases"]}
         self.assertEqual(got, {
             "parcel": (["cheap", "agent"], 0.6),
@@ -171,7 +172,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertIn("billing", row)
         self.assertIn("delivery", row)
         self.assertTrue(row.endswith("| FAIL |"))
-        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
+        self.assertEqual(proc.stdout, "cases=1 passed=0 failed=1 must_pass_failures=0 rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
 
     def _failing_case(self, must_pass):
         return self.write_cases([
@@ -182,7 +183,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
     def test_must_pass_failure_exits_1(self):
         proc = self.run_cli(self._failing_case(must_pass=True))
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1 rules_loaded=3 topics_loaded=2\n")
+        self.assertEqual(proc.stdout, "cases=2 passed=1 failed=1 must_pass_failures=1 rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         self.assertEqual(self.report_json()["summary"]["must_pass_failures"], 1)
         self.assertTrue((self.out / "synthetic_report.md").is_file())
 
@@ -251,7 +252,7 @@ class TestRunSynthetic(RunSyntheticTestBase):
     def test_empty_cases_list(self):
         proc = self.run_cli(self.write_cases([]))
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
+        self.assertEqual(proc.stdout, "cases=0 passed=0 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         report = self.report_json()
         self.assertEqual(report["cases"], [])
         self.assertEqual(report["summary"], {
@@ -365,9 +366,9 @@ class TestRunSynthetic(RunSyntheticTestBase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout,
                          "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3"
-                         " topics_loaded=2 trace_records=4\n")
+                         " topics_loaded=2 brand=none repeat_contact=off trace_records=4\n")
         self.assertEqual(plain.stdout,
-                         "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2\n")
+                         "cases=4 passed=4 failed=0 must_pass_failures=0 rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         records = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()]
         self.assertEqual([r["thread_id"] for r in records], [1, 2, 3, 4])
         report = self.report_json()["cases"]
@@ -463,7 +464,7 @@ class TestEscalateAlwaysTopics(RunSyntheticTestBase):
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "cases=1 passed=1 failed=0 must_pass_failures=0"
-                                      " rules_loaded=3 topics_loaded=2\n")
+                                      " rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         forced = self.report_json()["cases"][0]
         self.assertEqual(forced["actual"], {"intent": "praise", "action": "escalate",
                                             "escalate": True})
@@ -475,7 +476,7 @@ class TestEscalateAlwaysTopics(RunSyntheticTestBase):
         alt_out = self.dir / "alt"
         proc = self.run_cli(path, rules=self.ALT_RULES, out=alt_out)
         self.assertEqual(proc.returncode, 1, proc.stderr)
-        self.assertTrue(proc.stdout.endswith(" topics_loaded=1\n"), proc.stdout)
+        self.assertTrue(proc.stdout.endswith(" topics_loaded=1 brand=none repeat_contact=off\n"), proc.stdout)
         alt = json.loads((alt_out / "synthetic_report.json").read_text(encoding="utf-8"))
         self.assertEqual(alt["cases"][0]["actual"]["action"], "answer")
         self.assertEqual(alt["cases"][0]["topic_id"], [])
@@ -546,7 +547,7 @@ class TestRepeatContactCases(RunSyntheticTestBase):
         proc = self.run_cli(self.cases_path, rules=self.repeat_rules)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "cases=3 passed=3 failed=0 must_pass_failures=0"
-                                      " rules_loaded=3 topics_loaded=2\n")
+                                      " rules_loaded=3 topics_loaded=2 brand=none repeat_contact=on\n")
         report = self.report_json()
         self.assertEqual([c["passed"] for c in report["cases"]], [True, True, True])
         self.assertEqual([c["actual"]["action"] for c in report["cases"]],
@@ -655,7 +656,7 @@ class TestRepeatContactCases(RunSyntheticTestBase):
         proc = self.run_cli(path)
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, "cases=1 passed=1 failed=0 must_pass_failures=0"
-                                      " rules_loaded=3 topics_loaded=2\n")
+                                      " rules_loaded=3 topics_loaded=2 brand=none repeat_contact=off\n")
         report = self.report_json()
         only = report["cases"][0]
         self.assertTrue(only["passed"])
@@ -674,6 +675,62 @@ class TestRepeatContactCases(RunSyntheticTestBase):
         proc = self.run_cli(live_cases, rules=run_synthetic.DEFAULT_RULES_PATH)
         self.assertIn(proc.returncode, (0, 1), proc.stderr)
         self.assertEqual(self.report_json()["summary"]["repeat_contact_rule_loaded"], 1)
+
+
+FIXTURE_BRANDS = REPO_ROOT / "tests" / "fixtures" / "brands"
+
+
+class TestBrandFlag(RunSyntheticTestBase):
+    DRAFT = "Sure, we can zibberflop that for you today."
+
+    def brand_cli(self, cases_path, brand, out=None, rules=False):
+        return self.run_cli(cases_path, rules=rules, out=out,
+                            extra=("--brand", brand, "--brands-dir", str(FIXTURE_BRANDS)))
+
+    def test_brand_flag(self):
+        path = self.write_cases([case("parcel", *PARCEL, draft_reply=self.DRAFT)])
+        expected = {"alpha": ["a-banned"], "beta": []}
+        for brand, violations in expected.items():
+            with self.subTest(brand):
+                out = self.dir / ("out-" + brand)
+                proc = self.brand_cli(path, brand, out=out)
+                self.assertIn(proc.returncode, (0, 1), proc.stderr)
+                repeat = "off" if brand == "alpha" else "on"
+                self.assertTrue(proc.stdout.endswith(
+                    " rules_loaded=2 topics_loaded=1 brand=%s repeat_contact=%s\n"
+                    % (brand, repeat)), proc.stdout)
+                report = json.loads((out / "synthetic_report.json").read_text("utf-8"))
+                self.assertEqual(report["cases"][0]["actual_violations"], violations)
+                self.assertEqual(report["brand"], brand)
+                self.assertEqual(sorted(report), ["brand", "cases", "summary"])
+                md = (out / "synthetic_report.md").read_text("utf-8")
+                self.assertTrue(md.startswith("# Synthetic regression report\n\nBrand: %s\n"
+                                              % brand), md[:80])
+                metrics = json.loads((out / "metrics.json").read_text("utf-8"))
+                self.assertEqual(metrics["cohort"]["brand_population"], "all")
+
+    def test_no_brand_report_has_no_brand(self):
+        path = self.write_cases([case("parcel", *PARCEL)])
+        proc = self.run_cli(path)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(sorted(self.report_json()), ["cases", "summary"])
+        self.assertNotIn("Brand:", self.report_md())
+
+    def test_brand_errors_exit_2(self):
+        path = self.write_cases([case("parcel", *PARCEL)])
+        cases = {name: (name, False, "bad rules file")
+                 for name in ("../x", "Alpha", "a/b", "", "a" * 65)}
+        cases["not found"] = ("gamma", False, "brand 'gamma' not found under")
+        cases["both flags"] = ("alpha", None, "use either --brand or --rules, not both")
+        for label, (name, rules, message) in cases.items():
+            with self.subTest(label):
+                out = self.dir / "out-err"
+                proc = self.brand_cli(path, name, out=out, rules=rules)
+                self.assertEqual(proc.returncode, 2, proc.stderr)
+                self.assertTrue(proc.stderr.startswith("error: bad rules file: "), proc.stderr)
+                self.assertIn(message, proc.stderr)
+                self.assertEqual(proc.stdout, "")
+                self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":

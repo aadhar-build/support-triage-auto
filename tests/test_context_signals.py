@@ -15,9 +15,11 @@ from triage.context_signals import (
     ContactRecord,
     RepeatContactError,
     RepeatContactRule,
+    brand_attribution,
     contact_counts,
     contact_record,
     load_repeat_contact_rule,
+    repeat_contact_from_data,
 )
 from triage.threads import Thread, Turn
 
@@ -205,6 +207,70 @@ class TestLoadRule(unittest.TestCase):
                                            effect="escalate", report_window_hours=72))
         frac = self.write("frac.json", {"repeat_contact": dict(RULE, window_days=1.5)})
         self.assertEqual(load_repeat_contact_rule(frac).window_days, 1.5)
+
+
+class TestRepeatContactFromData(unittest.TestCase):
+    def test_parity_with_path_loader(self):
+        fixture = Path(__file__).resolve().parent / "fixtures" / "repeat_contact_rules.json"
+        data = json.loads(fixture.read_text(encoding="utf-8"))
+        self.assertEqual(repeat_contact_from_data(data, fixture),
+                         load_repeat_contact_rule(fixture))
+        with self.assertRaises(RepeatContactError) as ctx:
+            repeat_contact_from_data({"public_reply_rules": []}, "made-up-source")
+        self.assertEqual(str(ctx.exception), "repeat_contact rule in made-up-source: "
+                         "'repeat_contact' is missing or is not an object")
+
+
+def turns_thread(root_id, turns):
+    """A thread from (author, inbound, time, text) tuples, in order."""
+    built = tuple(Turn(root_id + i, author, inbound, at, text)
+                  for i, (author, inbound, at, text) in enumerate(turns))
+    return Thread(root_tweet_id=root_id,
+                  brand_ids=tuple(a for a, inbound, _, _ in turns if not inbound),
+                  turns=built, brand_replied=any(not t[1] for t in turns))
+
+
+class TestBrandAttribution(unittest.TestCase):
+    KNOWN = {"AlphaCo", "BetaCo"}
+
+    def attr(self, thread):
+        return brand_attribution(thread, "alphaco", self.KNOWN)
+
+    def test_first_tweet_mention_any_case(self):
+        t = turns_thread(100, [("cust_a", True, day(0), "@ALPHACO my order is late")])
+        self.assertEqual(self.attr(t), "brand")
+
+    def test_brand_reply_before_last_inbound(self):
+        t = turns_thread(110, [("cust_a", True, day(0), "my order is late"),
+                               ("AlphaCo", False, day(0, 1), "made-up brand reply"),
+                               ("cust_a", True, day(0, 2), "still late")])
+        self.assertEqual(self.attr(t), "brand")
+
+    def test_late_brand_reply_with_earlier_other_brand_reply(self):
+        t = turns_thread(120, [("cust_a", True, day(0), "my order is late"),
+                               ("BetaCo", False, day(0, 1), "made-up brand reply"),
+                               ("cust_a", True, day(0, 2), "still late"),
+                               ("AlphaCo", False, day(0, 3), "made-up brand reply")])
+        self.assertEqual(self.attr(t), "other_brand")
+
+    def test_other_brand_first_tweet_mention(self):
+        t = turns_thread(130, [("cust_a", True, day(0), "@BetaCo my order is late")])
+        self.assertEqual(self.attr(t), "other_brand")
+
+    def test_only_brand_reply_after_last_inbound(self):
+        t = turns_thread(140, [("cust_a", True, day(0), "my order is late"),
+                               ("AlphaCo", False, day(0, 1), "made-up brand reply")])
+        self.assertEqual(self.attr(t), "unattributed")
+
+    def test_outbound_first_turn(self):
+        t = turns_thread(150, [("AlphaCo", False, day(0), "made-up brand notice"),
+                               ("cust_a", True, day(0, 1), "@alphaco thanks")])
+        self.assertEqual(self.attr(t), "unattributed")
+
+    def test_mention_outside_first_tweet(self):
+        t = turns_thread(160, [("cust_a", True, day(0), "my order is late"),
+                               ("cust_a", True, day(0, 1), "@alphaco hello?")])
+        self.assertEqual(self.attr(t), "unattributed")
 
 
 class TestModuleHygiene(unittest.TestCase):

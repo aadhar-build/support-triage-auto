@@ -87,7 +87,24 @@ def load_rules(path):
     file. An empty `public_reply_rules` list is refused too (fail closed), so a blanked
     rules file can never make every draft safe to send.
     """
-    path, fail, data = _read_rules_object(path)
+    path, _, data = _read_rules_object(path)
+    return rules_from_data(data, path)
+
+
+def _failer(source):
+    def fail(problem):
+        return RulesError("%s: %s" % (source, problem))
+    return fail
+
+
+def rules_from_data(data, source):
+    """Validate an already-parsed rules object and return its public reply rules.
+
+    Same checks and messages as `load_rules`; `source` names where `data` came from.
+    """
+    fail = _failer(source)
+    if not isinstance(data, dict):
+        raise fail("top level must be a JSON object")
     raw_rules = data.get("public_reply_rules")
     if not isinstance(raw_rules, list):
         raise fail("'public_reply_rules' is missing or is not a list")
@@ -139,7 +156,19 @@ def load_escalate_topics(path):
     the file and the problem, for a missing, empty or malformed list (fail closed), so a
     blanked rules file can never switch the rule off.
     """
-    path, fail, data = _read_rules_object(path)
+    path, _, data = _read_rules_object(path)
+    return topics_from_data(data, path)
+
+
+def topics_from_data(data, source):
+    """Validate an already-parsed rules object and return its always-escalate topics.
+
+    Same checks and messages as `load_escalate_topics`; `source` names where `data` came
+    from.
+    """
+    fail = _failer(source)
+    if not isinstance(data, dict):
+        raise fail("top level must be a JSON object")
     raw_topics = data.get("escalate_always")
     if not isinstance(raw_topics, list):
         raise fail("'escalate_always' is missing or is not a list")

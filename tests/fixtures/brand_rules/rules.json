@@ -1,0 +1,38 @@
+{
+  "version": "fixture-s",
+  "status": "made-up",
+  "public_reply_rules": [
+    {
+      "id": "s-banned",
+      "type": "banned_phrase",
+      "description": "Made-up test rule.",
+      "phrases": [
+        "snorkelbar"
+      ]
+    },
+    {
+      "id": "s-pii",
+      "type": "pii_echo",
+      "detect": [
+        "card_number"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "s-topic",
+      "description": "Made-up test topic.",
+      "phrases": [
+        "s sentinel topic"
+      ],
+      "note": "Made-up note."
+    }
+  ],
+  "repeat_contact": {
+    "window_days": 7,
+    "min_conversations": 3,
+    "effect": "escalate",
+    "report_window_hours": 72,
+    "note": "Made-up note."
+  }
+}

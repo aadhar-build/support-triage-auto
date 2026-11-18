@@ -47,6 +47,18 @@ PYTHONPATH=src python3 -m triage.apply_review --run DIR --decisions decisions.js
 
 `review_page` writes one offline HTML file (no server, no network requests). Flagged cases (a policy violation or action `escalate`) come first. A case with a policy violation can only be edited or rejected, never approved. A case flagged only by `escalate` can be approved with a reason. The reviewer approves, edits, rejects with a reason or changes the action, then downloads `decisions.json`. `apply_review` checks it against the run and its cases file, runs the policy check (`--rules`, default `policies/rules.json`) on every edited draft and refuses any that still break a rule, merges it by case id into `DIR/review_applied.json` (re-applying is safe; a later file resumes the review) and prints the approved, edited, rejected and undecided counts and any changed actions. Both commands accept only a synthetic run, never real dataset threads.
 
+## Per-brand rules
+
+Each brand can keep its rules in `brands/<brand>/guidelines.md`: free Markdown prose plus exactly one fenced block opened by a line that is exactly ```` ```rules ````, holding a JSON object with the same keys as `policies/rules.json` (`public_reply_rules`, `escalate_always`, optional `repeat_contact`, `version`, `status`). Only that block is enforced. A missing, duplicated, empty or invalid block is refused (exit 2). `brands/amazonhelp/guidelines.md` starts with exactly today's `policies/rules.json`.
+
+```
+PYTHONPATH=src python3 -m triage.run_synthetic --cases CASES.json --out DIR --brand amazonhelp
+PYTHONPATH=src python3 -m triage.run_eval --gold GOLD.csv --out REPORT --brand amazonhelp
+PYTHONPATH=src python3 -m triage.brand_rules --conformance [--brand amazonhelp] [--rules policies/rules.json]
+```
+
+`--brand` and `--rules` can't be combined; without `--brand` the runners use `--rules` as before. Brand names must match `[a-z0-9][a-z0-9_-]{0,63}` and resolve inside `brands/` (`--brands-dir` is a test seam). Every run prints `brand=<name|none>`, the rules and topics loaded and `repeat_contact=on|off`. For `run_synthetic` and `apply_review`, `--brand` only picks the rules: every case still runs. For `run_eval`, `--brand` also picks the traffic: only threads attributed to the brand (a first-tweet @mention, or a brand reply made by the last inbound turn) are sampled, and stdout and the report give the included and excluded counts. `run_eval --brand` can't write `--metrics-out`. The conformance command exits 0 when the brand file's rules block equals the JSON rules file, 1 naming the differing top-level keys, 2 on a load error.
+
 ## Replaying a synthetic run
 
 To see why the cascade handled each made-up conversation the way it did, run the synthetic cases with a trace (the path must be outside the repository), then build the replay page:

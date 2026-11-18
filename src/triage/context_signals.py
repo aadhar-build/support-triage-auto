@@ -10,7 +10,9 @@ leave this module.
 load_repeat_contact_rule reads the owner's `repeat_contact` block from the rules file and
 fails closed: there are no defaults.
 
-Standard library only. No I/O except reading the rules file in load_repeat_contact_rule.
+Standard library only. No I/O except reading the rules file in load_repeat_contact_rule;
+repeat_contact_from_data validates an already-parsed object, and brand_attribution says
+which brand a thread belongs to at its decision moment.
 """
 
 from __future__ import annotations
@@ -118,6 +120,15 @@ def load_repeat_contact_rule(path) -> RepeatContactRule:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         raise fail("not valid JSON")
+    return repeat_contact_from_data(data, path)
+
+
+def repeat_contact_from_data(data, source) -> RepeatContactRule:
+    """Validate the `repeat_contact` block of an already-parsed rules object. Same checks
+    and messages as `load_repeat_contact_rule`; `source` names where `data` came from."""
+    def fail(problem):
+        return RepeatContactError("repeat_contact rule in %s: %s" % (source, problem))
+
     block = data.get("repeat_contact") if isinstance(data, dict) else None
     if not isinstance(block, dict):
         raise fail("'repeat_contact' is missing or is not an object")
@@ -138,3 +149,30 @@ def load_repeat_contact_rule(path) -> RepeatContactRule:
     return RepeatContactRule(window_days=block["window_days"], min_conversations=n,
                              effect="escalate",
                              report_window_hours=block["report_window_hours"])
+
+
+def brand_attribution(thread, brand, known_brands) -> str:
+    """Which brand a real thread belongs to at its decision moment: "brand", "other_brand"
+    or "unattributed".
+
+    The decision moment is the UTC time of the thread's last inbound turn. The thread is
+    the brand's when a brand handle (a member of `known_brands` equal to `brand` ignoring
+    case) is @mentioned in the first tweet, or replied at or before the decision moment.
+    It is another brand's when some other known brand was mentioned or replied by then.
+    Replies after the decision moment are never used.
+    """
+    inbound = [t for t in thread.turns if t.inbound]
+    if not inbound:
+        return "unattributed"
+    record = contact_record(thread, known_brands)
+    if record is None:
+        return "unattributed"
+    moment = inbound[-1].created_at.astimezone(timezone.utc)
+    handles = {b for b in known_brands if b.lower() == brand.lower()}
+    known_by_then = set(record.brands_at_start) | {
+        who for who, at in record.brand_replies if at <= moment}
+    if known_by_then & handles:
+        return "brand"
+    if known_by_then - handles:
+        return "other_brand"
+    return "unattributed"
