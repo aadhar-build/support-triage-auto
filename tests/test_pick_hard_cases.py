@@ -20,36 +20,50 @@ _T0 = datetime(2017, 10, 31, 22, 10, tzinfo=timezone.utc)
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 TWCS_HEADER = "tweet_id,author_id,inbound,created_at,text,response_tweet_id,in_response_to_tweet_id\n"
+BASE = 9100000  # fixture ids are BASE + small number, so no id can collide with a count
+
+
+def _id(n):
+    return BASE + n
+
+
+def _row(n, author, inbound, text, response="", parent=""):
+    response = "" if response == "" else str(_id(response))
+    parent = "" if parent == "" else str(_id(parent))
+    return '%d,%s,%s,Tue Oct 31 22:10:%02d +0000 2017,"%s",%s,%s' % (
+        _id(n), author, inbound, n, text, response, parent)
+
+
 TWCS_ROWS = [
     # 11: legal + fraud_or_hacked + strong_negative (3), brand reply 12
-    '11,cust_SENTINEL11,True,Tue Oct 31 22:10:11 +0000 2017,"my lawyer says this fraud is the worst SENTINEL_TEXT_11",12,',
-    '12,SENTINELBRAND,False,Tue Oct 31 22:10:12 +0000 2017,"sorry to hear that SENTINEL_TEXT_12",,11',
+    _row(11, "cust_SENTINEL11", True, "my lawyer says this fraud is the worst SENTINEL_TEXT_11", 12),
+    _row(12, "SENTINELBRAND", False, "sorry to hear that SENTINEL_TEXT_12", parent=11),
     # 13: fraud_or_hacked + strong_negative (2)
-    '13,cust_SENTINEL13,True,Tue Oct 31 22:10:13 +0000 2017,"my account was hacked, terrible SENTINEL_TEXT_13",,',
+    _row(13, "cust_SENTINEL13", True, "my account was hacked, terrible SENTINEL_TEXT_13"),
     # 15, 17, 19, 21, 23, 27, 33: one signal each
-    '15,cust_SENTINEL15,True,Tue Oct 31 22:10:15 +0000 2017,"worst service SENTINEL_TEXT_15",,',
-    '17,cust_SENTINEL17,True,Tue Oct 31 22:10:17 +0000 2017,"still waiting on my order SENTINEL_TEXT_17",,',
-    '19,cust_SENTINEL19,True,Tue Oct 31 22:10:19 +0000 2017,"talking to my attorney SENTINEL_TEXT_19",,',
-    '21,cust_SENTINEL21,True,Tue Oct 31 22:10:21 +0000 2017,"this app is useless SENTINEL_TEXT_21",,',
+    _row(15, "cust_SENTINEL15", True, "worst service SENTINEL_TEXT_15"),
+    _row(17, "cust_SENTINEL17", True, "still waiting on my order SENTINEL_TEXT_17"),
+    _row(19, "cust_SENTINEL19", True, "talking to my attorney SENTINEL_TEXT_19"),
+    _row(21, "cust_SENTINEL21", True, "this app is useless SENTINEL_TEXT_21"),
     # 23: many strong_negative words, still one signal
-    '23,cust_SENTINEL23,True,Tue Oct 31 22:10:23 +0000 2017,"terrible terrible awful horrible SENTINEL_TEXT_23",,',
+    _row(23, "cust_SENTINEL23", True, "terrible terrible awful horrible SENTINEL_TEXT_23"),
     # 25: no signal
-    '25,cust_SENTINEL25,True,Tue Oct 31 22:10:25 +0000 2017,"hello there SENTINEL_TEXT_25",,',
+    _row(25, "cust_SENTINEL25", True, "hello there SENTINEL_TEXT_25"),
     # 27: only "injured", which the cheap tier does not know
-    '27,cust_SENTINEL27,True,Tue Oct 31 22:10:27 +0000 2017,"my child was injured by the charger SENTINEL_TEXT_27",,',
+    _row(27, "cust_SENTINEL27", True, "my child was injured by the charger SENTINEL_TEXT_27"),
     # 29: signal words only in the brand turn
-    '29,cust_SENTINEL29,True,Tue Oct 31 22:10:29 +0000 2017,"can you help SENTINEL_TEXT_29",30,',
-    '30,SENTINELBRAND,False,Tue Oct 31 22:10:30 +0000 2017,"this is terrible, ask our lawyer SENTINEL_TEXT_30",,29',
+    _row(29, "cust_SENTINEL29", True, "can you help SENTINEL_TEXT_29", 30),
+    _row(30, "SENTINELBRAND", False, "this is terrible, ask our lawyer SENTINEL_TEXT_30", parent=29),
     # 31: fireworks / pursue only
-    '31,cust_SENTINEL31,True,Tue Oct 31 22:10:31 +0000 2017,"fireworks tonight, I pursue deals SENTINEL_TEXT_31",,',
+    _row(31, "cust_SENTINEL31", True, "fireworks tonight, I pursue deals SENTINEL_TEXT_31"),
     # 33: three turns, repeated_contact in the second inbound turn
-    '33,cust_SENTINEL33,True,Tue Oct 31 22:10:33 +0000 2017,"where is my refund SENTINEL_TEXT_33",34,',
-    '34,SENTINELBRAND,False,Tue Oct 31 22:10:34 +0000 2017,"please DM us SENTINEL_TEXT_34",35,33',
-    '35,cust_SENTINEL33,True,Tue Oct 31 22:10:35 +0000 2017,"still no reply SENTINEL_TEXT_35",,34',
+    _row(33, "cust_SENTINEL33", True, "where is my refund SENTINEL_TEXT_33", 34),
+    _row(34, "SENTINELBRAND", False, "please DM us SENTINEL_TEXT_34", 35, 33),
+    _row(35, "cust_SENTINEL33", True, "still no reply SENTINEL_TEXT_35", parent=34),
 ]
-ONE_SIGNAL = {15, 17, 19, 21, 23, 27, 33}
-QUALIFYING = {11, 13} | ONE_SIGNAL
-ALL_IDS = [str(i) for i in range(11, 36)] + ["SENTINEL"]
+ONE_SIGNAL = {_id(n) for n in (15, 17, 19, 21, 23, 27, 33)}
+QUALIFYING = {_id(11), _id(13)} | ONE_SIGNAL
+FIXTURE_IDS = [str(_id(n)) for n in range(11, 36)]
 
 
 def _split(dev, eval_, full, seed=1):
@@ -102,13 +116,148 @@ class TestPickHardCases(CliTestBase):
         proc = self.run_cli()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         picks = self.picks()
-        self.assertEqual([p["thread_id"] for p in picks[:2]], [11, 13])
+        self.assertEqual([p["thread_id"] for p in picks[:2]], [_id(11), _id(13)])
         self.assertEqual(picks[0]["signals"], ["legal", "fraud_or_hacked", "strong_negative"])
         self.assertEqual(picks[1]["signals"], ["fraud_or_hacked", "strong_negative"])
         self.assertEqual({p["thread_id"] for p in picks[2:]}, ONE_SIGNAL)
         by_id = {p["thread_id"]: p for p in picks}
-        self.assertEqual(by_id[23]["signals"], ["strong_negative"])
+        self.assertEqual(by_id[_id(23)]["signals"], ["strong_negative"])
         self.assertEqual([p["rank"] for p in picks], list(range(1, 10)))
+
+    def test_dev_and_full_splits_never_picked(self):
+        for name, config in (("dev", SPLIT_ALL_DEV), ("full", SPLIT_ALL_FULL)):
+            with self.subTest(split=name):
+                split = self.write("split-%s.json" % name, json.dumps(config))
+                proc = self.run_cli(split=split)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                self.assertEqual(self.picked_ids(), [])
+                summary = json.loads(proc.stdout)
+                self.assertEqual(summary["threads_considered"], 0)
+                self.assertEqual(summary["threads_picked"], 0)
+
+    def test_mixed_split_picks_only_eval(self):
+        from triage.split import assign_split, config_from_dict
+        config = config_from_dict(SPLIT_MIXED)
+        eval_hits = {i for i in QUALIFYING if assign_split(i, config) == "eval"}
+        other_hits = QUALIFYING - eval_hits
+        self.assertTrue(eval_hits, "fixture needs signal-hitting eval threads")
+        self.assertTrue(other_hits, "fixture needs signal-hitting dev/full threads")
+        split = self.write("split-mixed.json", json.dumps(SPLIT_MIXED))
+        proc = self.run_cli(split=split)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        picked = set(self.picked_ids())
+        self.assertEqual(picked, eval_hits)
+        self.assertFalse(picked & other_hits)
+
+    def test_random_sample_ids_excluded(self):
+        exclude = self.write("exclude.csv", "thread_id,note\n%d,x\n999999,y\n%d,dup\n" % (_id(19), _id(19)))
+        proc = self.run_cli(exclude=exclude)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn(_id(19), self.picked_ids())
+        self.assertEqual(set(self.picked_ids()), QUALIFYING - {_id(19)})
+        summary = json.loads(proc.stdout)
+        self.assertEqual(summary["threads_considered"], 12)
+        self.assertEqual(summary["threads_excluded_random_sample"], 1)
+        self.assertEqual(summary["exclude_ids_unmatched"], 1)
+        self.assertEqual(summary["threads_qualifying"], 8)
+
+    def test_no_signal_never_picked_and_fewer_than_n(self):
+        proc = self.run_cli("--n", "50")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        picked = self.picked_ids()
+        self.assertEqual(sorted(picked), sorted(QUALIFYING))
+        for no_signal in (_id(25), _id(29), _id(31)):
+            self.assertNotIn(no_signal, picked)
+        summary = json.loads(proc.stdout)
+        self.assertEqual(summary["threads_qualifying"], 9)
+        self.assertEqual(summary["threads_picked"], 9)
+
+    def test_same_inputs_and_seed_same_ids(self):
+        a, b = self.dir / "a.jsonl", self.dir / "b.jsonl"
+        for out in (a, b):
+            proc = self.run_cli("--n", "5", "--seed", "7", out=out)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(a.read_bytes(), b.read_bytes())
+        self.assertEqual(len(self.picked_ids(a)), 5)
+
+    def test_seed_reorders_ties_only(self):
+        orders_small = set()
+        for seed in range(20):
+            out = self.dir / ("all-%d.jsonl" % seed)
+            proc = self.run_cli("--seed", str(seed), out=out)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            picks = self.picks(out)
+            self.assertEqual(picks[0]["thread_id"], _id(11))
+            scores = [len(p["signals"]) for p in picks]
+            self.assertEqual(scores, sorted(scores, reverse=True))
+            self.assertEqual({p["thread_id"] for p in picks}, QUALIFYING)
+
+            out = self.dir / ("five-%d.jsonl" % seed)
+            proc = self.run_cli("--n", "5", "--seed", str(seed), out=out)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            ids = self.picked_ids(out)
+            self.assertEqual(ids[:2], [_id(11), _id(13)])
+            self.assertTrue(set(ids[2:]) <= ONE_SIGNAL)
+            orders_small.add(tuple(ids))
+        self.assertGreaterEqual(len(orders_small), 2)
+
+    def test_out_dotdot_outside_repo_accepted(self):
+        sub = self.dir / "sub"
+        sub.mkdir()
+        out = sub / ".." / "dotdot.jsonl"
+        proc = self.run_cli(out=out)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue((self.dir / "dotdot.jsonl").exists())
+
+    def test_summary_has_counts_only(self):
+        summary_out = self.dir / "summary.json"
+        proc = self.run_cli("--summary-out", str(summary_out))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stdout, "")
+        stdout_proc = self.run_cli()
+        self.assertEqual(stdout_proc.returncode, 0, stdout_proc.stderr)
+        file_text = summary_out.read_text(encoding="utf-8")
+        for text in (file_text, stdout_proc.stdout):
+            summary = json.loads(text)
+            self.assertEqual(set(summary), {
+                "threads_considered", "threads_excluded_random_sample", "exclude_ids_unmatched",
+                "threads_qualifying", "threads_picked", "picked_per_signal", "n", "seed"})
+            self.assertEqual(summary["picked_per_signal"], {
+                "legal": 2, "fraud_or_hacked": 2, "safety": 1, "repeated_contact": 2,
+                "strong_negative": 5})
+        for text in (file_text, proc.stdout, proc.stderr, stdout_proc.stdout,
+                     stdout_proc.stderr):
+            self.assertNotIn("SENTINEL", text)
+            self.assertNotIn("cust_", text)
+            for fixture_id in FIXTURE_IDS:
+                self.assertNotIn(fixture_id, text)
+
+    def test_labelling_file_contents(self):
+        proc = self.run_cli()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        by_id = {p["thread_id"]: p for p in self.picks()}
+        self.assertEqual(set(by_id[_id(11)]), {"rank", "thread_id", "signals", "turns"})
+        self.assertEqual(by_id[_id(11)]["rank"], 1)
+        self.assertEqual(by_id[_id(11)]["turns"], [
+            {"tweet_id": _id(11), "inbound": True, "created_at": "2017-10-31T22:10:11+00:00",
+             "text": "my lawyer says this fraud is the worst SENTINEL_TEXT_11"},
+            {"tweet_id": _id(12), "inbound": False, "created_at": "2017-10-31T22:10:12+00:00",
+             "text": "sorry to hear that SENTINEL_TEXT_12"},
+        ])
+        self.assertEqual([t["text"] for t in by_id[_id(33)]["turns"]], [
+            "where is my refund SENTINEL_TEXT_33", "please DM us SENTINEL_TEXT_34",
+            "still no reply SENTINEL_TEXT_35"])
+        self.assertEqual(by_id[_id(33)]["signals"], ["repeated_contact"])
+        raw = self.out.read_text(encoding="utf-8")
+        self.assertNotIn("cust_SENTINEL", raw)
+        self.assertNotIn("SENTINELBRAND", raw)
+
+    def test_signal_outside_cheap_tier_keywords_picked(self):
+        proc = self.run_cli()
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        by_id = {p["thread_id"]: p for p in self.picks()}
+        self.assertIn(_id(27), by_id)
+        self.assertEqual(by_id[_id(27)]["signals"], ["safety"])
 
 
 def _thread(*turns):
