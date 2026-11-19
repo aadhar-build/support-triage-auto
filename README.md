@@ -105,6 +105,21 @@ ssh -L 9000:127.0.0.1:8765 <server>
 
 Keep `--runs` outside git. Each run is one subfolder with a hand-written `manifest.json` (`{"schema_version": "run-manifest/1", "kind": "synthetic" | "gold_random" | "hard_case", "created_at": "...Z", "cost": {"estimated_usd": ..., "cost_per_1000_usd": ..., "prices_are_placeholders": ...}}`) and optionally a `metrics.json`; nothing writes manifests yet. Pages: Overview (latest run and estimated spend against the caps), Eval reports (run list and each run's drill-down report), Drift and incidents (names the commands only) and Policies and thresholds (rules and thresholds on disk next to each run's effective config). `--rules` and `--thresholds` point at other files; both are only read.
 
+## Go console (`triage serve`)
+
+The Go port of the admin console. It is read-only, GET-only and binds only to
+`127.0.0.1`, in the foreground. The default port is 8770 (8765 is taken on the
+VPS); `--port` overrides it. The same server serves the built web console.
+
+```sh
+cd web && npm ci && npm run build
+cd ../backend && go run ./cmd/triage serve --runs ~/triage-runs/ --web ../web/dist
+```
+
+Default paths (`policies/rules.json`, `evals/thresholds.json`, `web/dist`) are
+relative to the working directory, so run from the repo root or pass `--rules`,
+`--thresholds` and `--web` explicitly. Ctrl-C stops it.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:
