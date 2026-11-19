@@ -2,6 +2,7 @@ package policy
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -148,5 +149,80 @@ func TestBrandBlocksMatchGolden(t *testing.T) {
 		if !pyEqual(got, want) {
 			t.Errorf("%s: rules block differs from Python's extraction", b.md)
 		}
+	}
+}
+
+// normalizeConformance applies the golden's rewrites: the repo realpath becomes
+// <repo>, and the OS or parser detail of the four bracketed phrases becomes
+// (<detail>) (#67 Q1 and the owner's Q1 decision). Nothing else is rewritten.
+func normalizeConformance(s, repo string) string {
+	s = strings.ReplaceAll(s, repo, "<repo>")
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		for _, p := range []string{"cannot read rules file (", "not valid JSON (", "cannot read brand file (", "rules block is not valid JSON ("} {
+			at := strings.Index(l, p)
+			end := strings.LastIndex(l, ")")
+			if at >= 0 && end > at+len(p)-1 {
+				lines[i] = l[:at+len(p)-1] + "(<detail>)" + l[end+1:]
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func TestConformanceGolden(t *testing.T) {
+	root := atRepoRoot(t)
+	repo := mustReal(t, root)
+	raw, err := os.ReadFile("testdata/golden/brand_rules/conformance.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type goldenCase struct {
+		name           string
+		args           []string
+		exit           string
+		stdout, stderr string
+	}
+	var cases []goldenCase
+	var c *goldenCase
+	for _, l := range strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n") {
+		key, val, _ := strings.Cut(l, " ")
+		switch {
+		case key == "case":
+			cases = append(cases, goldenCase{name: val})
+			c = &cases[len(cases)-1]
+		case c == nil:
+			t.Fatalf("line before first case: %q", l)
+		case key == "args":
+			c.args = strings.Split(val, " ")
+		case key == "exit":
+			c.exit = val
+		case key == "stdout":
+			c.stdout += val + "\n"
+		case key == "stderr":
+			c.stderr += val + "\n"
+		case key == "end":
+			c = nil
+		default:
+			t.Fatalf("bad golden line %q", l)
+		}
+	}
+	if len(cases) != 12 {
+		t.Fatalf("golden has %d cases, want 12", len(cases))
+	}
+	for _, gc := range cases {
+		t.Run(gc.name, func(t *testing.T) {
+			out, errOut, code := runBrandRules(t, gc.args...)
+			if got := fmt.Sprint(code); got != gc.exit {
+				t.Errorf("exit %s, want %s", got, gc.exit)
+			}
+			if got := normalizeConformance(out, repo); got != gc.stdout {
+				t.Errorf("stdout %q, want %q", got, gc.stdout)
+			}
+			if got, want := normalizeConformance(errOut, repo), normalizeConformance(gc.stderr, repo); got != want {
+				t.Errorf("stderr %q, want %q", got, want)
+			}
+		})
 	}
 }

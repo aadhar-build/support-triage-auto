@@ -2,6 +2,7 @@ package policy
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -310,5 +311,34 @@ func TestDefaultsWithoutCheckout(t *testing.T) {
 	}
 	if _, err := RulesPathOf(RulesFlags{Brand: strp("beta")}); err == nil || err.Error() != "brand 'beta' not found under "+fake+"/brands" {
 		t.Errorf("fake checkout brands: %v", err)
+	}
+}
+
+func TestRulesFlagsRegister(t *testing.T) {
+	parse := func(args ...string) RulesFlags {
+		t.Helper()
+		f := RulesFlags{Default: "policies/rules.json"}
+		fs := flag.NewFlagSet("runner", flag.ContinueOnError)
+		f.Register(fs)
+		if err := fs.Parse(args); err != nil {
+			t.Fatalf("Parse(%q): %v", args, err)
+		}
+		return f
+	}
+	f := parse()
+	if f.Rules != nil || f.Brand != nil || f.BrandsDir != nil {
+		t.Errorf("no flags: %+v, want all nil", f)
+	}
+	f = parse("--brand", "beta", "--brands-dir=tests/fixtures/brands")
+	if f.Brand == nil || *f.Brand != "beta" || f.BrandsDir == nil || *f.BrandsDir != "tests/fixtures/brands" || f.Rules != nil {
+		t.Errorf("brand flags: %+v", f)
+	}
+	f = parse("--rules", "")
+	if f.Rules == nil || *f.Rules != "" {
+		t.Errorf("--rules given empty must count as given: %+v", f)
+	}
+	f = parse("--rules", "x.json", "--brand", "beta")
+	if _, _, err := LoadRulesSource(f); err == nil || err.Error() != "use either --brand or --rules, not both" {
+		t.Errorf("both through flags: %v", err)
 	}
 }
