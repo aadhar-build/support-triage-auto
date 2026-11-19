@@ -1,0 +1,3684 @@
+isalnum 0030 0039
+isalnum 0041 005a
+isalnum 0061 007a
+isalnum 00aa 00aa
+isalnum 00b2 00b3
+isalnum 00b5 00b5
+isalnum 00b9 00ba
+isalnum 00bc 00be
+isalnum 00c0 00d6
+isalnum 00d8 00f6
+isalnum 00f8 02c1
+isalnum 02c6 02d1
+isalnum 02e0 02e4
+isalnum 02ec 02ec
+isalnum 02ee 02ee
+isalnum 0370 0374
+isalnum 0376 0377
+isalnum 037a 037d
+isalnum 037f 037f
+isalnum 0386 0386
+isalnum 0388 038a
+isalnum 038c 038c
+isalnum 038e 03a1
+isalnum 03a3 03f5
+isalnum 03f7 0481
+isalnum 048a 052f
+isalnum 0531 0556
+isalnum 0559 0559
+isalnum 0560 0588
+isalnum 05d0 05ea
+isalnum 05ef 05f2
+isalnum 0620 064a
+isalnum 0660 0669
+isalnum 066e 066f
+isalnum 0671 06d3
+isalnum 06d5 06d5
+isalnum 06e5 06e6
+isalnum 06ee 06fc
+isalnum 06ff 06ff
+isalnum 0710 0710
+isalnum 0712 072f
+isalnum 074d 07a5
+isalnum 07b1 07b1
+isalnum 07c0 07ea
+isalnum 07f4 07f5
+isalnum 07fa 07fa
+isalnum 0800 0815
+isalnum 081a 081a
+isalnum 0824 0824
+isalnum 0828 0828
+isalnum 0840 0858
+isalnum 0860 086a
+isalnum 0870 0887
+isalnum 0889 088e
+isalnum 08a0 08c9
+isalnum 0904 0939
+isalnum 093d 093d
+isalnum 0950 0950
+isalnum 0958 0961
+isalnum 0966 096f
+isalnum 0971 0980
+isalnum 0985 098c
+isalnum 098f 0990
+isalnum 0993 09a8
+isalnum 09aa 09b0
+isalnum 09b2 09b2
+isalnum 09b6 09b9
+isalnum 09bd 09bd
+isalnum 09ce 09ce
+isalnum 09dc 09dd
+isalnum 09df 09e1
+isalnum 09e6 09f1
+isalnum 09f4 09f9
+isalnum 09fc 09fc
+isalnum 0a05 0a0a
+isalnum 0a0f 0a10
+isalnum 0a13 0a28
+isalnum 0a2a 0a30
+isalnum 0a32 0a33
+isalnum 0a35 0a36
+isalnum 0a38 0a39
+isalnum 0a59 0a5c
+isalnum 0a5e 0a5e
+isalnum 0a66 0a6f
+isalnum 0a72 0a74
+isalnum 0a85 0a8d
+isalnum 0a8f 0a91
+isalnum 0a93 0aa8
+isalnum 0aaa 0ab0
+isalnum 0ab2 0ab3
+isalnum 0ab5 0ab9
+isalnum 0abd 0abd
+isalnum 0ad0 0ad0
+isalnum 0ae0 0ae1
+isalnum 0ae6 0aef
+isalnum 0af9 0af9
+isalnum 0b05 0b0c
+isalnum 0b0f 0b10
+isalnum 0b13 0b28
+isalnum 0b2a 0b30
+isalnum 0b32 0b33
+isalnum 0b35 0b39
+isalnum 0b3d 0b3d
+isalnum 0b5c 0b5d
+isalnum 0b5f 0b61
+isalnum 0b66 0b6f
+isalnum 0b71 0b77
+isalnum 0b83 0b83
+isalnum 0b85 0b8a
+isalnum 0b8e 0b90
+isalnum 0b92 0b95
+isalnum 0b99 0b9a
+isalnum 0b9c 0b9c
+isalnum 0b9e 0b9f
+isalnum 0ba3 0ba4
+isalnum 0ba8 0baa
+isalnum 0bae 0bb9
+isalnum 0bd0 0bd0
+isalnum 0be6 0bf2
+isalnum 0c05 0c0c
+isalnum 0c0e 0c10
+isalnum 0c12 0c28
+isalnum 0c2a 0c39
+isalnum 0c3d 0c3d
+isalnum 0c58 0c5a
+isalnum 0c5d 0c5d
+isalnum 0c60 0c61
+isalnum 0c66 0c6f
+isalnum 0c78 0c7e
+isalnum 0c80 0c80
+isalnum 0c85 0c8c
+isalnum 0c8e 0c90
+isalnum 0c92 0ca8
+isalnum 0caa 0cb3
+isalnum 0cb5 0cb9
+isalnum 0cbd 0cbd
+isalnum 0cdd 0cde
+isalnum 0ce0 0ce1
+isalnum 0ce6 0cef
+isalnum 0cf1 0cf2
+isalnum 0d04 0d0c
+isalnum 0d0e 0d10
+isalnum 0d12 0d3a
+isalnum 0d3d 0d3d
+isalnum 0d4e 0d4e
+isalnum 0d54 0d56
+isalnum 0d58 0d61
+isalnum 0d66 0d78
+isalnum 0d7a 0d7f
+isalnum 0d85 0d96
+isalnum 0d9a 0db1
+isalnum 0db3 0dbb
+isalnum 0dbd 0dbd
+isalnum 0dc0 0dc6
+isalnum 0de6 0def
+isalnum 0e01 0e30
+isalnum 0e32 0e33
+isalnum 0e40 0e46
+isalnum 0e50 0e59
+isalnum 0e81 0e82
+isalnum 0e84 0e84
+isalnum 0e86 0e8a
+isalnum 0e8c 0ea3
+isalnum 0ea5 0ea5
+isalnum 0ea7 0eb0
+isalnum 0eb2 0eb3
+isalnum 0ebd 0ebd
+isalnum 0ec0 0ec4
+isalnum 0ec6 0ec6
+isalnum 0ed0 0ed9
+isalnum 0edc 0edf
+isalnum 0f00 0f00
+isalnum 0f20 0f33
+isalnum 0f40 0f47
+isalnum 0f49 0f6c
+isalnum 0f88 0f8c
+isalnum 1000 102a
+isalnum 103f 1049
+isalnum 1050 1055
+isalnum 105a 105d
+isalnum 1061 1061
+isalnum 1065 1066
+isalnum 106e 1070
+isalnum 1075 1081
+isalnum 108e 108e
+isalnum 1090 1099
+isalnum 10a0 10c5
+isalnum 10c7 10c7
+isalnum 10cd 10cd
+isalnum 10d0 10fa
+isalnum 10fc 1248
+isalnum 124a 124d
+isalnum 1250 1256
+isalnum 1258 1258
+isalnum 125a 125d
+isalnum 1260 1288
+isalnum 128a 128d
+isalnum 1290 12b0
+isalnum 12b2 12b5
+isalnum 12b8 12be
+isalnum 12c0 12c0
+isalnum 12c2 12c5
+isalnum 12c8 12d6
+isalnum 12d8 1310
+isalnum 1312 1315
+isalnum 1318 135a
+isalnum 1369 137c
+isalnum 1380 138f
+isalnum 13a0 13f5
+isalnum 13f8 13fd
+isalnum 1401 166c
+isalnum 166f 167f
+isalnum 1681 169a
+isalnum 16a0 16ea
+isalnum 16ee 16f8
+isalnum 1700 1711
+isalnum 171f 1731
+isalnum 1740 1751
+isalnum 1760 176c
+isalnum 176e 1770
+isalnum 1780 17b3
+isalnum 17d7 17d7
+isalnum 17dc 17dc
+isalnum 17e0 17e9
+isalnum 17f0 17f9
+isalnum 1810 1819
+isalnum 1820 1878
+isalnum 1880 1884
+isalnum 1887 18a8
+isalnum 18aa 18aa
+isalnum 18b0 18f5
+isalnum 1900 191e
+isalnum 1946 196d
+isalnum 1970 1974
+isalnum 1980 19ab
+isalnum 19b0 19c9
+isalnum 19d0 19da
+isalnum 1a00 1a16
+isalnum 1a20 1a54
+isalnum 1a80 1a89
+isalnum 1a90 1a99
+isalnum 1aa7 1aa7
+isalnum 1b05 1b33
+isalnum 1b45 1b4c
+isalnum 1b50 1b59
+isalnum 1b83 1ba0
+isalnum 1bae 1be5
+isalnum 1c00 1c23
+isalnum 1c40 1c49
+isalnum 1c4d 1c7d
+isalnum 1c80 1c88
+isalnum 1c90 1cba
+isalnum 1cbd 1cbf
+isalnum 1ce9 1cec
+isalnum 1cee 1cf3
+isalnum 1cf5 1cf6
+isalnum 1cfa 1cfa
+isalnum 1d00 1dbf
+isalnum 1e00 1f15
+isalnum 1f18 1f1d
+isalnum 1f20 1f45
+isalnum 1f48 1f4d
+isalnum 1f50 1f57
+isalnum 1f59 1f59
+isalnum 1f5b 1f5b
+isalnum 1f5d 1f5d
+isalnum 1f5f 1f7d
+isalnum 1f80 1fb4
+isalnum 1fb6 1fbc
+isalnum 1fbe 1fbe
+isalnum 1fc2 1fc4
+isalnum 1fc6 1fcc
+isalnum 1fd0 1fd3
+isalnum 1fd6 1fdb
+isalnum 1fe0 1fec
+isalnum 1ff2 1ff4
+isalnum 1ff6 1ffc
+isalnum 2070 2071
+isalnum 2074 2079
+isalnum 207f 2089
+isalnum 2090 209c
+isalnum 2102 2102
+isalnum 2107 2107
+isalnum 210a 2113
+isalnum 2115 2115
+isalnum 2119 211d
+isalnum 2124 2124
+isalnum 2126 2126
+isalnum 2128 2128
+isalnum 212a 212d
+isalnum 212f 2139
+isalnum 213c 213f
+isalnum 2145 2149
+isalnum 214e 214e
+isalnum 2150 2189
+isalnum 2460 249b
+isalnum 24ea 24ff
+isalnum 2776 2793
+isalnum 2c00 2ce4
+isalnum 2ceb 2cee
+isalnum 2cf2 2cf3
+isalnum 2cfd 2cfd
+isalnum 2d00 2d25
+isalnum 2d27 2d27
+isalnum 2d2d 2d2d
+isalnum 2d30 2d67
+isalnum 2d6f 2d6f
+isalnum 2d80 2d96
+isalnum 2da0 2da6
+isalnum 2da8 2dae
+isalnum 2db0 2db6
+isalnum 2db8 2dbe
+isalnum 2dc0 2dc6
+isalnum 2dc8 2dce
+isalnum 2dd0 2dd6
+isalnum 2dd8 2dde
+isalnum 2e2f 2e2f
+isalnum 3005 3007
+isalnum 3021 3029
+isalnum 3031 3035
+isalnum 3038 303c
+isalnum 3041 3096
+isalnum 309d 309f
+isalnum 30a1 30fa
+isalnum 30fc 30ff
+isalnum 3105 312f
+isalnum 3131 318e
+isalnum 3192 3195
+isalnum 31a0 31bf
+isalnum 31f0 31ff
+isalnum 3220 3229
+isalnum 3248 324f
+isalnum 3251 325f
+isalnum 3280 3289
+isalnum 32b1 32bf
+isalnum 3400 4dbf
+isalnum 4e00 a48c
+isalnum a4d0 a4fd
+isalnum a500 a60c
+isalnum a610 a62b
+isalnum a640 a66e
+isalnum a67f a69d
+isalnum a6a0 a6ef
+isalnum a717 a71f
+isalnum a722 a788
+isalnum a78b a7ca
+isalnum a7d0 a7d1
+isalnum a7d3 a7d3
+isalnum a7d5 a7d9
+isalnum a7f2 a801
+isalnum a803 a805
+isalnum a807 a80a
+isalnum a80c a822
+isalnum a830 a835
+isalnum a840 a873
+isalnum a882 a8b3
+isalnum a8d0 a8d9
+isalnum a8f2 a8f7
+isalnum a8fb a8fb
+isalnum a8fd a8fe
+isalnum a900 a925
+isalnum a930 a946
+isalnum a960 a97c
+isalnum a984 a9b2
+isalnum a9cf a9d9
+isalnum a9e0 a9e4
+isalnum a9e6 a9fe
+isalnum aa00 aa28
+isalnum aa40 aa42
+isalnum aa44 aa4b
+isalnum aa50 aa59
+isalnum aa60 aa76
+isalnum aa7a aa7a
+isalnum aa7e aaaf
+isalnum aab1 aab1
+isalnum aab5 aab6
+isalnum aab9 aabd
+isalnum aac0 aac0
+isalnum aac2 aac2
+isalnum aadb aadd
+isalnum aae0 aaea
+isalnum aaf2 aaf4
+isalnum ab01 ab06
+isalnum ab09 ab0e
+isalnum ab11 ab16
+isalnum ab20 ab26
+isalnum ab28 ab2e
+isalnum ab30 ab5a
+isalnum ab5c ab69
+isalnum ab70 abe2
+isalnum abf0 abf9
+isalnum ac00 d7a3
+isalnum d7b0 d7c6
+isalnum d7cb d7fb
+isalnum f900 fa6d
+isalnum fa70 fad9
+isalnum fb00 fb06
+isalnum fb13 fb17
+isalnum fb1d fb1d
+isalnum fb1f fb28
+isalnum fb2a fb36
+isalnum fb38 fb3c
+isalnum fb3e fb3e
+isalnum fb40 fb41
+isalnum fb43 fb44
+isalnum fb46 fbb1
+isalnum fbd3 fd3d
+isalnum fd50 fd8f
+isalnum fd92 fdc7
+isalnum fdf0 fdfb
+isalnum fe70 fe74
+isalnum fe76 fefc
+isalnum ff10 ff19
+isalnum ff21 ff3a
+isalnum ff41 ff5a
+isalnum ff66 ffbe
+isalnum ffc2 ffc7
+isalnum ffca ffcf
+isalnum ffd2 ffd7
+isalnum ffda ffdc
+isalnum 10000 1000b
+isalnum 1000d 10026
+isalnum 10028 1003a
+isalnum 1003c 1003d
+isalnum 1003f 1004d
+isalnum 10050 1005d
+isalnum 10080 100fa
+isalnum 10107 10133
+isalnum 10140 10178
+isalnum 1018a 1018b
+isalnum 10280 1029c
+isalnum 102a0 102d0
+isalnum 102e1 102fb
+isalnum 10300 10323
+isalnum 1032d 1034a
+isalnum 10350 10375
+isalnum 10380 1039d
+isalnum 103a0 103c3
+isalnum 103c8 103cf
+isalnum 103d1 103d5
+isalnum 10400 1049d
+isalnum 104a0 104a9
+isalnum 104b0 104d3
+isalnum 104d8 104fb
+isalnum 10500 10527
+isalnum 10530 10563
+isalnum 10570 1057a
+isalnum 1057c 1058a
+isalnum 1058c 10592
+isalnum 10594 10595
+isalnum 10597 105a1
+isalnum 105a3 105b1
+isalnum 105b3 105b9
+isalnum 105bb 105bc
+isalnum 10600 10736
+isalnum 10740 10755
+isalnum 10760 10767
+isalnum 10780 10785
+isalnum 10787 107b0
+isalnum 107b2 107ba
+isalnum 10800 10805
+isalnum 10808 10808
+isalnum 1080a 10835
+isalnum 10837 10838
+isalnum 1083c 1083c
+isalnum 1083f 10855
+isalnum 10858 10876
+isalnum 10879 1089e
+isalnum 108a7 108af
+isalnum 108e0 108f2
+isalnum 108f4 108f5
+isalnum 108fb 1091b
+isalnum 10920 10939
+isalnum 10980 109b7
+isalnum 109bc 109cf
+isalnum 109d2 10a00
+isalnum 10a10 10a13
+isalnum 10a15 10a17
+isalnum 10a19 10a35
+isalnum 10a40 10a48
+isalnum 10a60 10a7e
+isalnum 10a80 10a9f
+isalnum 10ac0 10ac7
+isalnum 10ac9 10ae4
+isalnum 10aeb 10aef
+isalnum 10b00 10b35
+isalnum 10b40 10b55
+isalnum 10b58 10b72
+isalnum 10b78 10b91
+isalnum 10ba9 10baf
+isalnum 10c00 10c48
+isalnum 10c80 10cb2
+isalnum 10cc0 10cf2
+isalnum 10cfa 10d23
+isalnum 10d30 10d39
+isalnum 10e60 10e7e
+isalnum 10e80 10ea9
+isalnum 10eb0 10eb1
+isalnum 10f00 10f27
+isalnum 10f30 10f45
+isalnum 10f51 10f54
+isalnum 10f70 10f81
+isalnum 10fb0 10fcb
+isalnum 10fe0 10ff6
+isalnum 11003 11037
+isalnum 11052 1106f
+isalnum 11071 11072
+isalnum 11075 11075
+isalnum 11083 110af
+isalnum 110d0 110e8
+isalnum 110f0 110f9
+isalnum 11103 11126
+isalnum 11136 1113f
+isalnum 11144 11144
+isalnum 11147 11147
+isalnum 11150 11172
+isalnum 11176 11176
+isalnum 11183 111b2
+isalnum 111c1 111c4
+isalnum 111d0 111da
+isalnum 111dc 111dc
+isalnum 111e1 111f4
+isalnum 11200 11211
+isalnum 11213 1122b
+isalnum 1123f 11240
+isalnum 11280 11286
+isalnum 11288 11288
+isalnum 1128a 1128d
+isalnum 1128f 1129d
+isalnum 1129f 112a8
+isalnum 112b0 112de
+isalnum 112f0 112f9
+isalnum 11305 1130c
+isalnum 1130f 11310
+isalnum 11313 11328
+isalnum 1132a 11330
+isalnum 11332 11333
+isalnum 11335 11339
+isalnum 1133d 1133d
+isalnum 11350 11350
+isalnum 1135d 11361
+isalnum 11400 11434
+isalnum 11447 1144a
+isalnum 11450 11459
+isalnum 1145f 11461
+isalnum 11480 114af
+isalnum 114c4 114c5
+isalnum 114c7 114c7
+isalnum 114d0 114d9
+isalnum 11580 115ae
+isalnum 115d8 115db
+isalnum 11600 1162f
+isalnum 11644 11644
+isalnum 11650 11659
+isalnum 11680 116aa
+isalnum 116b8 116b8
+isalnum 116c0 116c9
+isalnum 11700 1171a
+isalnum 11730 1173b
+isalnum 11740 11746
+isalnum 11800 1182b
+isalnum 118a0 118f2
+isalnum 118ff 11906
+isalnum 11909 11909
+isalnum 1190c 11913
+isalnum 11915 11916
+isalnum 11918 1192f
+isalnum 1193f 1193f
+isalnum 11941 11941
+isalnum 11950 11959
+isalnum 119a0 119a7
+isalnum 119aa 119d0
+isalnum 119e1 119e1
+isalnum 119e3 119e3
+isalnum 11a00 11a00
+isalnum 11a0b 11a32
+isalnum 11a3a 11a3a
+isalnum 11a50 11a50
+isalnum 11a5c 11a89
+isalnum 11a9d 11a9d
+isalnum 11ab0 11af8
+isalnum 11c00 11c08
+isalnum 11c0a 11c2e
+isalnum 11c40 11c40
+isalnum 11c50 11c6c
+isalnum 11c72 11c8f
+isalnum 11d00 11d06
+isalnum 11d08 11d09
+isalnum 11d0b 11d30
+isalnum 11d46 11d46
+isalnum 11d50 11d59
+isalnum 11d60 11d65
+isalnum 11d67 11d68
+isalnum 11d6a 11d89
+isalnum 11d98 11d98
+isalnum 11da0 11da9
+isalnum 11ee0 11ef2
+isalnum 11f02 11f02
+isalnum 11f04 11f10
+isalnum 11f12 11f33
+isalnum 11f50 11f59
+isalnum 11fb0 11fb0
+isalnum 11fc0 11fd4
+isalnum 12000 12399
+isalnum 12400 1246e
+isalnum 12480 12543
+isalnum 12f90 12ff0
+isalnum 13000 1342f
+isalnum 13441 13446
+isalnum 14400 14646
+isalnum 16800 16a38
+isalnum 16a40 16a5e
+isalnum 16a60 16a69
+isalnum 16a70 16abe
+isalnum 16ac0 16ac9
+isalnum 16ad0 16aed
+isalnum 16b00 16b2f
+isalnum 16b40 16b43
+isalnum 16b50 16b59
+isalnum 16b5b 16b61
+isalnum 16b63 16b77
+isalnum 16b7d 16b8f
+isalnum 16e40 16e96
+isalnum 16f00 16f4a
+isalnum 16f50 16f50
+isalnum 16f93 16f9f
+isalnum 16fe0 16fe1
+isalnum 16fe3 16fe3
+isalnum 17000 187f7
+isalnum 18800 18cd5
+isalnum 18d00 18d08
+isalnum 1aff0 1aff3
+isalnum 1aff5 1affb
+isalnum 1affd 1affe
+isalnum 1b000 1b122
+isalnum 1b132 1b132
+isalnum 1b150 1b152
+isalnum 1b155 1b155
+isalnum 1b164 1b167
+isalnum 1b170 1b2fb
+isalnum 1bc00 1bc6a
+isalnum 1bc70 1bc7c
+isalnum 1bc80 1bc88
+isalnum 1bc90 1bc99
+isalnum 1d2c0 1d2d3
+isalnum 1d2e0 1d2f3
+isalnum 1d360 1d378
+isalnum 1d400 1d454
+isalnum 1d456 1d49c
+isalnum 1d49e 1d49f
+isalnum 1d4a2 1d4a2
+isalnum 1d4a5 1d4a6
+isalnum 1d4a9 1d4ac
+isalnum 1d4ae 1d4b9
+isalnum 1d4bb 1d4bb
+isalnum 1d4bd 1d4c3
+isalnum 1d4c5 1d505
+isalnum 1d507 1d50a
+isalnum 1d50d 1d514
+isalnum 1d516 1d51c
+isalnum 1d51e 1d539
+isalnum 1d53b 1d53e
+isalnum 1d540 1d544
+isalnum 1d546 1d546
+isalnum 1d54a 1d550
+isalnum 1d552 1d6a5
+isalnum 1d6a8 1d6c0
+isalnum 1d6c2 1d6da
+isalnum 1d6dc 1d6fa
+isalnum 1d6fc 1d714
+isalnum 1d716 1d734
+isalnum 1d736 1d74e
+isalnum 1d750 1d76e
+isalnum 1d770 1d788
+isalnum 1d78a 1d7a8
+isalnum 1d7aa 1d7c2
+isalnum 1d7c4 1d7cb
+isalnum 1d7ce 1d7ff
+isalnum 1df00 1df1e
+isalnum 1df25 1df2a
+isalnum 1e030 1e06d
+isalnum 1e100 1e12c
+isalnum 1e137 1e13d
+isalnum 1e140 1e149
+isalnum 1e14e 1e14e
+isalnum 1e290 1e2ad
+isalnum 1e2c0 1e2eb
+isalnum 1e2f0 1e2f9
+isalnum 1e4d0 1e4eb
+isalnum 1e4f0 1e4f9
+isalnum 1e7e0 1e7e6
+isalnum 1e7e8 1e7eb
+isalnum 1e7ed 1e7ee
+isalnum 1e7f0 1e7fe
+isalnum 1e800 1e8c4
+isalnum 1e8c7 1e8cf
+isalnum 1e900 1e943
+isalnum 1e94b 1e94b
+isalnum 1e950 1e959
+isalnum 1ec71 1ecab
+isalnum 1ecad 1ecaf
+isalnum 1ecb1 1ecb4
+isalnum 1ed01 1ed2d
+isalnum 1ed2f 1ed3d
+isalnum 1ee00 1ee03
+isalnum 1ee05 1ee1f
+isalnum 1ee21 1ee22
+isalnum 1ee24 1ee24
+isalnum 1ee27 1ee27
+isalnum 1ee29 1ee32
+isalnum 1ee34 1ee37
+isalnum 1ee39 1ee39
+isalnum 1ee3b 1ee3b
+isalnum 1ee42 1ee42
+isalnum 1ee47 1ee47
+isalnum 1ee49 1ee49
+isalnum 1ee4b 1ee4b
+isalnum 1ee4d 1ee4f
+isalnum 1ee51 1ee52
+isalnum 1ee54 1ee54
+isalnum 1ee57 1ee57
+isalnum 1ee59 1ee59
+isalnum 1ee5b 1ee5b
+isalnum 1ee5d 1ee5d
+isalnum 1ee5f 1ee5f
+isalnum 1ee61 1ee62
+isalnum 1ee64 1ee64
+isalnum 1ee67 1ee6a
+isalnum 1ee6c 1ee72
+isalnum 1ee74 1ee77
+isalnum 1ee79 1ee7c
+isalnum 1ee7e 1ee7e
+isalnum 1ee80 1ee89
+isalnum 1ee8b 1ee9b
+isalnum 1eea1 1eea3
+isalnum 1eea5 1eea9
+isalnum 1eeab 1eebb
+isalnum 1f100 1f10c
+isalnum 1fbf0 1fbf9
+isalnum 20000 2a6df
+isalnum 2a700 2b739
+isalnum 2b740 2b81d
+isalnum 2b820 2cea1
+isalnum 2ceb0 2ebe0
+isalnum 2f800 2fa1d
+isalnum 30000 3134a
+isalnum 31350 323af
+isspace 0009 000d
+isspace 001c 0020
+isspace 0085 0085
+isspace 00a0 00a0
+isspace 1680 1680
+isspace 2000 200a
+isspace 2028 2029
+isspace 202f 202f
+isspace 205f 205f
+isspace 3000 3000
+case 0041 0041 0061
+case 0042 0042 0062
+case 0043 0043 0063
+case 0044 0044 0064
+case 0045 0045 0065
+case 0046 0046 0066
+case 0047 0047 0067
+case 0048 0048 0068
+case 0049 0049 0069 0130 0131
+case 004a 004a 006a
+case 004b 004b 006b 212a
+case 004c 004c 006c
+case 004d 004d 006d
+case 004e 004e 006e
+case 004f 004f 006f
+case 0050 0050 0070
+case 0051 0051 0071
+case 0052 0052 0072
+case 0053 0053 0073 017f
+case 0054 0054 0074
+case 0055 0055 0075
+case 0056 0056 0076
+case 0057 0057 0077
+case 0058 0058 0078
+case 0059 0059 0079
+case 005a 005a 007a
+case 0061 0041 0061
+case 0062 0042 0062
+case 0063 0043 0063
+case 0064 0044 0064
+case 0065 0045 0065
+case 0066 0046 0066
+case 0067 0047 0067
+case 0068 0048 0068
+case 0069 0049 0069 0130 0131
+case 006a 004a 006a
+case 006b 004b 006b 212a
+case 006c 004c 006c
+case 006d 004d 006d
+case 006e 004e 006e
+case 006f 004f 006f
+case 0070 0050 0070
+case 0071 0051 0071
+case 0072 0052 0072
+case 0073 0053 0073 017f
+case 0074 0054 0074
+case 0075 0055 0075
+case 0076 0056 0076
+case 0077 0057 0077
+case 0078 0058 0078
+case 0079 0059 0079
+case 007a 005a 007a
+case 00b5 00b5 039c 03bc
+case 00c0 00c0 00e0
+case 00c1 00c1 00e1
+case 00c2 00c2 00e2
+case 00c3 00c3 00e3
+case 00c4 00c4 00e4
+case 00c5 00c5 00e5 212b
+case 00c6 00c6 00e6
+case 00c7 00c7 00e7
+case 00c8 00c8 00e8
+case 00c9 00c9 00e9
+case 00ca 00ca 00ea
+case 00cb 00cb 00eb
+case 00cc 00cc 00ec
+case 00cd 00cd 00ed
+case 00ce 00ce 00ee
+case 00cf 00cf 00ef
+case 00d0 00d0 00f0
+case 00d1 00d1 00f1
+case 00d2 00d2 00f2
+case 00d3 00d3 00f3
+case 00d4 00d4 00f4
+case 00d5 00d5 00f5
+case 00d6 00d6 00f6
+case 00d8 00d8 00f8
+case 00d9 00d9 00f9
+case 00da 00da 00fa
+case 00db 00db 00fb
+case 00dc 00dc 00fc
+case 00dd 00dd 00fd
+case 00de 00de 00fe
+case 00df 00df 1e9e
+case 00e0 00c0 00e0
+case 00e1 00c1 00e1
+case 00e2 00c2 00e2
+case 00e3 00c3 00e3
+case 00e4 00c4 00e4
+case 00e5 00c5 00e5 212b
+case 00e6 00c6 00e6
+case 00e7 00c7 00e7
+case 00e8 00c8 00e8
+case 00e9 00c9 00e9
+case 00ea 00ca 00ea
+case 00eb 00cb 00eb
+case 00ec 00cc 00ec
+case 00ed 00cd 00ed
+case 00ee 00ce 00ee
+case 00ef 00cf 00ef
+case 00f0 00d0 00f0
+case 00f1 00d1 00f1
+case 00f2 00d2 00f2
+case 00f3 00d3 00f3
+case 00f4 00d4 00f4
+case 00f5 00d5 00f5
+case 00f6 00d6 00f6
+case 00f8 00d8 00f8
+case 00f9 00d9 00f9
+case 00fa 00da 00fa
+case 00fb 00db 00fb
+case 00fc 00dc 00fc
+case 00fd 00dd 00fd
+case 00fe 00de 00fe
+case 00ff 00ff 0178
+case 0100 0100 0101
+case 0101 0100 0101
+case 0102 0102 0103
+case 0103 0102 0103
+case 0104 0104 0105
+case 0105 0104 0105
+case 0106 0106 0107
+case 0107 0106 0107
+case 0108 0108 0109
+case 0109 0108 0109
+case 010a 010a 010b
+case 010b 010a 010b
+case 010c 010c 010d
+case 010d 010c 010d
+case 010e 010e 010f
+case 010f 010e 010f
+case 0110 0110 0111
+case 0111 0110 0111
+case 0112 0112 0113
+case 0113 0112 0113
+case 0114 0114 0115
+case 0115 0114 0115
+case 0116 0116 0117
+case 0117 0116 0117
+case 0118 0118 0119
+case 0119 0118 0119
+case 011a 011a 011b
+case 011b 011a 011b
+case 011c 011c 011d
+case 011d 011c 011d
+case 011e 011e 011f
+case 011f 011e 011f
+case 0120 0120 0121
+case 0121 0120 0121
+case 0122 0122 0123
+case 0123 0122 0123
+case 0124 0124 0125
+case 0125 0124 0125
+case 0126 0126 0127
+case 0127 0126 0127
+case 0128 0128 0129
+case 0129 0128 0129
+case 012a 012a 012b
+case 012b 012a 012b
+case 012c 012c 012d
+case 012d 012c 012d
+case 012e 012e 012f
+case 012f 012e 012f
+case 0130 0049 0069 0130 0131
+case 0131 0049 0069 0130 0131
+case 0132 0132 0133
+case 0133 0132 0133
+case 0134 0134 0135
+case 0135 0134 0135
+case 0136 0136 0137
+case 0137 0136 0137
+case 0139 0139 013a
+case 013a 0139 013a
+case 013b 013b 013c
+case 013c 013b 013c
+case 013d 013d 013e
+case 013e 013d 013e
+case 013f 013f 0140
+case 0140 013f 0140
+case 0141 0141 0142
+case 0142 0141 0142
+case 0143 0143 0144
+case 0144 0143 0144
+case 0145 0145 0146
+case 0146 0145 0146
+case 0147 0147 0148
+case 0148 0147 0148
+case 0149 0149
+case 014a 014a 014b
+case 014b 014a 014b
+case 014c 014c 014d
+case 014d 014c 014d
+case 014e 014e 014f
+case 014f 014e 014f
+case 0150 0150 0151
+case 0151 0150 0151
+case 0152 0152 0153
+case 0153 0152 0153
+case 0154 0154 0155
+case 0155 0154 0155
+case 0156 0156 0157
+case 0157 0156 0157
+case 0158 0158 0159
+case 0159 0158 0159
+case 015a 015a 015b
+case 015b 015a 015b
+case 015c 015c 015d
+case 015d 015c 015d
+case 015e 015e 015f
+case 015f 015e 015f
+case 0160 0160 0161
+case 0161 0160 0161
+case 0162 0162 0163
+case 0163 0162 0163
+case 0164 0164 0165
+case 0165 0164 0165
+case 0166 0166 0167
+case 0167 0166 0167
+case 0168 0168 0169
+case 0169 0168 0169
+case 016a 016a 016b
+case 016b 016a 016b
+case 016c 016c 016d
+case 016d 016c 016d
+case 016e 016e 016f
+case 016f 016e 016f
+case 0170 0170 0171
+case 0171 0170 0171
+case 0172 0172 0173
+case 0173 0172 0173
+case 0174 0174 0175
+case 0175 0174 0175
+case 0176 0176 0177
+case 0177 0176 0177
+case 0178 00ff 0178
+case 0179 0179 017a
+case 017a 0179 017a
+case 017b 017b 017c
+case 017c 017b 017c
+case 017d 017d 017e
+case 017e 017d 017e
+case 017f 0053 0073 017f
+case 0180 0180 0243
+case 0181 0181 0253
+case 0182 0182 0183
+case 0183 0182 0183
+case 0184 0184 0185
+case 0185 0184 0185
+case 0186 0186 0254
+case 0187 0187 0188
+case 0188 0187 0188
+case 0189 0189 0256
+case 018a 018a 0257
+case 018b 018b 018c
+case 018c 018b 018c
+case 018e 018e 01dd
+case 018f 018f 0259
+case 0190 0190 025b
+case 0191 0191 0192
+case 0192 0191 0192
+case 0193 0193 0260
+case 0194 0194 0263
+case 0195 0195 01f6
+case 0196 0196 0269
+case 0197 0197 0268
+case 0198 0198 0199
+case 0199 0198 0199
+case 019a 019a 023d
+case 019c 019c 026f
+case 019d 019d 0272
+case 019e 019e 0220
+case 019f 019f 0275
+case 01a0 01a0 01a1
+case 01a1 01a0 01a1
+case 01a2 01a2 01a3
+case 01a3 01a2 01a3
+case 01a4 01a4 01a5
+case 01a5 01a4 01a5
+case 01a6 01a6 0280
+case 01a7 01a7 01a8
+case 01a8 01a7 01a8
+case 01a9 01a9 0283
+case 01ac 01ac 01ad
+case 01ad 01ac 01ad
+case 01ae 01ae 0288
+case 01af 01af 01b0
+case 01b0 01af 01b0
+case 01b1 01b1 028a
+case 01b2 01b2 028b
+case 01b3 01b3 01b4
+case 01b4 01b3 01b4
+case 01b5 01b5 01b6
+case 01b6 01b5 01b6
+case 01b7 01b7 0292
+case 01b8 01b8 01b9
+case 01b9 01b8 01b9
+case 01bc 01bc 01bd
+case 01bd 01bc 01bd
+case 01bf 01bf 01f7
+case 01c4 01c4 01c5 01c6
+case 01c5 01c4 01c5 01c6
+case 01c6 01c4 01c5 01c6
+case 01c7 01c7 01c8 01c9
+case 01c8 01c7 01c8 01c9
+case 01c9 01c7 01c8 01c9
+case 01ca 01ca 01cb 01cc
+case 01cb 01ca 01cb 01cc
+case 01cc 01ca 01cb 01cc
+case 01cd 01cd 01ce
+case 01ce 01cd 01ce
+case 01cf 01cf 01d0
+case 01d0 01cf 01d0
+case 01d1 01d1 01d2
+case 01d2 01d1 01d2
+case 01d3 01d3 01d4
+case 01d4 01d3 01d4
+case 01d5 01d5 01d6
+case 01d6 01d5 01d6
+case 01d7 01d7 01d8
+case 01d8 01d7 01d8
+case 01d9 01d9 01da
+case 01da 01d9 01da
+case 01db 01db 01dc
+case 01dc 01db 01dc
+case 01dd 018e 01dd
+case 01de 01de 01df
+case 01df 01de 01df
+case 01e0 01e0 01e1
+case 01e1 01e0 01e1
+case 01e2 01e2 01e3
+case 01e3 01e2 01e3
+case 01e4 01e4 01e5
+case 01e5 01e4 01e5
+case 01e6 01e6 01e7
+case 01e7 01e6 01e7
+case 01e8 01e8 01e9
+case 01e9 01e8 01e9
+case 01ea 01ea 01eb
+case 01eb 01ea 01eb
+case 01ec 01ec 01ed
+case 01ed 01ec 01ed
+case 01ee 01ee 01ef
+case 01ef 01ee 01ef
+case 01f0 01f0
+case 01f1 01f1 01f2 01f3
+case 01f2 01f1 01f2 01f3
+case 01f3 01f1 01f2 01f3
+case 01f4 01f4 01f5
+case 01f5 01f4 01f5
+case 01f6 0195 01f6
+case 01f7 01bf 01f7
+case 01f8 01f8 01f9
+case 01f9 01f8 01f9
+case 01fa 01fa 01fb
+case 01fb 01fa 01fb
+case 01fc 01fc 01fd
+case 01fd 01fc 01fd
+case 01fe 01fe 01ff
+case 01ff 01fe 01ff
+case 0200 0200 0201
+case 0201 0200 0201
+case 0202 0202 0203
+case 0203 0202 0203
+case 0204 0204 0205
+case 0205 0204 0205
+case 0206 0206 0207
+case 0207 0206 0207
+case 0208 0208 0209
+case 0209 0208 0209
+case 020a 020a 020b
+case 020b 020a 020b
+case 020c 020c 020d
+case 020d 020c 020d
+case 020e 020e 020f
+case 020f 020e 020f
+case 0210 0210 0211
+case 0211 0210 0211
+case 0212 0212 0213
+case 0213 0212 0213
+case 0214 0214 0215
+case 0215 0214 0215
+case 0216 0216 0217
+case 0217 0216 0217
+case 0218 0218 0219
+case 0219 0218 0219
+case 021a 021a 021b
+case 021b 021a 021b
+case 021c 021c 021d
+case 021d 021c 021d
+case 021e 021e 021f
+case 021f 021e 021f
+case 0220 019e 0220
+case 0222 0222 0223
+case 0223 0222 0223
+case 0224 0224 0225
+case 0225 0224 0225
+case 0226 0226 0227
+case 0227 0226 0227
+case 0228 0228 0229
+case 0229 0228 0229
+case 022a 022a 022b
+case 022b 022a 022b
+case 022c 022c 022d
+case 022d 022c 022d
+case 022e 022e 022f
+case 022f 022e 022f
+case 0230 0230 0231
+case 0231 0230 0231
+case 0232 0232 0233
+case 0233 0232 0233
+case 023a 023a 2c65
+case 023b 023b 023c
+case 023c 023b 023c
+case 023d 019a 023d
+case 023e 023e 2c66
+case 023f 023f 2c7e
+case 0240 0240 2c7f
+case 0241 0241 0242
+case 0242 0241 0242
+case 0243 0180 0243
+case 0244 0244 0289
+case 0245 0245 028c
+case 0246 0246 0247
+case 0247 0246 0247
+case 0248 0248 0249
+case 0249 0248 0249
+case 024a 024a 024b
+case 024b 024a 024b
+case 024c 024c 024d
+case 024d 024c 024d
+case 024e 024e 024f
+case 024f 024e 024f
+case 0250 0250 2c6f
+case 0251 0251 2c6d
+case 0252 0252 2c70
+case 0253 0181 0253
+case 0254 0186 0254
+case 0256 0189 0256
+case 0257 018a 0257
+case 0259 018f 0259
+case 025b 0190 025b
+case 025c 025c a7ab
+case 0260 0193 0260
+case 0261 0261 a7ac
+case 0263 0194 0263
+case 0265 0265 a78d
+case 0266 0266 a7aa
+case 0268 0197 0268
+case 0269 0196 0269
+case 026a 026a a7ae
+case 026b 026b 2c62
+case 026c 026c a7ad
+case 026f 019c 026f
+case 0271 0271 2c6e
+case 0272 019d 0272
+case 0275 019f 0275
+case 027d 027d 2c64
+case 0280 01a6 0280
+case 0282 0282 a7c5
+case 0283 01a9 0283
+case 0287 0287 a7b1
+case 0288 01ae 0288
+case 0289 0244 0289
+case 028a 01b1 028a
+case 028b 01b2 028b
+case 028c 0245 028c
+case 0292 01b7 0292
+case 029d 029d a7b2
+case 029e 029e a7b0
+case 0345 0345 0399 03b9 1fbe
+case 0370 0370 0371
+case 0371 0370 0371
+case 0372 0372 0373
+case 0373 0372 0373
+case 0376 0376 0377
+case 0377 0376 0377
+case 037b 037b 03fd
+case 037c 037c 03fe
+case 037d 037d 03ff
+case 037f 037f 03f3
+case 0386 0386 03ac
+case 0388 0388 03ad
+case 0389 0389 03ae
+case 038a 038a 03af
+case 038c 038c 03cc
+case 038e 038e 03cd
+case 038f 038f 03ce
+case 0390 0390 1fd3
+case 0391 0391 03b1
+case 0392 0392 03b2 03d0
+case 0393 0393 03b3
+case 0394 0394 03b4
+case 0395 0395 03b5 03f5
+case 0396 0396 03b6
+case 0397 0397 03b7
+case 0398 0398 03b8 03d1 03f4
+case 0399 0345 0399 03b9 1fbe
+case 039a 039a 03ba 03f0
+case 039b 039b 03bb
+case 039c 00b5 039c 03bc
+case 039d 039d 03bd
+case 039e 039e 03be
+case 039f 039f 03bf
+case 03a0 03a0 03c0 03d6
+case 03a1 03a1 03c1 03f1
+case 03a3 03a3 03c2 03c3
+case 03a4 03a4 03c4
+case 03a5 03a5 03c5
+case 03a6 03a6 03c6 03d5
+case 03a7 03a7 03c7
+case 03a8 03a8 03c8
+case 03a9 03a9 03c9 2126
+case 03aa 03aa 03ca
+case 03ab 03ab 03cb
+case 03ac 0386 03ac
+case 03ad 0388 03ad
+case 03ae 0389 03ae
+case 03af 038a 03af
+case 03b0 03b0 1fe3
+case 03b1 0391 03b1
+case 03b2 0392 03b2 03d0
+case 03b3 0393 03b3
+case 03b4 0394 03b4
+case 03b5 0395 03b5 03f5
+case 03b6 0396 03b6
+case 03b7 0397 03b7
+case 03b8 0398 03b8 03d1 03f4
+case 03b9 0345 0399 03b9 1fbe
+case 03ba 039a 03ba 03f0
+case 03bb 039b 03bb
+case 03bc 00b5 039c 03bc
+case 03bd 039d 03bd
+case 03be 039e 03be
+case 03bf 039f 03bf
+case 03c0 03a0 03c0 03d6
+case 03c1 03a1 03c1 03f1
+case 03c2 03a3 03c2 03c3
+case 03c3 03a3 03c2 03c3
+case 03c4 03a4 03c4
+case 03c5 03a5 03c5
+case 03c6 03a6 03c6 03d5
+case 03c7 03a7 03c7
+case 03c8 03a8 03c8
+case 03c9 03a9 03c9 2126
+case 03ca 03aa 03ca
+case 03cb 03ab 03cb
+case 03cc 038c 03cc
+case 03cd 038e 03cd
+case 03ce 038f 03ce
+case 03cf 03cf 03d7
+case 03d0 0392 03b2 03d0
+case 03d1 0398 03b8 03d1 03f4
+case 03d5 03a6 03c6 03d5
+case 03d6 03a0 03c0 03d6
+case 03d7 03cf 03d7
+case 03d8 03d8 03d9
+case 03d9 03d8 03d9
+case 03da 03da 03db
+case 03db 03da 03db
+case 03dc 03dc 03dd
+case 03dd 03dc 03dd
+case 03de 03de 03df
+case 03df 03de 03df
+case 03e0 03e0 03e1
+case 03e1 03e0 03e1
+case 03e2 03e2 03e3
+case 03e3 03e2 03e3
+case 03e4 03e4 03e5
+case 03e5 03e4 03e5
+case 03e6 03e6 03e7
+case 03e7 03e6 03e7
+case 03e8 03e8 03e9
+case 03e9 03e8 03e9
+case 03ea 03ea 03eb
+case 03eb 03ea 03eb
+case 03ec 03ec 03ed
+case 03ed 03ec 03ed
+case 03ee 03ee 03ef
+case 03ef 03ee 03ef
+case 03f0 039a 03ba 03f0
+case 03f1 03a1 03c1 03f1
+case 03f2 03f2 03f9
+case 03f3 037f 03f3
+case 03f4 0398 03b8 03d1 03f4
+case 03f5 0395 03b5 03f5
+case 03f7 03f7 03f8
+case 03f8 03f7 03f8
+case 03f9 03f2 03f9
+case 03fa 03fa 03fb
+case 03fb 03fa 03fb
+case 03fd 037b 03fd
+case 03fe 037c 03fe
+case 03ff 037d 03ff
+case 0400 0400 0450
+case 0401 0401 0451
+case 0402 0402 0452
+case 0403 0403 0453
+case 0404 0404 0454
+case 0405 0405 0455
+case 0406 0406 0456
+case 0407 0407 0457
+case 0408 0408 0458
+case 0409 0409 0459
+case 040a 040a 045a
+case 040b 040b 045b
+case 040c 040c 045c
+case 040d 040d 045d
+case 040e 040e 045e
+case 040f 040f 045f
+case 0410 0410 0430
+case 0411 0411 0431
+case 0412 0412 0432 1c80
+case 0413 0413 0433
+case 0414 0414 0434 1c81
+case 0415 0415 0435
+case 0416 0416 0436
+case 0417 0417 0437
+case 0418 0418 0438
+case 0419 0419 0439
+case 041a 041a 043a
+case 041b 041b 043b
+case 041c 041c 043c
+case 041d 041d 043d
+case 041e 041e 043e 1c82
+case 041f 041f 043f
+case 0420 0420 0440
+case 0421 0421 0441 1c83
+case 0422 0422 0442 1c84 1c85
+case 0423 0423 0443
+case 0424 0424 0444
+case 0425 0425 0445
+case 0426 0426 0446
+case 0427 0427 0447
+case 0428 0428 0448
+case 0429 0429 0449
+case 042a 042a 044a 1c86
+case 042b 042b 044b
+case 042c 042c 044c
+case 042d 042d 044d
+case 042e 042e 044e
+case 042f 042f 044f
+case 0430 0410 0430
+case 0431 0411 0431
+case 0432 0412 0432 1c80
+case 0433 0413 0433
+case 0434 0414 0434 1c81
+case 0435 0415 0435
+case 0436 0416 0436
+case 0437 0417 0437
+case 0438 0418 0438
+case 0439 0419 0439
+case 043a 041a 043a
+case 043b 041b 043b
+case 043c 041c 043c
+case 043d 041d 043d
+case 043e 041e 043e 1c82
+case 043f 041f 043f
+case 0440 0420 0440
+case 0441 0421 0441 1c83
+case 0442 0422 0442 1c84 1c85
+case 0443 0423 0443
+case 0444 0424 0444
+case 0445 0425 0445
+case 0446 0426 0446
+case 0447 0427 0447
+case 0448 0428 0448
+case 0449 0429 0449
+case 044a 042a 044a 1c86
+case 044b 042b 044b
+case 044c 042c 044c
+case 044d 042d 044d
+case 044e 042e 044e
+case 044f 042f 044f
+case 0450 0400 0450
+case 0451 0401 0451
+case 0452 0402 0452
+case 0453 0403 0453
+case 0454 0404 0454
+case 0455 0405 0455
+case 0456 0406 0456
+case 0457 0407 0457
+case 0458 0408 0458
+case 0459 0409 0459
+case 045a 040a 045a
+case 045b 040b 045b
+case 045c 040c 045c
+case 045d 040d 045d
+case 045e 040e 045e
+case 045f 040f 045f
+case 0460 0460 0461
+case 0461 0460 0461
+case 0462 0462 0463 1c87
+case 0463 0462 0463 1c87
+case 0464 0464 0465
+case 0465 0464 0465
+case 0466 0466 0467
+case 0467 0466 0467
+case 0468 0468 0469
+case 0469 0468 0469
+case 046a 046a 046b
+case 046b 046a 046b
+case 046c 046c 046d
+case 046d 046c 046d
+case 046e 046e 046f
+case 046f 046e 046f
+case 0470 0470 0471
+case 0471 0470 0471
+case 0472 0472 0473
+case 0473 0472 0473
+case 0474 0474 0475
+case 0475 0474 0475
+case 0476 0476 0477
+case 0477 0476 0477
+case 0478 0478 0479
+case 0479 0478 0479
+case 047a 047a 047b
+case 047b 047a 047b
+case 047c 047c 047d
+case 047d 047c 047d
+case 047e 047e 047f
+case 047f 047e 047f
+case 0480 0480 0481
+case 0481 0480 0481
+case 048a 048a 048b
+case 048b 048a 048b
+case 048c 048c 048d
+case 048d 048c 048d
+case 048e 048e 048f
+case 048f 048e 048f
+case 0490 0490 0491
+case 0491 0490 0491
+case 0492 0492 0493
+case 0493 0492 0493
+case 0494 0494 0495
+case 0495 0494 0495
+case 0496 0496 0497
+case 0497 0496 0497
+case 0498 0498 0499
+case 0499 0498 0499
+case 049a 049a 049b
+case 049b 049a 049b
+case 049c 049c 049d
+case 049d 049c 049d
+case 049e 049e 049f
+case 049f 049e 049f
+case 04a0 04a0 04a1
+case 04a1 04a0 04a1
+case 04a2 04a2 04a3
+case 04a3 04a2 04a3
+case 04a4 04a4 04a5
+case 04a5 04a4 04a5
+case 04a6 04a6 04a7
+case 04a7 04a6 04a7
+case 04a8 04a8 04a9
+case 04a9 04a8 04a9
+case 04aa 04aa 04ab
+case 04ab 04aa 04ab
+case 04ac 04ac 04ad
+case 04ad 04ac 04ad
+case 04ae 04ae 04af
+case 04af 04ae 04af
+case 04b0 04b0 04b1
+case 04b1 04b0 04b1
+case 04b2 04b2 04b3
+case 04b3 04b2 04b3
+case 04b4 04b4 04b5
+case 04b5 04b4 04b5
+case 04b6 04b6 04b7
+case 04b7 04b6 04b7
+case 04b8 04b8 04b9
+case 04b9 04b8 04b9
+case 04ba 04ba 04bb
+case 04bb 04ba 04bb
+case 04bc 04bc 04bd
+case 04bd 04bc 04bd
+case 04be 04be 04bf
+case 04bf 04be 04bf
+case 04c0 04c0 04cf
+case 04c1 04c1 04c2
+case 04c2 04c1 04c2
+case 04c3 04c3 04c4
+case 04c4 04c3 04c4
+case 04c5 04c5 04c6
+case 04c6 04c5 04c6
+case 04c7 04c7 04c8
+case 04c8 04c7 04c8
+case 04c9 04c9 04ca
+case 04ca 04c9 04ca
+case 04cb 04cb 04cc
+case 04cc 04cb 04cc
+case 04cd 04cd 04ce
+case 04ce 04cd 04ce
+case 04cf 04c0 04cf
+case 04d0 04d0 04d1
+case 04d1 04d0 04d1
+case 04d2 04d2 04d3
+case 04d3 04d2 04d3
+case 04d4 04d4 04d5
+case 04d5 04d4 04d5
+case 04d6 04d6 04d7
+case 04d7 04d6 04d7
+case 04d8 04d8 04d9
+case 04d9 04d8 04d9
+case 04da 04da 04db
+case 04db 04da 04db
+case 04dc 04dc 04dd
+case 04dd 04dc 04dd
+case 04de 04de 04df
+case 04df 04de 04df
+case 04e0 04e0 04e1
+case 04e1 04e0 04e1
+case 04e2 04e2 04e3
+case 04e3 04e2 04e3
+case 04e4 04e4 04e5
+case 04e5 04e4 04e5
+case 04e6 04e6 04e7
+case 04e7 04e6 04e7
+case 04e8 04e8 04e9
+case 04e9 04e8 04e9
+case 04ea 04ea 04eb
+case 04eb 04ea 04eb
+case 04ec 04ec 04ed
+case 04ed 04ec 04ed
+case 04ee 04ee 04ef
+case 04ef 04ee 04ef
+case 04f0 04f0 04f1
+case 04f1 04f0 04f1
+case 04f2 04f2 04f3
+case 04f3 04f2 04f3
+case 04f4 04f4 04f5
+case 04f5 04f4 04f5
+case 04f6 04f6 04f7
+case 04f7 04f6 04f7
+case 04f8 04f8 04f9
+case 04f9 04f8 04f9
+case 04fa 04fa 04fb
+case 04fb 04fa 04fb
+case 04fc 04fc 04fd
+case 04fd 04fc 04fd
+case 04fe 04fe 04ff
+case 04ff 04fe 04ff
+case 0500 0500 0501
+case 0501 0500 0501
+case 0502 0502 0503
+case 0503 0502 0503
+case 0504 0504 0505
+case 0505 0504 0505
+case 0506 0506 0507
+case 0507 0506 0507
+case 0508 0508 0509
+case 0509 0508 0509
+case 050a 050a 050b
+case 050b 050a 050b
+case 050c 050c 050d
+case 050d 050c 050d
+case 050e 050e 050f
+case 050f 050e 050f
+case 0510 0510 0511
+case 0511 0510 0511
+case 0512 0512 0513
+case 0513 0512 0513
+case 0514 0514 0515
+case 0515 0514 0515
+case 0516 0516 0517
+case 0517 0516 0517
+case 0518 0518 0519
+case 0519 0518 0519
+case 051a 051a 051b
+case 051b 051a 051b
+case 051c 051c 051d
+case 051d 051c 051d
+case 051e 051e 051f
+case 051f 051e 051f
+case 0520 0520 0521
+case 0521 0520 0521
+case 0522 0522 0523
+case 0523 0522 0523
+case 0524 0524 0525
+case 0525 0524 0525
+case 0526 0526 0527
+case 0527 0526 0527
+case 0528 0528 0529
+case 0529 0528 0529
+case 052a 052a 052b
+case 052b 052a 052b
+case 052c 052c 052d
+case 052d 052c 052d
+case 052e 052e 052f
+case 052f 052e 052f
+case 0531 0531 0561
+case 0532 0532 0562
+case 0533 0533 0563
+case 0534 0534 0564
+case 0535 0535 0565
+case 0536 0536 0566
+case 0537 0537 0567
+case 0538 0538 0568
+case 0539 0539 0569
+case 053a 053a 056a
+case 053b 053b 056b
+case 053c 053c 056c
+case 053d 053d 056d
+case 053e 053e 056e
+case 053f 053f 056f
+case 0540 0540 0570
+case 0541 0541 0571
+case 0542 0542 0572
+case 0543 0543 0573
+case 0544 0544 0574
+case 0545 0545 0575
+case 0546 0546 0576
+case 0547 0547 0577
+case 0548 0548 0578
+case 0549 0549 0579
+case 054a 054a 057a
+case 054b 054b 057b
+case 054c 054c 057c
+case 054d 054d 057d
+case 054e 054e 057e
+case 054f 054f 057f
+case 0550 0550 0580
+case 0551 0551 0581
+case 0552 0552 0582
+case 0553 0553 0583
+case 0554 0554 0584
+case 0555 0555 0585
+case 0556 0556 0586
+case 0561 0531 0561
+case 0562 0532 0562
+case 0563 0533 0563
+case 0564 0534 0564
+case 0565 0535 0565
+case 0566 0536 0566
+case 0567 0537 0567
+case 0568 0538 0568
+case 0569 0539 0569
+case 056a 053a 056a
+case 056b 053b 056b
+case 056c 053c 056c
+case 056d 053d 056d
+case 056e 053e 056e
+case 056f 053f 056f
+case 0570 0540 0570
+case 0571 0541 0571
+case 0572 0542 0572
+case 0573 0543 0573
+case 0574 0544 0574
+case 0575 0545 0575
+case 0576 0546 0576
+case 0577 0547 0577
+case 0578 0548 0578
+case 0579 0549 0579
+case 057a 054a 057a
+case 057b 054b 057b
+case 057c 054c 057c
+case 057d 054d 057d
+case 057e 054e 057e
+case 057f 054f 057f
+case 0580 0550 0580
+case 0581 0551 0581
+case 0582 0552 0582
+case 0583 0553 0583
+case 0584 0554 0584
+case 0585 0555 0585
+case 0586 0556 0586
+case 0587 0587
+case 10a0 10a0 2d00
+case 10a1 10a1 2d01
+case 10a2 10a2 2d02
+case 10a3 10a3 2d03
+case 10a4 10a4 2d04
+case 10a5 10a5 2d05
+case 10a6 10a6 2d06
+case 10a7 10a7 2d07
+case 10a8 10a8 2d08
+case 10a9 10a9 2d09
+case 10aa 10aa 2d0a
+case 10ab 10ab 2d0b
+case 10ac 10ac 2d0c
+case 10ad 10ad 2d0d
+case 10ae 10ae 2d0e
+case 10af 10af 2d0f
+case 10b0 10b0 2d10
+case 10b1 10b1 2d11
+case 10b2 10b2 2d12
+case 10b3 10b3 2d13
+case 10b4 10b4 2d14
+case 10b5 10b5 2d15
+case 10b6 10b6 2d16
+case 10b7 10b7 2d17
+case 10b8 10b8 2d18
+case 10b9 10b9 2d19
+case 10ba 10ba 2d1a
+case 10bb 10bb 2d1b
+case 10bc 10bc 2d1c
+case 10bd 10bd 2d1d
+case 10be 10be 2d1e
+case 10bf 10bf 2d1f
+case 10c0 10c0 2d20
+case 10c1 10c1 2d21
+case 10c2 10c2 2d22
+case 10c3 10c3 2d23
+case 10c4 10c4 2d24
+case 10c5 10c5 2d25
+case 10c7 10c7 2d27
+case 10cd 10cd 2d2d
+case 10d0 10d0 1c90
+case 10d1 10d1 1c91
+case 10d2 10d2 1c92
+case 10d3 10d3 1c93
+case 10d4 10d4 1c94
+case 10d5 10d5 1c95
+case 10d6 10d6 1c96
+case 10d7 10d7 1c97
+case 10d8 10d8 1c98
+case 10d9 10d9 1c99
+case 10da 10da 1c9a
+case 10db 10db 1c9b
+case 10dc 10dc 1c9c
+case 10dd 10dd 1c9d
+case 10de 10de 1c9e
+case 10df 10df 1c9f
+case 10e0 10e0 1ca0
+case 10e1 10e1 1ca1
+case 10e2 10e2 1ca2
+case 10e3 10e3 1ca3
+case 10e4 10e4 1ca4
+case 10e5 10e5 1ca5
+case 10e6 10e6 1ca6
+case 10e7 10e7 1ca7
+case 10e8 10e8 1ca8
+case 10e9 10e9 1ca9
+case 10ea 10ea 1caa
+case 10eb 10eb 1cab
+case 10ec 10ec 1cac
+case 10ed 10ed 1cad
+case 10ee 10ee 1cae
+case 10ef 10ef 1caf
+case 10f0 10f0 1cb0
+case 10f1 10f1 1cb1
+case 10f2 10f2 1cb2
+case 10f3 10f3 1cb3
+case 10f4 10f4 1cb4
+case 10f5 10f5 1cb5
+case 10f6 10f6 1cb6
+case 10f7 10f7 1cb7
+case 10f8 10f8 1cb8
+case 10f9 10f9 1cb9
+case 10fa 10fa 1cba
+case 10fd 10fd 1cbd
+case 10fe 10fe 1cbe
+case 10ff 10ff 1cbf
+case 13a0 13a0 ab70
+case 13a1 13a1 ab71
+case 13a2 13a2 ab72
+case 13a3 13a3 ab73
+case 13a4 13a4 ab74
+case 13a5 13a5 ab75
+case 13a6 13a6 ab76
+case 13a7 13a7 ab77
+case 13a8 13a8 ab78
+case 13a9 13a9 ab79
+case 13aa 13aa ab7a
+case 13ab 13ab ab7b
+case 13ac 13ac ab7c
+case 13ad 13ad ab7d
+case 13ae 13ae ab7e
+case 13af 13af ab7f
+case 13b0 13b0 ab80
+case 13b1 13b1 ab81
+case 13b2 13b2 ab82
+case 13b3 13b3 ab83
+case 13b4 13b4 ab84
+case 13b5 13b5 ab85
+case 13b6 13b6 ab86
+case 13b7 13b7 ab87
+case 13b8 13b8 ab88
+case 13b9 13b9 ab89
+case 13ba 13ba ab8a
+case 13bb 13bb ab8b
+case 13bc 13bc ab8c
+case 13bd 13bd ab8d
+case 13be 13be ab8e
+case 13bf 13bf ab8f
+case 13c0 13c0 ab90
+case 13c1 13c1 ab91
+case 13c2 13c2 ab92
+case 13c3 13c3 ab93
+case 13c4 13c4 ab94
+case 13c5 13c5 ab95
+case 13c6 13c6 ab96
+case 13c7 13c7 ab97
+case 13c8 13c8 ab98
+case 13c9 13c9 ab99
+case 13ca 13ca ab9a
+case 13cb 13cb ab9b
+case 13cc 13cc ab9c
+case 13cd 13cd ab9d
+case 13ce 13ce ab9e
+case 13cf 13cf ab9f
+case 13d0 13d0 aba0
+case 13d1 13d1 aba1
+case 13d2 13d2 aba2
+case 13d3 13d3 aba3
+case 13d4 13d4 aba4
+case 13d5 13d5 aba5
+case 13d6 13d6 aba6
+case 13d7 13d7 aba7
+case 13d8 13d8 aba8
+case 13d9 13d9 aba9
+case 13da 13da abaa
+case 13db 13db abab
+case 13dc 13dc abac
+case 13dd 13dd abad
+case 13de 13de abae
+case 13df 13df abaf
+case 13e0 13e0 abb0
+case 13e1 13e1 abb1
+case 13e2 13e2 abb2
+case 13e3 13e3 abb3
+case 13e4 13e4 abb4
+case 13e5 13e5 abb5
+case 13e6 13e6 abb6
+case 13e7 13e7 abb7
+case 13e8 13e8 abb8
+case 13e9 13e9 abb9
+case 13ea 13ea abba
+case 13eb 13eb abbb
+case 13ec 13ec abbc
+case 13ed 13ed abbd
+case 13ee 13ee abbe
+case 13ef 13ef abbf
+case 13f0 13f0 13f8
+case 13f1 13f1 13f9
+case 13f2 13f2 13fa
+case 13f3 13f3 13fb
+case 13f4 13f4 13fc
+case 13f5 13f5 13fd
+case 13f8 13f0 13f8
+case 13f9 13f1 13f9
+case 13fa 13f2 13fa
+case 13fb 13f3 13fb
+case 13fc 13f4 13fc
+case 13fd 13f5 13fd
+case 1c80 0412 0432 1c80
+case 1c81 0414 0434 1c81
+case 1c82 041e 043e 1c82
+case 1c83 0421 0441 1c83
+case 1c84 0422 0442 1c84 1c85
+case 1c85 0422 0442 1c84 1c85
+case 1c86 042a 044a 1c86
+case 1c87 0462 0463 1c87
+case 1c88 1c88 a64a a64b
+case 1c90 10d0 1c90
+case 1c91 10d1 1c91
+case 1c92 10d2 1c92
+case 1c93 10d3 1c93
+case 1c94 10d4 1c94
+case 1c95 10d5 1c95
+case 1c96 10d6 1c96
+case 1c97 10d7 1c97
+case 1c98 10d8 1c98
+case 1c99 10d9 1c99
+case 1c9a 10da 1c9a
+case 1c9b 10db 1c9b
+case 1c9c 10dc 1c9c
+case 1c9d 10dd 1c9d
+case 1c9e 10de 1c9e
+case 1c9f 10df 1c9f
+case 1ca0 10e0 1ca0
+case 1ca1 10e1 1ca1
+case 1ca2 10e2 1ca2
+case 1ca3 10e3 1ca3
+case 1ca4 10e4 1ca4
+case 1ca5 10e5 1ca5
+case 1ca6 10e6 1ca6
+case 1ca7 10e7 1ca7
+case 1ca8 10e8 1ca8
+case 1ca9 10e9 1ca9
+case 1caa 10ea 1caa
+case 1cab 10eb 1cab
+case 1cac 10ec 1cac
+case 1cad 10ed 1cad
+case 1cae 10ee 1cae
+case 1caf 10ef 1caf
+case 1cb0 10f0 1cb0
+case 1cb1 10f1 1cb1
+case 1cb2 10f2 1cb2
+case 1cb3 10f3 1cb3
+case 1cb4 10f4 1cb4
+case 1cb5 10f5 1cb5
+case 1cb6 10f6 1cb6
+case 1cb7 10f7 1cb7
+case 1cb8 10f8 1cb8
+case 1cb9 10f9 1cb9
+case 1cba 10fa 1cba
+case 1cbd 10fd 1cbd
+case 1cbe 10fe 1cbe
+case 1cbf 10ff 1cbf
+case 1d79 1d79 a77d
+case 1d7d 1d7d 2c63
+case 1d8e 1d8e a7c6
+case 1e00 1e00 1e01
+case 1e01 1e00 1e01
+case 1e02 1e02 1e03
+case 1e03 1e02 1e03
+case 1e04 1e04 1e05
+case 1e05 1e04 1e05
+case 1e06 1e06 1e07
+case 1e07 1e06 1e07
+case 1e08 1e08 1e09
+case 1e09 1e08 1e09
+case 1e0a 1e0a 1e0b
+case 1e0b 1e0a 1e0b
+case 1e0c 1e0c 1e0d
+case 1e0d 1e0c 1e0d
+case 1e0e 1e0e 1e0f
+case 1e0f 1e0e 1e0f
+case 1e10 1e10 1e11
+case 1e11 1e10 1e11
+case 1e12 1e12 1e13
+case 1e13 1e12 1e13
+case 1e14 1e14 1e15
+case 1e15 1e14 1e15
+case 1e16 1e16 1e17
+case 1e17 1e16 1e17
+case 1e18 1e18 1e19
+case 1e19 1e18 1e19
+case 1e1a 1e1a 1e1b
+case 1e1b 1e1a 1e1b
+case 1e1c 1e1c 1e1d
+case 1e1d 1e1c 1e1d
+case 1e1e 1e1e 1e1f
+case 1e1f 1e1e 1e1f
+case 1e20 1e20 1e21
+case 1e21 1e20 1e21
+case 1e22 1e22 1e23
+case 1e23 1e22 1e23
+case 1e24 1e24 1e25
+case 1e25 1e24 1e25
+case 1e26 1e26 1e27
+case 1e27 1e26 1e27
+case 1e28 1e28 1e29
+case 1e29 1e28 1e29
+case 1e2a 1e2a 1e2b
+case 1e2b 1e2a 1e2b
+case 1e2c 1e2c 1e2d
+case 1e2d 1e2c 1e2d
+case 1e2e 1e2e 1e2f
+case 1e2f 1e2e 1e2f
+case 1e30 1e30 1e31
+case 1e31 1e30 1e31
+case 1e32 1e32 1e33
+case 1e33 1e32 1e33
+case 1e34 1e34 1e35
+case 1e35 1e34 1e35
+case 1e36 1e36 1e37
+case 1e37 1e36 1e37
+case 1e38 1e38 1e39
+case 1e39 1e38 1e39
+case 1e3a 1e3a 1e3b
+case 1e3b 1e3a 1e3b
+case 1e3c 1e3c 1e3d
+case 1e3d 1e3c 1e3d
+case 1e3e 1e3e 1e3f
+case 1e3f 1e3e 1e3f
+case 1e40 1e40 1e41
+case 1e41 1e40 1e41
+case 1e42 1e42 1e43
+case 1e43 1e42 1e43
+case 1e44 1e44 1e45
+case 1e45 1e44 1e45
+case 1e46 1e46 1e47
+case 1e47 1e46 1e47
+case 1e48 1e48 1e49
+case 1e49 1e48 1e49
+case 1e4a 1e4a 1e4b
+case 1e4b 1e4a 1e4b
+case 1e4c 1e4c 1e4d
+case 1e4d 1e4c 1e4d
+case 1e4e 1e4e 1e4f
+case 1e4f 1e4e 1e4f
+case 1e50 1e50 1e51
+case 1e51 1e50 1e51
+case 1e52 1e52 1e53
+case 1e53 1e52 1e53
+case 1e54 1e54 1e55
+case 1e55 1e54 1e55
+case 1e56 1e56 1e57
+case 1e57 1e56 1e57
+case 1e58 1e58 1e59
+case 1e59 1e58 1e59
+case 1e5a 1e5a 1e5b
+case 1e5b 1e5a 1e5b
+case 1e5c 1e5c 1e5d
+case 1e5d 1e5c 1e5d
+case 1e5e 1e5e 1e5f
+case 1e5f 1e5e 1e5f
+case 1e60 1e60 1e61 1e9b
+case 1e61 1e60 1e61 1e9b
+case 1e62 1e62 1e63
+case 1e63 1e62 1e63
+case 1e64 1e64 1e65
+case 1e65 1e64 1e65
+case 1e66 1e66 1e67
+case 1e67 1e66 1e67
+case 1e68 1e68 1e69
+case 1e69 1e68 1e69
+case 1e6a 1e6a 1e6b
+case 1e6b 1e6a 1e6b
+case 1e6c 1e6c 1e6d
+case 1e6d 1e6c 1e6d
+case 1e6e 1e6e 1e6f
+case 1e6f 1e6e 1e6f
+case 1e70 1e70 1e71
+case 1e71 1e70 1e71
+case 1e72 1e72 1e73
+case 1e73 1e72 1e73
+case 1e74 1e74 1e75
+case 1e75 1e74 1e75
+case 1e76 1e76 1e77
+case 1e77 1e76 1e77
+case 1e78 1e78 1e79
+case 1e79 1e78 1e79
+case 1e7a 1e7a 1e7b
+case 1e7b 1e7a 1e7b
+case 1e7c 1e7c 1e7d
+case 1e7d 1e7c 1e7d
+case 1e7e 1e7e 1e7f
+case 1e7f 1e7e 1e7f
+case 1e80 1e80 1e81
+case 1e81 1e80 1e81
+case 1e82 1e82 1e83
+case 1e83 1e82 1e83
+case 1e84 1e84 1e85
+case 1e85 1e84 1e85
+case 1e86 1e86 1e87
+case 1e87 1e86 1e87
+case 1e88 1e88 1e89
+case 1e89 1e88 1e89
+case 1e8a 1e8a 1e8b
+case 1e8b 1e8a 1e8b
+case 1e8c 1e8c 1e8d
+case 1e8d 1e8c 1e8d
+case 1e8e 1e8e 1e8f
+case 1e8f 1e8e 1e8f
+case 1e90 1e90 1e91
+case 1e91 1e90 1e91
+case 1e92 1e92 1e93
+case 1e93 1e92 1e93
+case 1e94 1e94 1e95
+case 1e95 1e94 1e95
+case 1e96 1e96
+case 1e97 1e97
+case 1e98 1e98
+case 1e99 1e99
+case 1e9a 1e9a
+case 1e9b 1e60 1e61 1e9b
+case 1e9e 00df 1e9e
+case 1ea0 1ea0 1ea1
+case 1ea1 1ea0 1ea1
+case 1ea2 1ea2 1ea3
+case 1ea3 1ea2 1ea3
+case 1ea4 1ea4 1ea5
+case 1ea5 1ea4 1ea5
+case 1ea6 1ea6 1ea7
+case 1ea7 1ea6 1ea7
+case 1ea8 1ea8 1ea9
+case 1ea9 1ea8 1ea9
+case 1eaa 1eaa 1eab
+case 1eab 1eaa 1eab
+case 1eac 1eac 1ead
+case 1ead 1eac 1ead
+case 1eae 1eae 1eaf
+case 1eaf 1eae 1eaf
+case 1eb0 1eb0 1eb1
+case 1eb1 1eb0 1eb1
+case 1eb2 1eb2 1eb3
+case 1eb3 1eb2 1eb3
+case 1eb4 1eb4 1eb5
+case 1eb5 1eb4 1eb5
+case 1eb6 1eb6 1eb7
+case 1eb7 1eb6 1eb7
+case 1eb8 1eb8 1eb9
+case 1eb9 1eb8 1eb9
+case 1eba 1eba 1ebb
+case 1ebb 1eba 1ebb
+case 1ebc 1ebc 1ebd
+case 1ebd 1ebc 1ebd
+case 1ebe 1ebe 1ebf
+case 1ebf 1ebe 1ebf
+case 1ec0 1ec0 1ec1
+case 1ec1 1ec0 1ec1
+case 1ec2 1ec2 1ec3
+case 1ec3 1ec2 1ec3
+case 1ec4 1ec4 1ec5
+case 1ec5 1ec4 1ec5
+case 1ec6 1ec6 1ec7
+case 1ec7 1ec6 1ec7
+case 1ec8 1ec8 1ec9
+case 1ec9 1ec8 1ec9
+case 1eca 1eca 1ecb
+case 1ecb 1eca 1ecb
+case 1ecc 1ecc 1ecd
+case 1ecd 1ecc 1ecd
+case 1ece 1ece 1ecf
+case 1ecf 1ece 1ecf
+case 1ed0 1ed0 1ed1
+case 1ed1 1ed0 1ed1
+case 1ed2 1ed2 1ed3
+case 1ed3 1ed2 1ed3
+case 1ed4 1ed4 1ed5
+case 1ed5 1ed4 1ed5
+case 1ed6 1ed6 1ed7
+case 1ed7 1ed6 1ed7
+case 1ed8 1ed8 1ed9
+case 1ed9 1ed8 1ed9
+case 1eda 1eda 1edb
+case 1edb 1eda 1edb
+case 1edc 1edc 1edd
+case 1edd 1edc 1edd
+case 1ede 1ede 1edf
+case 1edf 1ede 1edf
+case 1ee0 1ee0 1ee1
+case 1ee1 1ee0 1ee1
+case 1ee2 1ee2 1ee3
+case 1ee3 1ee2 1ee3
+case 1ee4 1ee4 1ee5
+case 1ee5 1ee4 1ee5
+case 1ee6 1ee6 1ee7
+case 1ee7 1ee6 1ee7
+case 1ee8 1ee8 1ee9
+case 1ee9 1ee8 1ee9
+case 1eea 1eea 1eeb
+case 1eeb 1eea 1eeb
+case 1eec 1eec 1eed
+case 1eed 1eec 1eed
+case 1eee 1eee 1eef
+case 1eef 1eee 1eef
+case 1ef0 1ef0 1ef1
+case 1ef1 1ef0 1ef1
+case 1ef2 1ef2 1ef3
+case 1ef3 1ef2 1ef3
+case 1ef4 1ef4 1ef5
+case 1ef5 1ef4 1ef5
+case 1ef6 1ef6 1ef7
+case 1ef7 1ef6 1ef7
+case 1ef8 1ef8 1ef9
+case 1ef9 1ef8 1ef9
+case 1efa 1efa 1efb
+case 1efb 1efa 1efb
+case 1efc 1efc 1efd
+case 1efd 1efc 1efd
+case 1efe 1efe 1eff
+case 1eff 1efe 1eff
+case 1f00 1f00 1f08
+case 1f01 1f01 1f09
+case 1f02 1f02 1f0a
+case 1f03 1f03 1f0b
+case 1f04 1f04 1f0c
+case 1f05 1f05 1f0d
+case 1f06 1f06 1f0e
+case 1f07 1f07 1f0f
+case 1f08 1f00 1f08
+case 1f09 1f01 1f09
+case 1f0a 1f02 1f0a
+case 1f0b 1f03 1f0b
+case 1f0c 1f04 1f0c
+case 1f0d 1f05 1f0d
+case 1f0e 1f06 1f0e
+case 1f0f 1f07 1f0f
+case 1f10 1f10 1f18
+case 1f11 1f11 1f19
+case 1f12 1f12 1f1a
+case 1f13 1f13 1f1b
+case 1f14 1f14 1f1c
+case 1f15 1f15 1f1d
+case 1f18 1f10 1f18
+case 1f19 1f11 1f19
+case 1f1a 1f12 1f1a
+case 1f1b 1f13 1f1b
+case 1f1c 1f14 1f1c
+case 1f1d 1f15 1f1d
+case 1f20 1f20 1f28
+case 1f21 1f21 1f29
+case 1f22 1f22 1f2a
+case 1f23 1f23 1f2b
+case 1f24 1f24 1f2c
+case 1f25 1f25 1f2d
+case 1f26 1f26 1f2e
+case 1f27 1f27 1f2f
+case 1f28 1f20 1f28
+case 1f29 1f21 1f29
+case 1f2a 1f22 1f2a
+case 1f2b 1f23 1f2b
+case 1f2c 1f24 1f2c
+case 1f2d 1f25 1f2d
+case 1f2e 1f26 1f2e
+case 1f2f 1f27 1f2f
+case 1f30 1f30 1f38
+case 1f31 1f31 1f39
+case 1f32 1f32 1f3a
+case 1f33 1f33 1f3b
+case 1f34 1f34 1f3c
+case 1f35 1f35 1f3d
+case 1f36 1f36 1f3e
+case 1f37 1f37 1f3f
+case 1f38 1f30 1f38
+case 1f39 1f31 1f39
+case 1f3a 1f32 1f3a
+case 1f3b 1f33 1f3b
+case 1f3c 1f34 1f3c
+case 1f3d 1f35 1f3d
+case 1f3e 1f36 1f3e
+case 1f3f 1f37 1f3f
+case 1f40 1f40 1f48
+case 1f41 1f41 1f49
+case 1f42 1f42 1f4a
+case 1f43 1f43 1f4b
+case 1f44 1f44 1f4c
+case 1f45 1f45 1f4d
+case 1f48 1f40 1f48
+case 1f49 1f41 1f49
+case 1f4a 1f42 1f4a
+case 1f4b 1f43 1f4b
+case 1f4c 1f44 1f4c
+case 1f4d 1f45 1f4d
+case 1f50 1f50
+case 1f51 1f51 1f59
+case 1f52 1f52
+case 1f53 1f53 1f5b
+case 1f54 1f54
+case 1f55 1f55 1f5d
+case 1f56 1f56
+case 1f57 1f57 1f5f
+case 1f59 1f51 1f59
+case 1f5b 1f53 1f5b
+case 1f5d 1f55 1f5d
+case 1f5f 1f57 1f5f
+case 1f60 1f60 1f68
+case 1f61 1f61 1f69
+case 1f62 1f62 1f6a
+case 1f63 1f63 1f6b
+case 1f64 1f64 1f6c
+case 1f65 1f65 1f6d
+case 1f66 1f66 1f6e
+case 1f67 1f67 1f6f
+case 1f68 1f60 1f68
+case 1f69 1f61 1f69
+case 1f6a 1f62 1f6a
+case 1f6b 1f63 1f6b
+case 1f6c 1f64 1f6c
+case 1f6d 1f65 1f6d
+case 1f6e 1f66 1f6e
+case 1f6f 1f67 1f6f
+case 1f70 1f70 1fba
+case 1f71 1f71 1fbb
+case 1f72 1f72 1fc8
+case 1f73 1f73 1fc9
+case 1f74 1f74 1fca
+case 1f75 1f75 1fcb
+case 1f76 1f76 1fda
+case 1f77 1f77 1fdb
+case 1f78 1f78 1ff8
+case 1f79 1f79 1ff9
+case 1f7a 1f7a 1fea
+case 1f7b 1f7b 1feb
+case 1f7c 1f7c 1ffa
+case 1f7d 1f7d 1ffb
+case 1f80 1f80 1f88
+case 1f81 1f81 1f89
+case 1f82 1f82 1f8a
+case 1f83 1f83 1f8b
+case 1f84 1f84 1f8c
+case 1f85 1f85 1f8d
+case 1f86 1f86 1f8e
+case 1f87 1f87 1f8f
+case 1f88 1f80 1f88
+case 1f89 1f81 1f89
+case 1f8a 1f82 1f8a
+case 1f8b 1f83 1f8b
+case 1f8c 1f84 1f8c
+case 1f8d 1f85 1f8d
+case 1f8e 1f86 1f8e
+case 1f8f 1f87 1f8f
+case 1f90 1f90 1f98
+case 1f91 1f91 1f99
+case 1f92 1f92 1f9a
+case 1f93 1f93 1f9b
+case 1f94 1f94 1f9c
+case 1f95 1f95 1f9d
+case 1f96 1f96 1f9e
+case 1f97 1f97 1f9f
+case 1f98 1f90 1f98
+case 1f99 1f91 1f99
+case 1f9a 1f92 1f9a
+case 1f9b 1f93 1f9b
+case 1f9c 1f94 1f9c
+case 1f9d 1f95 1f9d
+case 1f9e 1f96 1f9e
+case 1f9f 1f97 1f9f
+case 1fa0 1fa0 1fa8
+case 1fa1 1fa1 1fa9
+case 1fa2 1fa2 1faa
+case 1fa3 1fa3 1fab
+case 1fa4 1fa4 1fac
+case 1fa5 1fa5 1fad
+case 1fa6 1fa6 1fae
+case 1fa7 1fa7 1faf
+case 1fa8 1fa0 1fa8
+case 1fa9 1fa1 1fa9
+case 1faa 1fa2 1faa
+case 1fab 1fa3 1fab
+case 1fac 1fa4 1fac
+case 1fad 1fa5 1fad
+case 1fae 1fa6 1fae
+case 1faf 1fa7 1faf
+case 1fb0 1fb0 1fb8
+case 1fb1 1fb1 1fb9
+case 1fb2 1fb2
+case 1fb3 1fb3 1fbc
+case 1fb4 1fb4
+case 1fb6 1fb6
+case 1fb7 1fb7
+case 1fb8 1fb0 1fb8
+case 1fb9 1fb1 1fb9
+case 1fba 1f70 1fba
+case 1fbb 1f71 1fbb
+case 1fbc 1fb3 1fbc
+case 1fbe 0345 0399 03b9 1fbe
+case 1fc2 1fc2
+case 1fc3 1fc3 1fcc
+case 1fc4 1fc4
+case 1fc6 1fc6
+case 1fc7 1fc7
+case 1fc8 1f72 1fc8
+case 1fc9 1f73 1fc9
+case 1fca 1f74 1fca
+case 1fcb 1f75 1fcb
+case 1fcc 1fc3 1fcc
+case 1fd0 1fd0 1fd8
+case 1fd1 1fd1 1fd9
+case 1fd2 1fd2
+case 1fd3 0390 1fd3
+case 1fd6 1fd6
+case 1fd7 1fd7
+case 1fd8 1fd0 1fd8
+case 1fd9 1fd1 1fd9
+case 1fda 1f76 1fda
+case 1fdb 1f77 1fdb
+case 1fe0 1fe0 1fe8
+case 1fe1 1fe1 1fe9
+case 1fe2 1fe2
+case 1fe3 03b0 1fe3
+case 1fe4 1fe4
+case 1fe5 1fe5 1fec
+case 1fe6 1fe6
+case 1fe7 1fe7
+case 1fe8 1fe0 1fe8
+case 1fe9 1fe1 1fe9
+case 1fea 1f7a 1fea
+case 1feb 1f7b 1feb
+case 1fec 1fe5 1fec
+case 1ff2 1ff2
+case 1ff3 1ff3 1ffc
+case 1ff4 1ff4
+case 1ff6 1ff6
+case 1ff7 1ff7
+case 1ff8 1f78 1ff8
+case 1ff9 1f79 1ff9
+case 1ffa 1f7c 1ffa
+case 1ffb 1f7d 1ffb
+case 1ffc 1ff3 1ffc
+case 2126 03a9 03c9 2126
+case 212a 004b 006b 212a
+case 212b 00c5 00e5 212b
+case 2132 2132 214e
+case 214e 2132 214e
+case 2160 2160 2170
+case 2161 2161 2171
+case 2162 2162 2172
+case 2163 2163 2173
+case 2164 2164 2174
+case 2165 2165 2175
+case 2166 2166 2176
+case 2167 2167 2177
+case 2168 2168 2178
+case 2169 2169 2179
+case 216a 216a 217a
+case 216b 216b 217b
+case 216c 216c 217c
+case 216d 216d 217d
+case 216e 216e 217e
+case 216f 216f 217f
+case 2170 2160 2170
+case 2171 2161 2171
+case 2172 2162 2172
+case 2173 2163 2173
+case 2174 2164 2174
+case 2175 2165 2175
+case 2176 2166 2176
+case 2177 2167 2177
+case 2178 2168 2178
+case 2179 2169 2179
+case 217a 216a 217a
+case 217b 216b 217b
+case 217c 216c 217c
+case 217d 216d 217d
+case 217e 216e 217e
+case 217f 216f 217f
+case 2183 2183 2184
+case 2184 2183 2184
+case 24b6 24b6 24d0
+case 24b7 24b7 24d1
+case 24b8 24b8 24d2
+case 24b9 24b9 24d3
+case 24ba 24ba 24d4
+case 24bb 24bb 24d5
+case 24bc 24bc 24d6
+case 24bd 24bd 24d7
+case 24be 24be 24d8
+case 24bf 24bf 24d9
+case 24c0 24c0 24da
+case 24c1 24c1 24db
+case 24c2 24c2 24dc
+case 24c3 24c3 24dd
+case 24c4 24c4 24de
+case 24c5 24c5 24df
+case 24c6 24c6 24e0
+case 24c7 24c7 24e1
+case 24c8 24c8 24e2
+case 24c9 24c9 24e3
+case 24ca 24ca 24e4
+case 24cb 24cb 24e5
+case 24cc 24cc 24e6
+case 24cd 24cd 24e7
+case 24ce 24ce 24e8
+case 24cf 24cf 24e9
+case 24d0 24b6 24d0
+case 24d1 24b7 24d1
+case 24d2 24b8 24d2
+case 24d3 24b9 24d3
+case 24d4 24ba 24d4
+case 24d5 24bb 24d5
+case 24d6 24bc 24d6
+case 24d7 24bd 24d7
+case 24d8 24be 24d8
+case 24d9 24bf 24d9
+case 24da 24c0 24da
+case 24db 24c1 24db
+case 24dc 24c2 24dc
+case 24dd 24c3 24dd
+case 24de 24c4 24de
+case 24df 24c5 24df
+case 24e0 24c6 24e0
+case 24e1 24c7 24e1
+case 24e2 24c8 24e2
+case 24e3 24c9 24e3
+case 24e4 24ca 24e4
+case 24e5 24cb 24e5
+case 24e6 24cc 24e6
+case 24e7 24cd 24e7
+case 24e8 24ce 24e8
+case 24e9 24cf 24e9
+case 2c00 2c00 2c30
+case 2c01 2c01 2c31
+case 2c02 2c02 2c32
+case 2c03 2c03 2c33
+case 2c04 2c04 2c34
+case 2c05 2c05 2c35
+case 2c06 2c06 2c36
+case 2c07 2c07 2c37
+case 2c08 2c08 2c38
+case 2c09 2c09 2c39
+case 2c0a 2c0a 2c3a
+case 2c0b 2c0b 2c3b
+case 2c0c 2c0c 2c3c
+case 2c0d 2c0d 2c3d
+case 2c0e 2c0e 2c3e
+case 2c0f 2c0f 2c3f
+case 2c10 2c10 2c40
+case 2c11 2c11 2c41
+case 2c12 2c12 2c42
+case 2c13 2c13 2c43
+case 2c14 2c14 2c44
+case 2c15 2c15 2c45
+case 2c16 2c16 2c46
+case 2c17 2c17 2c47
+case 2c18 2c18 2c48
+case 2c19 2c19 2c49
+case 2c1a 2c1a 2c4a
+case 2c1b 2c1b 2c4b
+case 2c1c 2c1c 2c4c
+case 2c1d 2c1d 2c4d
+case 2c1e 2c1e 2c4e
+case 2c1f 2c1f 2c4f
+case 2c20 2c20 2c50
+case 2c21 2c21 2c51
+case 2c22 2c22 2c52
+case 2c23 2c23 2c53
+case 2c24 2c24 2c54
+case 2c25 2c25 2c55
+case 2c26 2c26 2c56
+case 2c27 2c27 2c57
+case 2c28 2c28 2c58
+case 2c29 2c29 2c59
+case 2c2a 2c2a 2c5a
+case 2c2b 2c2b 2c5b
+case 2c2c 2c2c 2c5c
+case 2c2d 2c2d 2c5d
+case 2c2e 2c2e 2c5e
+case 2c2f 2c2f 2c5f
+case 2c30 2c00 2c30
+case 2c31 2c01 2c31
+case 2c32 2c02 2c32
+case 2c33 2c03 2c33
+case 2c34 2c04 2c34
+case 2c35 2c05 2c35
+case 2c36 2c06 2c36
+case 2c37 2c07 2c37
+case 2c38 2c08 2c38
+case 2c39 2c09 2c39
+case 2c3a 2c0a 2c3a
+case 2c3b 2c0b 2c3b
+case 2c3c 2c0c 2c3c
+case 2c3d 2c0d 2c3d
+case 2c3e 2c0e 2c3e
+case 2c3f 2c0f 2c3f
+case 2c40 2c10 2c40
+case 2c41 2c11 2c41
+case 2c42 2c12 2c42
+case 2c43 2c13 2c43
+case 2c44 2c14 2c44
+case 2c45 2c15 2c45
+case 2c46 2c16 2c46
+case 2c47 2c17 2c47
+case 2c48 2c18 2c48
+case 2c49 2c19 2c49
+case 2c4a 2c1a 2c4a
+case 2c4b 2c1b 2c4b
+case 2c4c 2c1c 2c4c
+case 2c4d 2c1d 2c4d
+case 2c4e 2c1e 2c4e
+case 2c4f 2c1f 2c4f
+case 2c50 2c20 2c50
+case 2c51 2c21 2c51
+case 2c52 2c22 2c52
+case 2c53 2c23 2c53
+case 2c54 2c24 2c54
+case 2c55 2c25 2c55
+case 2c56 2c26 2c56
+case 2c57 2c27 2c57
+case 2c58 2c28 2c58
+case 2c59 2c29 2c59
+case 2c5a 2c2a 2c5a
+case 2c5b 2c2b 2c5b
+case 2c5c 2c2c 2c5c
+case 2c5d 2c2d 2c5d
+case 2c5e 2c2e 2c5e
+case 2c5f 2c2f 2c5f
+case 2c60 2c60 2c61
+case 2c61 2c60 2c61
+case 2c62 026b 2c62
+case 2c63 1d7d 2c63
+case 2c64 027d 2c64
+case 2c65 023a 2c65
+case 2c66 023e 2c66
+case 2c67 2c67 2c68
+case 2c68 2c67 2c68
+case 2c69 2c69 2c6a
+case 2c6a 2c69 2c6a
+case 2c6b 2c6b 2c6c
+case 2c6c 2c6b 2c6c
+case 2c6d 0251 2c6d
+case 2c6e 0271 2c6e
+case 2c6f 0250 2c6f
+case 2c70 0252 2c70
+case 2c72 2c72 2c73
+case 2c73 2c72 2c73
+case 2c75 2c75 2c76
+case 2c76 2c75 2c76
+case 2c7e 023f 2c7e
+case 2c7f 0240 2c7f
+case 2c80 2c80 2c81
+case 2c81 2c80 2c81
+case 2c82 2c82 2c83
+case 2c83 2c82 2c83
+case 2c84 2c84 2c85
+case 2c85 2c84 2c85
+case 2c86 2c86 2c87
+case 2c87 2c86 2c87
+case 2c88 2c88 2c89
+case 2c89 2c88 2c89
+case 2c8a 2c8a 2c8b
+case 2c8b 2c8a 2c8b
+case 2c8c 2c8c 2c8d
+case 2c8d 2c8c 2c8d
+case 2c8e 2c8e 2c8f
+case 2c8f 2c8e 2c8f
+case 2c90 2c90 2c91
+case 2c91 2c90 2c91
+case 2c92 2c92 2c93
+case 2c93 2c92 2c93
+case 2c94 2c94 2c95
+case 2c95 2c94 2c95
+case 2c96 2c96 2c97
+case 2c97 2c96 2c97
+case 2c98 2c98 2c99
+case 2c99 2c98 2c99
+case 2c9a 2c9a 2c9b
+case 2c9b 2c9a 2c9b
+case 2c9c 2c9c 2c9d
+case 2c9d 2c9c 2c9d
+case 2c9e 2c9e 2c9f
+case 2c9f 2c9e 2c9f
+case 2ca0 2ca0 2ca1
+case 2ca1 2ca0 2ca1
+case 2ca2 2ca2 2ca3
+case 2ca3 2ca2 2ca3
+case 2ca4 2ca4 2ca5
+case 2ca5 2ca4 2ca5
+case 2ca6 2ca6 2ca7
+case 2ca7 2ca6 2ca7
+case 2ca8 2ca8 2ca9
+case 2ca9 2ca8 2ca9
+case 2caa 2caa 2cab
+case 2cab 2caa 2cab
+case 2cac 2cac 2cad
+case 2cad 2cac 2cad
+case 2cae 2cae 2caf
+case 2caf 2cae 2caf
+case 2cb0 2cb0 2cb1
+case 2cb1 2cb0 2cb1
+case 2cb2 2cb2 2cb3
+case 2cb3 2cb2 2cb3
+case 2cb4 2cb4 2cb5
+case 2cb5 2cb4 2cb5
+case 2cb6 2cb6 2cb7
+case 2cb7 2cb6 2cb7
+case 2cb8 2cb8 2cb9
+case 2cb9 2cb8 2cb9
+case 2cba 2cba 2cbb
+case 2cbb 2cba 2cbb
+case 2cbc 2cbc 2cbd
+case 2cbd 2cbc 2cbd
+case 2cbe 2cbe 2cbf
+case 2cbf 2cbe 2cbf
+case 2cc0 2cc0 2cc1
+case 2cc1 2cc0 2cc1
+case 2cc2 2cc2 2cc3
+case 2cc3 2cc2 2cc3
+case 2cc4 2cc4 2cc5
+case 2cc5 2cc4 2cc5
+case 2cc6 2cc6 2cc7
+case 2cc7 2cc6 2cc7
+case 2cc8 2cc8 2cc9
+case 2cc9 2cc8 2cc9
+case 2cca 2cca 2ccb
+case 2ccb 2cca 2ccb
+case 2ccc 2ccc 2ccd
+case 2ccd 2ccc 2ccd
+case 2cce 2cce 2ccf
+case 2ccf 2cce 2ccf
+case 2cd0 2cd0 2cd1
+case 2cd1 2cd0 2cd1
+case 2cd2 2cd2 2cd3
+case 2cd3 2cd2 2cd3
+case 2cd4 2cd4 2cd5
+case 2cd5 2cd4 2cd5
+case 2cd6 2cd6 2cd7
+case 2cd7 2cd6 2cd7
+case 2cd8 2cd8 2cd9
+case 2cd9 2cd8 2cd9
+case 2cda 2cda 2cdb
+case 2cdb 2cda 2cdb
+case 2cdc 2cdc 2cdd
+case 2cdd 2cdc 2cdd
+case 2cde 2cde 2cdf
+case 2cdf 2cde 2cdf
+case 2ce0 2ce0 2ce1
+case 2ce1 2ce0 2ce1
+case 2ce2 2ce2 2ce3
+case 2ce3 2ce2 2ce3
+case 2ceb 2ceb 2cec
+case 2cec 2ceb 2cec
+case 2ced 2ced 2cee
+case 2cee 2ced 2cee
+case 2cf2 2cf2 2cf3
+case 2cf3 2cf2 2cf3
+case 2d00 10a0 2d00
+case 2d01 10a1 2d01
+case 2d02 10a2 2d02
+case 2d03 10a3 2d03
+case 2d04 10a4 2d04
+case 2d05 10a5 2d05
+case 2d06 10a6 2d06
+case 2d07 10a7 2d07
+case 2d08 10a8 2d08
+case 2d09 10a9 2d09
+case 2d0a 10aa 2d0a
+case 2d0b 10ab 2d0b
+case 2d0c 10ac 2d0c
+case 2d0d 10ad 2d0d
+case 2d0e 10ae 2d0e
+case 2d0f 10af 2d0f
+case 2d10 10b0 2d10
+case 2d11 10b1 2d11
+case 2d12 10b2 2d12
+case 2d13 10b3 2d13
+case 2d14 10b4 2d14
+case 2d15 10b5 2d15
+case 2d16 10b6 2d16
+case 2d17 10b7 2d17
+case 2d18 10b8 2d18
+case 2d19 10b9 2d19
+case 2d1a 10ba 2d1a
+case 2d1b 10bb 2d1b
+case 2d1c 10bc 2d1c
+case 2d1d 10bd 2d1d
+case 2d1e 10be 2d1e
+case 2d1f 10bf 2d1f
+case 2d20 10c0 2d20
+case 2d21 10c1 2d21
+case 2d22 10c2 2d22
+case 2d23 10c3 2d23
+case 2d24 10c4 2d24
+case 2d25 10c5 2d25
+case 2d27 10c7 2d27
+case 2d2d 10cd 2d2d
+case a640 a640 a641
+case a641 a640 a641
+case a642 a642 a643
+case a643 a642 a643
+case a644 a644 a645
+case a645 a644 a645
+case a646 a646 a647
+case a647 a646 a647
+case a648 a648 a649
+case a649 a648 a649
+case a64a 1c88 a64a a64b
+case a64b 1c88 a64a a64b
+case a64c a64c a64d
+case a64d a64c a64d
+case a64e a64e a64f
+case a64f a64e a64f
+case a650 a650 a651
+case a651 a650 a651
+case a652 a652 a653
+case a653 a652 a653
+case a654 a654 a655
+case a655 a654 a655
+case a656 a656 a657
+case a657 a656 a657
+case a658 a658 a659
+case a659 a658 a659
+case a65a a65a a65b
+case a65b a65a a65b
+case a65c a65c a65d
+case a65d a65c a65d
+case a65e a65e a65f
+case a65f a65e a65f
+case a660 a660 a661
+case a661 a660 a661
+case a662 a662 a663
+case a663 a662 a663
+case a664 a664 a665
+case a665 a664 a665
+case a666 a666 a667
+case a667 a666 a667
+case a668 a668 a669
+case a669 a668 a669
+case a66a a66a a66b
+case a66b a66a a66b
+case a66c a66c a66d
+case a66d a66c a66d
+case a680 a680 a681
+case a681 a680 a681
+case a682 a682 a683
+case a683 a682 a683
+case a684 a684 a685
+case a685 a684 a685
+case a686 a686 a687
+case a687 a686 a687
+case a688 a688 a689
+case a689 a688 a689
+case a68a a68a a68b
+case a68b a68a a68b
+case a68c a68c a68d
+case a68d a68c a68d
+case a68e a68e a68f
+case a68f a68e a68f
+case a690 a690 a691
+case a691 a690 a691
+case a692 a692 a693
+case a693 a692 a693
+case a694 a694 a695
+case a695 a694 a695
+case a696 a696 a697
+case a697 a696 a697
+case a698 a698 a699
+case a699 a698 a699
+case a69a a69a a69b
+case a69b a69a a69b
+case a722 a722 a723
+case a723 a722 a723
+case a724 a724 a725
+case a725 a724 a725
+case a726 a726 a727
+case a727 a726 a727
+case a728 a728 a729
+case a729 a728 a729
+case a72a a72a a72b
+case a72b a72a a72b
+case a72c a72c a72d
+case a72d a72c a72d
+case a72e a72e a72f
+case a72f a72e a72f
+case a732 a732 a733
+case a733 a732 a733
+case a734 a734 a735
+case a735 a734 a735
+case a736 a736 a737
+case a737 a736 a737
+case a738 a738 a739
+case a739 a738 a739
+case a73a a73a a73b
+case a73b a73a a73b
+case a73c a73c a73d
+case a73d a73c a73d
+case a73e a73e a73f
+case a73f a73e a73f
+case a740 a740 a741
+case a741 a740 a741
+case a742 a742 a743
+case a743 a742 a743
+case a744 a744 a745
+case a745 a744 a745
+case a746 a746 a747
+case a747 a746 a747
+case a748 a748 a749
+case a749 a748 a749
+case a74a a74a a74b
+case a74b a74a a74b
+case a74c a74c a74d
+case a74d a74c a74d
+case a74e a74e a74f
+case a74f a74e a74f
+case a750 a750 a751
+case a751 a750 a751
+case a752 a752 a753
+case a753 a752 a753
+case a754 a754 a755
+case a755 a754 a755
+case a756 a756 a757
+case a757 a756 a757
+case a758 a758 a759
+case a759 a758 a759
+case a75a a75a a75b
+case a75b a75a a75b
+case a75c a75c a75d
+case a75d a75c a75d
+case a75e a75e a75f
+case a75f a75e a75f
+case a760 a760 a761
+case a761 a760 a761
+case a762 a762 a763
+case a763 a762 a763
+case a764 a764 a765
+case a765 a764 a765
+case a766 a766 a767
+case a767 a766 a767
+case a768 a768 a769
+case a769 a768 a769
+case a76a a76a a76b
+case a76b a76a a76b
+case a76c a76c a76d
+case a76d a76c a76d
+case a76e a76e a76f
+case a76f a76e a76f
+case a779 a779 a77a
+case a77a a779 a77a
+case a77b a77b a77c
+case a77c a77b a77c
+case a77d 1d79 a77d
+case a77e a77e a77f
+case a77f a77e a77f
+case a780 a780 a781
+case a781 a780 a781
+case a782 a782 a783
+case a783 a782 a783
+case a784 a784 a785
+case a785 a784 a785
+case a786 a786 a787
+case a787 a786 a787
+case a78b a78b a78c
+case a78c a78b a78c
+case a78d 0265 a78d
+case a790 a790 a791
+case a791 a790 a791
+case a792 a792 a793
+case a793 a792 a793
+case a794 a794 a7c4
+case a796 a796 a797
+case a797 a796 a797
+case a798 a798 a799
+case a799 a798 a799
+case a79a a79a a79b
+case a79b a79a a79b
+case a79c a79c a79d
+case a79d a79c a79d
+case a79e a79e a79f
+case a79f a79e a79f
+case a7a0 a7a0 a7a1
+case a7a1 a7a0 a7a1
+case a7a2 a7a2 a7a3
+case a7a3 a7a2 a7a3
+case a7a4 a7a4 a7a5
+case a7a5 a7a4 a7a5
+case a7a6 a7a6 a7a7
+case a7a7 a7a6 a7a7
+case a7a8 a7a8 a7a9
+case a7a9 a7a8 a7a9
+case a7aa 0266 a7aa
+case a7ab 025c a7ab
+case a7ac 0261 a7ac
+case a7ad 026c a7ad
+case a7ae 026a a7ae
+case a7b0 029e a7b0
+case a7b1 0287 a7b1
+case a7b2 029d a7b2
+case a7b3 a7b3 ab53
+case a7b4 a7b4 a7b5
+case a7b5 a7b4 a7b5
+case a7b6 a7b6 a7b7
+case a7b7 a7b6 a7b7
+case a7b8 a7b8 a7b9
+case a7b9 a7b8 a7b9
+case a7ba a7ba a7bb
+case a7bb a7ba a7bb
+case a7bc a7bc a7bd
+case a7bd a7bc a7bd
+case a7be a7be a7bf
+case a7bf a7be a7bf
+case a7c0 a7c0 a7c1
+case a7c1 a7c0 a7c1
+case a7c2 a7c2 a7c3
+case a7c3 a7c2 a7c3
+case a7c4 a794 a7c4
+case a7c5 0282 a7c5
+case a7c6 1d8e a7c6
+case a7c7 a7c7 a7c8
+case a7c8 a7c7 a7c8
+case a7c9 a7c9 a7ca
+case a7ca a7c9 a7ca
+case a7d0 a7d0 a7d1
+case a7d1 a7d0 a7d1
+case a7d6 a7d6 a7d7
+case a7d7 a7d6 a7d7
+case a7d8 a7d8 a7d9
+case a7d9 a7d8 a7d9
+case a7f5 a7f5 a7f6
+case a7f6 a7f5 a7f6
+case ab53 a7b3 ab53
+case ab70 13a0 ab70
+case ab71 13a1 ab71
+case ab72 13a2 ab72
+case ab73 13a3 ab73
+case ab74 13a4 ab74
+case ab75 13a5 ab75
+case ab76 13a6 ab76
+case ab77 13a7 ab77
+case ab78 13a8 ab78
+case ab79 13a9 ab79
+case ab7a 13aa ab7a
+case ab7b 13ab ab7b
+case ab7c 13ac ab7c
+case ab7d 13ad ab7d
+case ab7e 13ae ab7e
+case ab7f 13af ab7f
+case ab80 13b0 ab80
+case ab81 13b1 ab81
+case ab82 13b2 ab82
+case ab83 13b3 ab83
+case ab84 13b4 ab84
+case ab85 13b5 ab85
+case ab86 13b6 ab86
+case ab87 13b7 ab87
+case ab88 13b8 ab88
+case ab89 13b9 ab89
+case ab8a 13ba ab8a
+case ab8b 13bb ab8b
+case ab8c 13bc ab8c
+case ab8d 13bd ab8d
+case ab8e 13be ab8e
+case ab8f 13bf ab8f
+case ab90 13c0 ab90
+case ab91 13c1 ab91
+case ab92 13c2 ab92
+case ab93 13c3 ab93
+case ab94 13c4 ab94
+case ab95 13c5 ab95
+case ab96 13c6 ab96
+case ab97 13c7 ab97
+case ab98 13c8 ab98
+case ab99 13c9 ab99
+case ab9a 13ca ab9a
+case ab9b 13cb ab9b
+case ab9c 13cc ab9c
+case ab9d 13cd ab9d
+case ab9e 13ce ab9e
+case ab9f 13cf ab9f
+case aba0 13d0 aba0
+case aba1 13d1 aba1
+case aba2 13d2 aba2
+case aba3 13d3 aba3
+case aba4 13d4 aba4
+case aba5 13d5 aba5
+case aba6 13d6 aba6
+case aba7 13d7 aba7
+case aba8 13d8 aba8
+case aba9 13d9 aba9
+case abaa 13da abaa
+case abab 13db abab
+case abac 13dc abac
+case abad 13dd abad
+case abae 13de abae
+case abaf 13df abaf
+case abb0 13e0 abb0
+case abb1 13e1 abb1
+case abb2 13e2 abb2
+case abb3 13e3 abb3
+case abb4 13e4 abb4
+case abb5 13e5 abb5
+case abb6 13e6 abb6
+case abb7 13e7 abb7
+case abb8 13e8 abb8
+case abb9 13e9 abb9
+case abba 13ea abba
+case abbb 13eb abbb
+case abbc 13ec abbc
+case abbd 13ed abbd
+case abbe 13ee abbe
+case abbf 13ef abbf
+case fb00 fb00
+case fb01 fb01
+case fb02 fb02
+case fb03 fb03
+case fb04 fb04
+case fb05 fb05 fb06
+case fb06 fb05 fb06
+case fb13 fb13
+case fb14 fb14
+case fb15 fb15
+case fb16 fb16
+case fb17 fb17
+case ff21 ff21 ff41
+case ff22 ff22 ff42
+case ff23 ff23 ff43
+case ff24 ff24 ff44
+case ff25 ff25 ff45
+case ff26 ff26 ff46
+case ff27 ff27 ff47
+case ff28 ff28 ff48
+case ff29 ff29 ff49
+case ff2a ff2a ff4a
+case ff2b ff2b ff4b
+case ff2c ff2c ff4c
+case ff2d ff2d ff4d
+case ff2e ff2e ff4e
+case ff2f ff2f ff4f
+case ff30 ff30 ff50
+case ff31 ff31 ff51
+case ff32 ff32 ff52
+case ff33 ff33 ff53
+case ff34 ff34 ff54
+case ff35 ff35 ff55
+case ff36 ff36 ff56
+case ff37 ff37 ff57
+case ff38 ff38 ff58
+case ff39 ff39 ff59
+case ff3a ff3a ff5a
+case ff41 ff21 ff41
+case ff42 ff22 ff42
+case ff43 ff23 ff43
+case ff44 ff24 ff44
+case ff45 ff25 ff45
+case ff46 ff26 ff46
+case ff47 ff27 ff47
+case ff48 ff28 ff48
+case ff49 ff29 ff49
+case ff4a ff2a ff4a
+case ff4b ff2b ff4b
+case ff4c ff2c ff4c
+case ff4d ff2d ff4d
+case ff4e ff2e ff4e
+case ff4f ff2f ff4f
+case ff50 ff30 ff50
+case ff51 ff31 ff51
+case ff52 ff32 ff52
+case ff53 ff33 ff53
+case ff54 ff34 ff54
+case ff55 ff35 ff55
+case ff56 ff36 ff56
+case ff57 ff37 ff57
+case ff58 ff38 ff58
+case ff59 ff39 ff59
+case ff5a ff3a ff5a
+case 10400 10400 10428
+case 10401 10401 10429
+case 10402 10402 1042a
+case 10403 10403 1042b
+case 10404 10404 1042c
+case 10405 10405 1042d
+case 10406 10406 1042e
+case 10407 10407 1042f
+case 10408 10408 10430
+case 10409 10409 10431
+case 1040a 1040a 10432
+case 1040b 1040b 10433
+case 1040c 1040c 10434
+case 1040d 1040d 10435
+case 1040e 1040e 10436
+case 1040f 1040f 10437
+case 10410 10410 10438
+case 10411 10411 10439
+case 10412 10412 1043a
+case 10413 10413 1043b
+case 10414 10414 1043c
+case 10415 10415 1043d
+case 10416 10416 1043e
+case 10417 10417 1043f
+case 10418 10418 10440
+case 10419 10419 10441
+case 1041a 1041a 10442
+case 1041b 1041b 10443
+case 1041c 1041c 10444
+case 1041d 1041d 10445
+case 1041e 1041e 10446
+case 1041f 1041f 10447
+case 10420 10420 10448
+case 10421 10421 10449
+case 10422 10422 1044a
+case 10423 10423 1044b
+case 10424 10424 1044c
+case 10425 10425 1044d
+case 10426 10426 1044e
+case 10427 10427 1044f
+case 10428 10400 10428
+case 10429 10401 10429
+case 1042a 10402 1042a
+case 1042b 10403 1042b
+case 1042c 10404 1042c
+case 1042d 10405 1042d
+case 1042e 10406 1042e
+case 1042f 10407 1042f
+case 10430 10408 10430
+case 10431 10409 10431
+case 10432 1040a 10432
+case 10433 1040b 10433
+case 10434 1040c 10434
+case 10435 1040d 10435
+case 10436 1040e 10436
+case 10437 1040f 10437
+case 10438 10410 10438
+case 10439 10411 10439
+case 1043a 10412 1043a
+case 1043b 10413 1043b
+case 1043c 10414 1043c
+case 1043d 10415 1043d
+case 1043e 10416 1043e
+case 1043f 10417 1043f
+case 10440 10418 10440
+case 10441 10419 10441
+case 10442 1041a 10442
+case 10443 1041b 10443
+case 10444 1041c 10444
+case 10445 1041d 10445
+case 10446 1041e 10446
+case 10447 1041f 10447
+case 10448 10420 10448
+case 10449 10421 10449
+case 1044a 10422 1044a
+case 1044b 10423 1044b
+case 1044c 10424 1044c
+case 1044d 10425 1044d
+case 1044e 10426 1044e
+case 1044f 10427 1044f
+case 104b0 104b0 104d8
+case 104b1 104b1 104d9
+case 104b2 104b2 104da
+case 104b3 104b3 104db
+case 104b4 104b4 104dc
+case 104b5 104b5 104dd
+case 104b6 104b6 104de
+case 104b7 104b7 104df
+case 104b8 104b8 104e0
+case 104b9 104b9 104e1
+case 104ba 104ba 104e2
+case 104bb 104bb 104e3
+case 104bc 104bc 104e4
+case 104bd 104bd 104e5
+case 104be 104be 104e6
+case 104bf 104bf 104e7
+case 104c0 104c0 104e8
+case 104c1 104c1 104e9
+case 104c2 104c2 104ea
+case 104c3 104c3 104eb
+case 104c4 104c4 104ec
+case 104c5 104c5 104ed
+case 104c6 104c6 104ee
+case 104c7 104c7 104ef
+case 104c8 104c8 104f0
+case 104c9 104c9 104f1
+case 104ca 104ca 104f2
+case 104cb 104cb 104f3
+case 104cc 104cc 104f4
+case 104cd 104cd 104f5
+case 104ce 104ce 104f6
+case 104cf 104cf 104f7
+case 104d0 104d0 104f8
+case 104d1 104d1 104f9
+case 104d2 104d2 104fa
+case 104d3 104d3 104fb
+case 104d8 104b0 104d8
+case 104d9 104b1 104d9
+case 104da 104b2 104da
+case 104db 104b3 104db
+case 104dc 104b4 104dc
+case 104dd 104b5 104dd
+case 104de 104b6 104de
+case 104df 104b7 104df
+case 104e0 104b8 104e0
+case 104e1 104b9 104e1
+case 104e2 104ba 104e2
+case 104e3 104bb 104e3
+case 104e4 104bc 104e4
+case 104e5 104bd 104e5
+case 104e6 104be 104e6
+case 104e7 104bf 104e7
+case 104e8 104c0 104e8
+case 104e9 104c1 104e9
+case 104ea 104c2 104ea
+case 104eb 104c3 104eb
+case 104ec 104c4 104ec
+case 104ed 104c5 104ed
+case 104ee 104c6 104ee
+case 104ef 104c7 104ef
+case 104f0 104c8 104f0
+case 104f1 104c9 104f1
+case 104f2 104ca 104f2
+case 104f3 104cb 104f3
+case 104f4 104cc 104f4
+case 104f5 104cd 104f5
+case 104f6 104ce 104f6
+case 104f7 104cf 104f7
+case 104f8 104d0 104f8
+case 104f9 104d1 104f9
+case 104fa 104d2 104fa
+case 104fb 104d3 104fb
+case 10570 10570 10597
+case 10571 10571 10598
+case 10572 10572 10599
+case 10573 10573 1059a
+case 10574 10574 1059b
+case 10575 10575 1059c
+case 10576 10576 1059d
+case 10577 10577 1059e
+case 10578 10578 1059f
+case 10579 10579 105a0
+case 1057a 1057a 105a1
+case 1057c 1057c 105a3
+case 1057d 1057d 105a4
+case 1057e 1057e 105a5
+case 1057f 1057f 105a6
+case 10580 10580 105a7
+case 10581 10581 105a8
+case 10582 10582 105a9
+case 10583 10583 105aa
+case 10584 10584 105ab
+case 10585 10585 105ac
+case 10586 10586 105ad
+case 10587 10587 105ae
+case 10588 10588 105af
+case 10589 10589 105b0
+case 1058a 1058a 105b1
+case 1058c 1058c 105b3
+case 1058d 1058d 105b4
+case 1058e 1058e 105b5
+case 1058f 1058f 105b6
+case 10590 10590 105b7
+case 10591 10591 105b8
+case 10592 10592 105b9
+case 10594 10594 105bb
+case 10595 10595 105bc
+case 10597 10570 10597
+case 10598 10571 10598
+case 10599 10572 10599
+case 1059a 10573 1059a
+case 1059b 10574 1059b
+case 1059c 10575 1059c
+case 1059d 10576 1059d
+case 1059e 10577 1059e
+case 1059f 10578 1059f
+case 105a0 10579 105a0
+case 105a1 1057a 105a1
+case 105a3 1057c 105a3
+case 105a4 1057d 105a4
+case 105a5 1057e 105a5
+case 105a6 1057f 105a6
+case 105a7 10580 105a7
+case 105a8 10581 105a8
+case 105a9 10582 105a9
+case 105aa 10583 105aa
+case 105ab 10584 105ab
+case 105ac 10585 105ac
+case 105ad 10586 105ad
+case 105ae 10587 105ae
+case 105af 10588 105af
+case 105b0 10589 105b0
+case 105b1 1058a 105b1
+case 105b3 1058c 105b3
+case 105b4 1058d 105b4
+case 105b5 1058e 105b5
+case 105b6 1058f 105b6
+case 105b7 10590 105b7
+case 105b8 10591 105b8
+case 105b9 10592 105b9
+case 105bb 10594 105bb
+case 105bc 10595 105bc
+case 10c80 10c80 10cc0
+case 10c81 10c81 10cc1
+case 10c82 10c82 10cc2
+case 10c83 10c83 10cc3
+case 10c84 10c84 10cc4
+case 10c85 10c85 10cc5
+case 10c86 10c86 10cc6
+case 10c87 10c87 10cc7
+case 10c88 10c88 10cc8
+case 10c89 10c89 10cc9
+case 10c8a 10c8a 10cca
+case 10c8b 10c8b 10ccb
+case 10c8c 10c8c 10ccc
+case 10c8d 10c8d 10ccd
+case 10c8e 10c8e 10cce
+case 10c8f 10c8f 10ccf
+case 10c90 10c90 10cd0
+case 10c91 10c91 10cd1
+case 10c92 10c92 10cd2
+case 10c93 10c93 10cd3
+case 10c94 10c94 10cd4
+case 10c95 10c95 10cd5
+case 10c96 10c96 10cd6
+case 10c97 10c97 10cd7
+case 10c98 10c98 10cd8
+case 10c99 10c99 10cd9
+case 10c9a 10c9a 10cda
+case 10c9b 10c9b 10cdb
+case 10c9c 10c9c 10cdc
+case 10c9d 10c9d 10cdd
+case 10c9e 10c9e 10cde
+case 10c9f 10c9f 10cdf
+case 10ca0 10ca0 10ce0
+case 10ca1 10ca1 10ce1
+case 10ca2 10ca2 10ce2
+case 10ca3 10ca3 10ce3
+case 10ca4 10ca4 10ce4
+case 10ca5 10ca5 10ce5
+case 10ca6 10ca6 10ce6
+case 10ca7 10ca7 10ce7
+case 10ca8 10ca8 10ce8
+case 10ca9 10ca9 10ce9
+case 10caa 10caa 10cea
+case 10cab 10cab 10ceb
+case 10cac 10cac 10cec
+case 10cad 10cad 10ced
+case 10cae 10cae 10cee
+case 10caf 10caf 10cef
+case 10cb0 10cb0 10cf0
+case 10cb1 10cb1 10cf1
+case 10cb2 10cb2 10cf2
+case 10cc0 10c80 10cc0
+case 10cc1 10c81 10cc1
+case 10cc2 10c82 10cc2
+case 10cc3 10c83 10cc3
+case 10cc4 10c84 10cc4
+case 10cc5 10c85 10cc5
+case 10cc6 10c86 10cc6
+case 10cc7 10c87 10cc7
+case 10cc8 10c88 10cc8
+case 10cc9 10c89 10cc9
+case 10cca 10c8a 10cca
+case 10ccb 10c8b 10ccb
+case 10ccc 10c8c 10ccc
+case 10ccd 10c8d 10ccd
+case 10cce 10c8e 10cce
+case 10ccf 10c8f 10ccf
+case 10cd0 10c90 10cd0
+case 10cd1 10c91 10cd1
+case 10cd2 10c92 10cd2
+case 10cd3 10c93 10cd3
+case 10cd4 10c94 10cd4
+case 10cd5 10c95 10cd5
+case 10cd6 10c96 10cd6
+case 10cd7 10c97 10cd7
+case 10cd8 10c98 10cd8
+case 10cd9 10c99 10cd9
+case 10cda 10c9a 10cda
+case 10cdb 10c9b 10cdb
+case 10cdc 10c9c 10cdc
+case 10cdd 10c9d 10cdd
+case 10cde 10c9e 10cde
+case 10cdf 10c9f 10cdf
+case 10ce0 10ca0 10ce0
+case 10ce1 10ca1 10ce1
+case 10ce2 10ca2 10ce2
+case 10ce3 10ca3 10ce3
+case 10ce4 10ca4 10ce4
+case 10ce5 10ca5 10ce5
+case 10ce6 10ca6 10ce6
+case 10ce7 10ca7 10ce7
+case 10ce8 10ca8 10ce8
+case 10ce9 10ca9 10ce9
+case 10cea 10caa 10cea
+case 10ceb 10cab 10ceb
+case 10cec 10cac 10cec
+case 10ced 10cad 10ced
+case 10cee 10cae 10cee
+case 10cef 10caf 10cef
+case 10cf0 10cb0 10cf0
+case 10cf1 10cb1 10cf1
+case 10cf2 10cb2 10cf2
+case 118a0 118a0 118c0
+case 118a1 118a1 118c1
+case 118a2 118a2 118c2
+case 118a3 118a3 118c3
+case 118a4 118a4 118c4
+case 118a5 118a5 118c5
+case 118a6 118a6 118c6
+case 118a7 118a7 118c7
+case 118a8 118a8 118c8
+case 118a9 118a9 118c9
+case 118aa 118aa 118ca
+case 118ab 118ab 118cb
+case 118ac 118ac 118cc
+case 118ad 118ad 118cd
+case 118ae 118ae 118ce
+case 118af 118af 118cf
+case 118b0 118b0 118d0
+case 118b1 118b1 118d1
+case 118b2 118b2 118d2
+case 118b3 118b3 118d3
+case 118b4 118b4 118d4
+case 118b5 118b5 118d5
+case 118b6 118b6 118d6
+case 118b7 118b7 118d7
+case 118b8 118b8 118d8
+case 118b9 118b9 118d9
+case 118ba 118ba 118da
+case 118bb 118bb 118db
+case 118bc 118bc 118dc
+case 118bd 118bd 118dd
+case 118be 118be 118de
+case 118bf 118bf 118df
+case 118c0 118a0 118c0
+case 118c1 118a1 118c1
+case 118c2 118a2 118c2
+case 118c3 118a3 118c3
+case 118c4 118a4 118c4
+case 118c5 118a5 118c5
+case 118c6 118a6 118c6
+case 118c7 118a7 118c7
+case 118c8 118a8 118c8
+case 118c9 118a9 118c9
+case 118ca 118aa 118ca
+case 118cb 118ab 118cb
+case 118cc 118ac 118cc
+case 118cd 118ad 118cd
+case 118ce 118ae 118ce
+case 118cf 118af 118cf
+case 118d0 118b0 118d0
+case 118d1 118b1 118d1
+case 118d2 118b2 118d2
+case 118d3 118b3 118d3
+case 118d4 118b4 118d4
+case 118d5 118b5 118d5
+case 118d6 118b6 118d6
+case 118d7 118b7 118d7
+case 118d8 118b8 118d8
+case 118d9 118b9 118d9
+case 118da 118ba 118da
+case 118db 118bb 118db
+case 118dc 118bc 118dc
+case 118dd 118bd 118dd
+case 118de 118be 118de
+case 118df 118bf 118df
+case 16e40 16e40 16e60
+case 16e41 16e41 16e61
+case 16e42 16e42 16e62
+case 16e43 16e43 16e63
+case 16e44 16e44 16e64
+case 16e45 16e45 16e65
+case 16e46 16e46 16e66
+case 16e47 16e47 16e67
+case 16e48 16e48 16e68
+case 16e49 16e49 16e69
+case 16e4a 16e4a 16e6a
+case 16e4b 16e4b 16e6b
+case 16e4c 16e4c 16e6c
+case 16e4d 16e4d 16e6d
+case 16e4e 16e4e 16e6e
+case 16e4f 16e4f 16e6f
+case 16e50 16e50 16e70
+case 16e51 16e51 16e71
+case 16e52 16e52 16e72
+case 16e53 16e53 16e73
+case 16e54 16e54 16e74
+case 16e55 16e55 16e75
+case 16e56 16e56 16e76
+case 16e57 16e57 16e77
+case 16e58 16e58 16e78
+case 16e59 16e59 16e79
+case 16e5a 16e5a 16e7a
+case 16e5b 16e5b 16e7b
+case 16e5c 16e5c 16e7c
+case 16e5d 16e5d 16e7d
+case 16e5e 16e5e 16e7e
+case 16e5f 16e5f 16e7f
+case 16e60 16e40 16e60
+case 16e61 16e41 16e61
+case 16e62 16e42 16e62
+case 16e63 16e43 16e63
+case 16e64 16e44 16e64
+case 16e65 16e45 16e65
+case 16e66 16e46 16e66
+case 16e67 16e47 16e67
+case 16e68 16e48 16e68
+case 16e69 16e49 16e69
+case 16e6a 16e4a 16e6a
+case 16e6b 16e4b 16e6b
+case 16e6c 16e4c 16e6c
+case 16e6d 16e4d 16e6d
+case 16e6e 16e4e 16e6e
+case 16e6f 16e4f 16e6f
+case 16e70 16e50 16e70
+case 16e71 16e51 16e71
+case 16e72 16e52 16e72
+case 16e73 16e53 16e73
+case 16e74 16e54 16e74
+case 16e75 16e55 16e75
+case 16e76 16e56 16e76
+case 16e77 16e57 16e77
+case 16e78 16e58 16e78
+case 16e79 16e59 16e79
+case 16e7a 16e5a 16e7a
+case 16e7b 16e5b 16e7b
+case 16e7c 16e5c 16e7c
+case 16e7d 16e5d 16e7d
+case 16e7e 16e5e 16e7e
+case 16e7f 16e5f 16e7f
+case 1e900 1e900 1e922
+case 1e901 1e901 1e923
+case 1e902 1e902 1e924
+case 1e903 1e903 1e925
+case 1e904 1e904 1e926
+case 1e905 1e905 1e927
+case 1e906 1e906 1e928
+case 1e907 1e907 1e929
+case 1e908 1e908 1e92a
+case 1e909 1e909 1e92b
+case 1e90a 1e90a 1e92c
+case 1e90b 1e90b 1e92d
+case 1e90c 1e90c 1e92e
+case 1e90d 1e90d 1e92f
+case 1e90e 1e90e 1e930
+case 1e90f 1e90f 1e931
+case 1e910 1e910 1e932
+case 1e911 1e911 1e933
+case 1e912 1e912 1e934
+case 1e913 1e913 1e935
+case 1e914 1e914 1e936
+case 1e915 1e915 1e937
+case 1e916 1e916 1e938
+case 1e917 1e917 1e939
+case 1e918 1e918 1e93a
+case 1e919 1e919 1e93b
+case 1e91a 1e91a 1e93c
+case 1e91b 1e91b 1e93d
+case 1e91c 1e91c 1e93e
+case 1e91d 1e91d 1e93f
+case 1e91e 1e91e 1e940
+case 1e91f 1e91f 1e941
+case 1e920 1e920 1e942
+case 1e921 1e921 1e943
+case 1e922 1e900 1e922
+case 1e923 1e901 1e923
+case 1e924 1e902 1e924
+case 1e925 1e903 1e925
+case 1e926 1e904 1e926
+case 1e927 1e905 1e927
+case 1e928 1e906 1e928
+case 1e929 1e907 1e929
+case 1e92a 1e908 1e92a
+case 1e92b 1e909 1e92b
+case 1e92c 1e90a 1e92c
+case 1e92d 1e90b 1e92d
+case 1e92e 1e90c 1e92e
+case 1e92f 1e90d 1e92f
+case 1e930 1e90e 1e930
+case 1e931 1e90f 1e931
+case 1e932 1e910 1e932
+case 1e933 1e911 1e933
+case 1e934 1e912 1e934
+case 1e935 1e913 1e935
+case 1e936 1e914 1e936
+case 1e937 1e915 1e937
+case 1e938 1e916 1e938
+case 1e939 1e917 1e939
+case 1e93a 1e918 1e93a
+case 1e93b 1e919 1e93b
+case 1e93c 1e91a 1e93c
+case 1e93d 1e91b 1e93d
+case 1e93e 1e91c 1e93e
+case 1e93f 1e91d 1e93f
+case 1e940 1e91e 1e940
+case 1e941 1e91f 1e941
+case 1e942 1e920 1e942
+case 1e943 1e921 1e943

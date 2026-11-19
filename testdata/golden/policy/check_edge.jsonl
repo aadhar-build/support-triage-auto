@@ -1,0 +1,36 @@
+{"case":"plain","safe":false,"violations":[["a-phrase",15,26,"full refund"],["edge-phrase",15,26,"full refund"]]}
+{"case":"turkish-i","safe":false,"violations":[["edge-phrase",0,5,"izmir"],["edge-phrase",6,11,"\u0130zmir"],["edge-phrase",12,17,"IZMIR"],["edge-phrase",18,23,"\u0131zm\u0131r"],["edge-phrase",24,29,"Izmir"]]}
+{"case":"istanbul","safe":false,"violations":[["edge-phrase",0,8,"istanbul"],["edge-phrase",9,17,"\u0130stanbul"],["edge-phrase",18,26,"ISTANBUL"],["edge-phrase",27,35,"\u0131stanbul"]]}
+{"case":"long-s","safe":false,"violations":[["edge-phrase",0,4,"STOP"],["edge-phrase",5,9,"\u017ftop"],["edge-phrase",10,14,"\u017fTOP"],["edge-phrase",15,19,"stop"]]}
+{"case":"sharp-s","safe":false,"violations":[["edge-phrase",8,14,"stra\u00dfe"],["edge-phrase",15,21,"STRA\u1e9eE"],["edge-phrase",22,28,"Stra\u00dfe"]]}
+{"case":"kelvin","safe":false,"violations":[["edge-phrase",0,6,"\u212aelvin"],["edge-phrase",7,13,"KELVIN"],["edge-phrase",14,20,"kelvin"]]}
+{"case":"sigma","safe":false,"violations":[["edge-phrase",6,11,"\u03c3\u03bf\u03c6\u03af\u03b1"],["edge-phrase",12,17,"\u03c2\u03bf\u03c6\u03af\u03b1"],["edge-phrase",18,23,"\u03a3\u039f\u03a6\u038a\u0391"]]}
+{"case":"theta","safe":false,"violations":[["edge-phrase",0,5,"\u03b1\u03b8\u03b7\u03bd\u03b1"],["edge-phrase",6,11,"\u03b1\u03d1\u03b7\u03bd\u03b1"],["edge-phrase",12,17,"\u0391\u03f4\u0397\u039d\u0391"]]}
+{"case":"micro","safe":false,"violations":[["edge-phrase",2,4,"\u00b5s"],["edge-phrase",10,12,"\u03bcs"],["edge-phrase",18,20,"\u039cS"]]}
+{"case":"digraph","safe":false,"violations":[["edge-phrase",0,6,"\u01c4UNGLA"],["edge-phrase",7,13,"\u01c5ungla"],["edge-phrase",14,20,"\u01c6ungla"]]}
+{"case":"ligature","safe":false,"violations":[["edge-phrase",0,3,"\ufb01ne"],["edge-phrase",14,17,"\ufb01NE"]]}
+{"case":"nbsp","safe":false,"violations":[["a-phrase",2,13,"full\u00a0refund"],["edge-phrase",2,13,"full\u00a0refund"],["a-phrase",18,29,"full\u3000refund"],["edge-phrase",18,29,"full\u3000refund"],["a-phrase",34,45,"full\u2028refund"],["edge-phrase",34,45,"full\u2028refund"]]}
+{"case":"odd-spaces","safe":false,"violations":[["a-phrase",0,11,"full\u000brefund"],["edge-phrase",0,11,"full\u000brefund"],["a-phrase",12,23,"full\u001crefund"],["edge-phrase",12,23,"full\u001crefund"],["a-phrase",24,35,"full\u001frefund"],["edge-phrase",24,35,"full\u001frefund"],["a-phrase",36,47,"full\u0085refund"],["edge-phrase",36,47,"full\u0085refund"]]}
+{"case":"tab-newline","safe":false,"violations":[["a-phrase",0,13,"full\t\n refund"],["edge-phrase",0,13,"full\t\n refund"]]}
+{"case":"trailing-space-backtrack","safe":false,"violations":[["edge-phrase",0,2,"x "],["edge-phrase",5,7,"x\u00a0"]]}
+{"case":"double-space","safe":false,"violations":[["edge-phrase",4,8,"a  b"],["edge-phrase",9,14,"a   b"],["edge-phrase",15,19,"a\u00a0\u00a0b"]]}
+{"case":"leading-space","safe":false,"violations":[["edge-phrase",12,17," lead"]]}
+{"case":"boundaries","safe":true,"violations":[]}
+{"case":"cjk-digits","safe":true,"violations":[]}
+{"case":"symbols","safe":false,"violations":[["edge-phrase",0,4,"100%"],["edge-phrase",17,20,"c++"],["edge-phrase",26,29,"a.b"],["edge-phrase",38,40,"_x"]]}
+{"case":"apostrophes","safe":false,"violations":[["edge-phrase",0,12,"We\u2019ll refund"],["edge-phrase",14,27,"we'll  refund"],["edge-phrase",29,40,"We\u2019re sorry"],["edge-phrase",42,53,"we're SORRY"]]}
+{"case":"overlap","safe":false,"violations":[["a-phrase",0,11,"full refund"],["edge-phrase",0,11,"full refund"],["a-phrase",12,23,"full refund"],["edge-phrase",12,23,"full refund"]]}
+{"case":"same-span-two-rules","safe":false,"violations":[["a-phrase",2,13,"full refund"],["edge-phrase",2,13,"full refund"],["edge-card",18,37,"4111 1111 1111 1111"],["edge-pii",18,37,"4111 1111 1111 1111"]]}
+{"case":"card-forms","safe":true,"violations":[]}
+{"case":"card-touching","safe":false,"violations":[["edge-card",73,89,"4111111111111111"],["edge-pii",73,89,"4111111111111111"]]}
+{"case":"card-lengths","safe":true,"violations":[]}
+{"case":"card-in-email","safe":true,"violations":[]}
+{"case":"phone-echo","safe":false,"violations":[["edge-pii",5,17,"555 123 4567"],["edge-pii",42,54,"555.123.4567"],["edge-pii",58,68,"5551234567"]]}
+{"case":"phone-intl","safe":false,"violations":[["edge-pii",7,23,"+44 20 7946 0958"]]}
+{"case":"phone-bounds","safe":true,"violations":[]}
+{"case":"phone-in-email","safe":false,"violations":[["edge-pii",5,27,"5551234567@sms.example"]]}
+{"case":"email-echo","safe":false,"violations":[["edge-pii",7,28,"JO.Bloggs@Example.com"]]}
+{"case":"email-nonascii","safe":false,"violations":[["edge-pii",22,31,"jo@ex.com"]]}
+{"case":"unicode-offsets","safe":false,"violations":[["a-phrase",3,14,"full refund"],["edge-phrase",3,14,"full refund"],["edge-card",18,37,"4111 1111 1111 1111"],["edge-pii",18,37,"4111 1111 1111 1111"]]}
+{"case":"empty","safe":true,"violations":[]}
+{"case":"combining","safe":false,"violations":[["edge-phrase",7,12,"\u0130zmir"]]}

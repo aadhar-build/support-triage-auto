@@ -1,0 +1,276 @@
+{"case":"del-01","safe":true,"source":"policies/rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"del-01","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"del-01","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"del-01","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"del-01","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"del-01","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"del-01","safe":true,"source":"brands/amazonhelp/guidelines.md","violations":[]}
+{"case":"del-04","safe":false,"source":"policies/rules.json","violations":[["no-refund-promise",10,22,"We'll refund"]]}
+{"case":"del-04","safe":false,"source":"tests/fixtures/policy_rules.json","violations":[["t-promise",10,22,"We'll refund"]]}
+{"case":"del-04","safe":false,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[["t-promise",10,22,"We'll refund"]]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"del-04","safe":false,"source":"tests/fixtures/repeat_contact_rules.json","violations":[["t-promise",10,22,"We'll refund"]]}
+{"case":"del-04","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"del-04","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"del-04","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"del-04","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"del-04","safe":false,"source":"./tests/fixtures/policy_rules.json","violations":[["t-promise",10,22,"We'll refund"]]}
+{"case":"del-04","safe":false,"source":"tests//fixtures/policy_rules.json","violations":[["t-promise",10,22,"We'll refund"]]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"del-04","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"del-04","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-refund-promise",10,22,"We'll refund"]]}
+{"case":"bil-01","safe":true,"source":"policies/rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"bil-01","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"bil-01","safe":true,"source":"brands/amazonhelp/guidelines.md","violations":[]}
+{"case":"bil-03","safe":false,"source":"policies/rules.json","violations":[["no-refund-promise",25,37,"We'll credit"]]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"bil-03","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"bil-03","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-refund-promise",25,37,"We'll credit"]]}
+{"case":"bil-05","safe":false,"source":"policies/rules.json","violations":[["no-pii-echo",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/policy_rules.json","violations":[["t-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[["t-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/brand_rules/rules.json","violations":[["s-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[["s-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/admin/rules.json","violations":[["fixture-no-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/propose_change_rules.json","violations":[["pc-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[["pc-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[["pc-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[["pc-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/repeat_contact_rules.json","violations":[["t-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"bil-05","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"bil-05","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"bil-05","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"bil-05","safe":false,"source":"./tests/fixtures/policy_rules.json","violations":[["t-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests//fixtures/policy_rules.json","violations":[["t-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[["a-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[["ac-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[["b-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[["s-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[["pc-pii",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-05","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-pii-echo",24,43,"4111 1111 1111 1111"]]}
+{"case":"bil-07","safe":false,"source":"policies/rules.json","violations":[["no-sensitive-request",31,42,"card number"]]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"bil-07","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"bil-07","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-sensitive-request",31,42,"card number"]]}
+{"case":"acc-06","safe":false,"source":"policies/rules.json","violations":[["no-sensitive-request",34,47,"your password"]]}
+{"case":"acc-06","safe":false,"source":"tests/fixtures/policy_rules.json","violations":[["t-secret",34,47,"your password"]]}
+{"case":"acc-06","safe":false,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[["t-secret",34,47,"your password"]]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"acc-06","safe":false,"source":"tests/fixtures/repeat_contact_rules.json","violations":[["t-secret",34,47,"your password"]]}
+{"case":"acc-06","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"acc-06","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"acc-06","safe":false,"source":"./tests/fixtures/policy_rules.json","violations":[["t-secret",34,47,"your password"]]}
+{"case":"acc-06","safe":false,"source":"tests//fixtures/policy_rules.json","violations":[["t-secret",34,47,"your password"]]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"acc-06","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"acc-06","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-sensitive-request",34,47,"your password"]]}
+{"case":"out-02","safe":true,"source":"policies/rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"out-02","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"out-02","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"out-02","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"out-02","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"out-02","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"out-02","safe":true,"source":"brands/amazonhelp/guidelines.md","violations":[]}
+{"case":"com-05","safe":false,"source":"policies/rules.json","violations":[["no-liability-admission",18,27,"our fault"],["no-liability-admission",32,45,"we are liable"]]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"com-05","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"com-05","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"com-05","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"com-05","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"com-05","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"com-05","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-liability-admission",18,27,"our fault"],["no-liability-admission",32,45,"we are liable"]]}
+{"case":"pra-01","safe":true,"source":"policies/rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"pra-01","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"pra-01","safe":true,"source":"brands/amazonhelp/guidelines.md","violations":[]}
+{"case":"pra-05","safe":true,"source":"policies/rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/policy_rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/propose_change_rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/repeat_contact_rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"./tests/fixtures/policy_rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests//fixtures/policy_rules.json","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"pra-05","safe":true,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[]}
+{"case":"pra-05","safe":true,"source":"brands/amazonhelp/guidelines.md","violations":[]}
+{"case":"oth-05","safe":false,"source":"policies/rules.json","violations":[["no-pii-echo",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/policy_rules.json","violations":[["t-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/policy_rules_alt_topics.json","violations":[["t-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/brand_rules/rules.json","violations":[]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/brand_rules/rules_other_version.json","violations":[]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/admin/rules.json","violations":[]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/propose_change_rules.json","violations":[["pc-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/propose_change_proposed_repeat.json","violations":[["pc-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/propose_change_proposed_reply_rules.json","violations":[["pc-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/propose_change_proposed_topic.json","violations":[["pc-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/repeat_contact_rules.json","violations":[["t-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":true,"source":"testdata/policy/bad_rules/topic_item_not_object.json","violations":[]}
+{"case":"oth-05","safe":true,"source":"testdata/policy/bad_rules/topic_missing_id.json","violations":[]}
+{"case":"oth-05","safe":true,"source":"testdata/policy/bad_rules/trailing_whitespace_ok.json","violations":[]}
+{"case":"oth-05","safe":true,"source":"testdata/policy/bad_rules/version_not_string.json","violations":[]}
+{"case":"oth-05","safe":false,"source":"./tests/fixtures/policy_rules.json","violations":[["t-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"tests//fixtures/policy_rules.json","violations":[["t-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/brands/alpha/guidelines.md","violations":[]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/brands/alphaco/guidelines.md","violations":[]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/brands/beta/guidelines.md","violations":[]}
+{"case":"oth-05","safe":true,"source":"tests/fixtures/brand_rules/brands/same/guidelines.md","violations":[]}
+{"case":"oth-05","safe":false,"source":"tests/fixtures/propose_change_brand_guidelines.md","violations":[["pc-pii",18,30,"07700 900123"]]}
+{"case":"oth-05","safe":false,"source":"brands/amazonhelp/guidelines.md","violations":[["no-pii-echo",18,30,"07700 900123"]]}

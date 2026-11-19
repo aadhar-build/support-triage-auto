@@ -1,0 +1,1 @@
+{"public_reply_rules": [{"id": "dd", "type": {"z": 1, "a": "say \"hi\"", "z": [], "q": {"x": "both ' and \""}}}]}

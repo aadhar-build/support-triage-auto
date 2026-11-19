@@ -1,0 +1,1 @@
+{"public_reply_rules": [{"id": "it's \"q\"\n\t\\ \u200b \u00e9 \ud83d\ude00 \udb40\udc01 \u0085", "type": "pii_echo", "detect": ["card_number"]}, {"id": "it's \"q\"\n\t\\ \u200b \u00e9 \ud83d\ude00 \udb40\udc01 \u0085", "type": "pii_echo", "detect": ["card_number"]}]}

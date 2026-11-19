@@ -1,0 +1,86 @@
+{
+  "version": "edge-1",
+  "public_reply_rules": [
+    {
+      "id": "edge-phrase",
+      "type": "banned_phrase",
+      "phrases": [
+        "izmir",
+        "x ",
+        "a  b",
+        " lead",
+        "stra\u00dfe",
+        "kelvin",
+        "\u03c3\u03bf\u03c6\u03af\u03b1",
+        "stop",
+        "we'll refund",
+        "we\u2019re sorry",
+        "\u00b5s",
+        "\u01c6ungla",
+        "full refund",
+        "\u0130stanbul",
+        "\ufb01ne",
+        "100%",
+        "c++",
+        "a.b",
+        "_x",
+        "\u0391\u0398\u0397\u039d\u0391"
+      ]
+    },
+    {
+      "id": "edge-pii",
+      "type": "pii_echo",
+      "detect": [
+        "card_number",
+        "email_from_customer",
+        "phone_from_customer"
+      ]
+    },
+    {
+      "id": "edge-card",
+      "type": "pii_echo",
+      "detect": [
+        "card_number"
+      ]
+    },
+    {
+      "id": "a-phrase",
+      "type": "banned_phrase",
+      "phrases": [
+        "full refund"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "t-legal",
+      "phrases": [
+        "legal action",
+        "sue"
+      ]
+    },
+    {
+      "id": "t-unicode",
+      "phrases": [
+        "istanbul",
+        "\u017fafety",
+        "\u2126",
+        "\ufb01",
+        "dz"
+      ]
+    },
+    {
+      "id": "t-space",
+      "phrases": [
+        "chargeback now",
+        "x "
+      ]
+    },
+    {
+      "id": "t-apos",
+      "phrases": [
+        "can't log in"
+      ]
+    }
+  ]
+}
