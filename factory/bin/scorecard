@@ -1,33 +1,144 @@
 #!/usr/bin/env python3
-"""The factory scorecard: every job in factory/jobs/, grouped by factory version,
-beside the frozen baseline named in config.json ("baseline").
-
-  scorecard            markdown table to stdout
-  scorecard --json     the cards as JSON (to freeze a new baseline)
-"""
+"""Compare factory versions or report a seven-day observation period."""
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import factory as F  # noqa: E402
 
 
-def main(argv: list[str]) -> int:
-    root = F.repo_root()
-    cfg = F.load_config(root)
-    jobs = [F.read_job(p.parent) for p in sorted(F.jobs_dir(root).glob("*/job.json"))]
+def weekly_start(value: str) -> date:
+    try:
+        start = date.fromisoformat(value)
+        if start.isoformat() != value or start > date.max - timedelta(days=7):
+            raise ValueError
+        return start
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("expected a seven-day interval starting YYYY-MM-DD") from exc
+
+
+def utc_cutoff(value: str) -> datetime:
+    try:
+        cutoff = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if cutoff.utcoffset() == timedelta(0):
+            return cutoff
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError("expected a UTC timestamp, e.g. 2026-11-19T09:00:00Z")
+
+
+def read_jobs(root: Path, read):
+    records, unreadable, invalid_ids = [], {}, 0
+    for path in sorted(F.jobs_dir(root).glob("*/job.json")):
+        job_id = path.parent.name
+        if not F.valid_reporting_job_id(job_id):
+            invalid_ids += 1
+            continue
+        try:
+            records.append(read(F.reporting_job_dir(root, job_id)))
+        except F.FactoryError as exc:
+            unreadable[job_id] = [str(exc)]
+        except (OSError, ValueError, RecursionError):
+            unreadable[job_id] = [f"invalid or unreadable job state for {job_id}"]
+    return records, unreadable, invalid_ids
+
+
+def show_unreadable(unreadable, invalid_ids, stream):
+    if unreadable:
+        print("\nUnreadable jobs omitted from the reported cohort", file=stream)
+        for diagnostics in unreadable.values():
+            print(f"- {diagnostics[0]}", file=stream)
+    if invalid_ids:
+        print(f"\n{invalid_ids} job directories have invalid IDs and were omitted.", file=stream)
+
+
+def weekly(root: Path, cfg: dict, args: argparse.Namespace) -> None:
+    from evidence_adapter import reporting_record
+    from scorecard_report import render_weekly_report, weekly_report
+
+    as_of = args.as_of or datetime.now(timezone.utc)
+    records, unreadable, invalid_ids = read_jobs(root, lambda folder: reporting_record(root, cfg, folder, as_of=as_of))
+    verifications = {}
+    if args.verify_github_merges:
+        from merge_evidence import verify_merge_delivery
+
+        for record in records:
+            result = verify_merge_delivery(root, cfg, record, as_of)
+            if result is not None:
+                verifications[record["job"]["id"]] = result
+    report = weekly_report(records, args.weekly, as_of, args.timezone, args.defect_window_days)
+    report["diagnostics"].update(unreadable)
+    report["invalid_job_directories"] = invalid_ids
+    report["incident_and_interruption_source_verification"] = "unavailable"
+    if args.verify_github_merges:
+        report["merge_verification"] = verifications
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print(render_weekly_report(report), end="")
+        print("\nIncident and interruption source verification is unavailable. Reported outcomes remain visible.")
+        show_unreadable(unreadable, invalid_ids, sys.stdout)
+        if verifications:
+            print("\nGitHub merge delivery verification")
+            for job_id, result in report["merge_verification"].items():
+                authority = f" ([delivery]({result['url']}))" if "url" in result else ""
+                print(f"- {job_id} — {result['status'].replace('_', ' ')}{authority}")
+
+
+def legacy(root: Path, cfg: dict, as_json: bool) -> None:
+    from evidence_adapter import read_reporting_job
+
+    jobs, unreadable, invalid_ids = read_jobs(root, read_reporting_job)
     cards = F.scorecard(jobs)
-    if "--json" in argv:
+    if as_json:
         print(json.dumps(cards, indent=2, default=str))
-        return 0
-    baseline = None
-    if cfg.get("baseline") and (root / cfg["baseline"]).exists():
-        baseline = json.loads((root / cfg["baseline"]).read_text())
-    print(F.render_scorecard(cards, baseline), end="")
+    else:
+        baseline = None
+        if cfg.get("baseline") and (root / cfg["baseline"]).exists():
+            baseline = json.loads((root / cfg["baseline"]).read_text())
+        print(F.render_scorecard(cards, baseline), end="")
+    show_unreadable(unreadable, invalid_ids, sys.stderr)
+
+
+def main(argv: list[str]) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--json", action="store_true", help="output structured JSON")
+    parser.add_argument("--weekly", type=weekly_start, metavar="YYYY-MM-DD", help="start of the reporting week")
+    parser.add_argument("--timezone", metavar="IANA", help="time zone for weekly cohort boundaries")
+    parser.add_argument("--as-of", type=utc_cutoff, metavar="UTC", help="recording-time cutoff for observations")
+    parser.add_argument("--defect-window-days", type=int, metavar="N", help="escaped-defect follow-up window")
+    parser.add_argument("--verify-github-merges", action="store_true",
+                        help="read existing GitHub deliveries referenced by merge observations")
+    args = parser.parse_args(argv)
+    if args.weekly is None and any(value is not None for value in
+                                   (args.timezone, args.as_of, args.defect_window_days)):
+        parser.error("--timezone, --as-of, and --defect-window-days require --weekly")
+    if args.verify_github_merges and args.weekly is None:
+        parser.error("--verify-github-merges requires --weekly")
+    if args.defect_window_days is not None and args.defect_window_days <= 0:
+        parser.error("--defect-window-days must be positive")
+    try:
+        if args.timezone:
+            ZoneInfo(args.timezone)
+        root = F.repo_root()
+        cfg = F.load_config(root)
+        if args.weekly is None:
+            legacy(root, cfg, args.json)
+        else:
+            weekly(root, cfg, args)
+    except ZoneInfoNotFoundError:
+        parser.error(f"unknown time zone {args.timezone!r}")
+    except (F.FactoryError, OSError, ValueError, OverflowError) as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

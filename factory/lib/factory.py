@@ -11,6 +11,7 @@ import datetime as _dt
 import fcntl
 import fnmatch
 import json
+import math
 import os
 import secrets
 import socket
@@ -99,6 +100,23 @@ def job_dir(root: Path, job_id: str) -> Path:
     if not (d / "job.json").exists():
         raise FactoryError(f"no job {job_id}")
     return d
+
+
+def reporting_job_dir(root: Path, job_id: str) -> Path:
+    """Refuse aliases and non-job paths for observation commands."""
+    if not valid_reporting_job_id(job_id):
+        raise FactoryError("invalid job ID")
+    folder = jobs_dir(root) / job_id
+    state = folder / "job.json"
+    if any(path.is_symlink() for path in (folder.parent.parent, folder.parent, folder, state)):
+        raise FactoryError(f"job {job_id} must use a real job directory and state file")
+    if not state.is_file():
+        raise FactoryError(f"no job {job_id}")
+    return folder
+
+
+def valid_reporting_job_id(job_id: str) -> bool:
+    return len(job_id) <= 255 and re.fullmatch(r"[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*", job_id) is not None
 
 
 def slugify(text: str, words: int = 4) -> str:
@@ -197,6 +215,47 @@ def _small_json(path: Path, limit: int) -> dict:
 
 def read_job(d: Path) -> dict:
     return _small_json(d / "job.json", 4 * 1024 * 1024)
+
+
+def validate_reporting_job(job, job_id: str) -> dict:
+    """Validate the stored fields used by reporting and tolerate missing legacy dates."""
+    if not isinstance(job, dict) or job.get("id") != job_id:
+        raise FactoryError(f"invalid or unreadable job state for {job_id}")
+    history = job.get("history")
+    if history is None:
+        history = []
+    if not isinstance(history, list) or any(
+        not isinstance(step, dict) or any(step.get(key) is not None and not isinstance(step[key], str)
+                                          for key in ("stage", "note", "at"))
+        for step in history
+    ):
+        raise FactoryError(f"job {job_id} has malformed history")
+    surfaces, reviewers = job.get("surfaces"), job.get("reviewers")
+    if surfaces is not None and (not isinstance(surfaces, list) or any(not isinstance(s, str) for s in surfaces)):
+        raise FactoryError(f"job {job_id} has malformed surfaces")
+    if reviewers is not None and (not isinstance(reviewers, dict)
+                                  or any(not isinstance(model, str) for model in reviewers.values())):
+        raise FactoryError(f"job {job_id} has malformed reviewers")
+    for field in ("stage", "risk", "branch", "worktree", "stacked_on_branch", "factory_version", "origin"):
+        value = job.get(field)
+        if value is not None and not isinstance(value, str):
+            raise FactoryError(f"job {job_id} has malformed {field}")
+    if "round" in job and (type(job["round"]) is not int or job["round"] < 0):
+        raise FactoryError(f"job {job_id} has malformed round")
+    for field in ("escaped", "owner_changes"):
+        if job.get(field) is not None and type(job[field]) is not bool:
+            raise FactoryError(f"job {job_id} has malformed {field}")
+    for field in ("owner_minutes", "cost_usd"):
+        value = job.get(field)
+        if value is not None:
+            try:
+                valid = type(value) in (int, float) and value >= 0 and math.isfinite(value)
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise FactoryError(f"job {job_id} has malformed {field}")
+    normalized_history = [step if _ts(step.get("at")) is not None else {**step, "at": None} for step in history]
+    return {**job, "history": normalized_history}
 
 
 def require_admission(d: Path, *, final: bool = False, token: str | None = None) -> None:
@@ -501,42 +560,47 @@ def allowed_files(spec_text: str) -> list[str]:
 BASE_VERSION = "v1"
 
 
-def _ts(at: str) -> _dt.datetime:
-    return _dt.datetime.strptime(at, "%Y-%m-%dT%H:%M:%SZ")
+def _ts(at: str | None) -> _dt.datetime | None:
+    if not isinstance(at, str):
+        return None
+    try:
+        value = _dt.datetime.fromisoformat(at.replace("Z", "+00:00"))
+        return value.astimezone(_dt.timezone.utc) if value.utcoffset() is not None else None
+    except (ValueError, OverflowError):
+        return None
 
 
 def job_metrics(job: dict) -> dict:
     """What one job's history says: timings, gate, escalation, merge path."""
-    h = job["history"]
-    stages = [e["stage"] for e in h]
-    created = _ts(h[0]["at"])
+    h = job.get("history") or []
+    stages = [e.get("stage") for e in h]
+    created = _ts(h[0].get("at")) if h else None
     ready = None
     for i, e in enumerate(h):
-        if e["stage"] == "needs-human" or (e["stage"] == "merged" and i and h[i - 1]["stage"] == "merging"):
-            ready = _ts(e["at"])
+        if stages[i] == "needs-human" or (stages[i] == "merged" and i and stages[i - 1] == "merging"):
+            ready = _ts(e.get("at"))
             break
-    merged = next((_ts(e["at"]) for e in h if e["stage"] == "merged"), None)
-    first_pass = None
-    if "gate" in stages:
-        i = stages.index("gate")
-        first_pass = i + 1 < len(stages) and stages[i + 1] == "review"
+    merged = next((_ts(e.get("at")) for e in h if e.get("stage") == "merged"), None)
+    merge_recorded = "merged" in stages or job.get("stage") == "merged"
     escalated = None
-    if any(e["note"] == "approver escalated" for e in h):
+    if any(e.get("note") == "approver escalated" for e in h):
         escalated = True
     elif "merging" in stages:
         escalated = False
     return {
-        "merged": merged is not None,
-        "rejected": job["stage"] == "rejected",
-        "agent_minutes": round((ready - created).total_seconds() / 60, 2) if ready else None,
-        "lead_hours": round((merged - created).total_seconds() / 3600, 2) if merged else None,
+        "merged": merge_recorded,
+        "rejected": job.get("stage") == "rejected",
+        "agent_minutes": round((ready - created).total_seconds() / 60, 2) if ready and created else None,
+        "lead_hours": round((merged - created).total_seconds() / 3600, 2) if merged and created else None,
         "merged_at": merged,
-        "first_pass_gate": first_pass,
+        "first_pass_gate": None,
+        "first_gate_attempted": "gate" in stages or job.get("stage") == "gate",
         "rounds": job.get("round", 0),
         "escalated": escalated,
         "auto_merged": merged is not None and "merging" in stages and stages[stages.index("merged") - 1] == "merging",
-        "accepted_as_built": not job.get("owner_changes", False),
-        "escaped": bool(job.get("escaped", False)),
+        "accepted_as_built": None,
+        "escaped": job.get("escaped") if type(job.get("escaped")) is bool else None,
+        "owner_changes": job.get("owner_changes") if type(job.get("owner_changes")) is bool else None,
         "owner_minutes": job.get("owner_minutes"),
         "cost_usd": job.get("cost_usd"),
     }
@@ -559,30 +623,40 @@ def scorecard(jobs: list[dict]) -> dict[str, dict]:
     """One card per factory version. Pairs are (count, out of)."""
     groups: dict[str, list[dict]] = {}
     for job in jobs:
-        groups.setdefault(job.get("factory_version", BASE_VERSION), []).append(job_metrics(job))
+        if job.get("origin") == "controlled":
+            continue
+        groups.setdefault(job.get("factory_version") or BASE_VERSION, []).append(job_metrics(job))
     cards = {}
     for version, ms in groups.items():
         merged = [m for m in ms if m["merged"]]
+        stamped_merges = [m["merged_at"] for m in merged if m["merged_at"] is not None]
         weeks = 1.0
-        if len(merged) > 1:
-            span = max(m["merged_at"] for m in merged) - min(m["merged_at"] for m in merged)
+        if len(stamped_merges) > 1:
+            span = max(stamped_merges) - min(stamped_merges)
             weeks = max(1.0, span.total_seconds() / (7 * 86400))
+        first_gates = sum(m["first_gate_attempted"] for m in ms)
         cards[version] = {
             "version": version,
             "jobs": len(ms),
             "merged": len(merged),
             "rejected": sum(1 for m in ms if m["rejected"]),
-            "merges_per_week": round(len(merged) / weeks, 2),
+            "merges_per_week": round(len(merged) / weeks, 2) if len(merged) == len(stamped_merges) else None,
             "agent_minutes_median": _median([m["agent_minutes"] for m in ms]),
             "lead_hours_median": _median([m["lead_hours"] for m in merged]),
-            "first_pass_gate": _count(ms, "first_pass_gate"),
+            "first_pass_gate": None,
             "rounds_mean": round(sum(m["rounds"] for m in merged) / len(merged), 2) if merged else None,
             "escalated": _count(ms, "escalated"),
             "auto_merged": (sum(1 for m in merged if m["auto_merged"]), len(merged)),
-            "accepted_as_built": (sum(1 for m in merged if m["accepted_as_built"]), len(merged)),
-            "change_fail": (sum(1 for m in merged if m["escaped"]), len(merged)),
+            "accepted_as_built": None,
+            "change_fail": None,
             "owner_minutes_median": _median([m["owner_minutes"] for m in merged]),
             "cost_usd_median": _median([m["cost_usd"] for m in merged]),
+            "coverage": {
+                "first_pass_gate": {"eligible": first_gates, "observed": 0, "unknown": first_gates},
+                "accepted_as_built": {"eligible": len(merged), "observed": 0, "unknown": len(merged)},
+                "change_fail": {"eligible": len(merged), "observed": 0, "unknown": len(merged),
+                                "legacy_affected": sum(m["escaped"] is True for m in merged)},
+            },
         }
     return cards
 
@@ -616,12 +690,24 @@ def render_scorecard(cards: dict[str, dict], baseline: dict | None) -> str:
     head = ["Metric", f"{base_version} baseline (frozen)"] + [f"{v} (n = {cards[v]['jobs']})" for v in others]
     lines = ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
     for label, key in SCORECARD_ROWS:
-        row = [label, _cell((baseline or {}).get(key))] + [_cell(cards[v].get(key)) for v in others]
+        row = [label, _cell((baseline or {}).get(key))]
+        for version in others:
+            card = cards[version]
+            coverage = card.get("coverage", {}).get(key)
+            value = _cell(card.get(key))
+            if coverage and coverage["eligible"]:
+                value += f" ({coverage['observed']}/{coverage['eligible']} observed, {coverage['unknown']} unknown)"
+            row.append(value)
         lines.append("| " + " | ".join(row) + " |")
     small = [v for v in others if cards[v]["jobs"] < SMALL_SAMPLE]
     if small or (baseline and baseline.get("jobs", 0) < SMALL_SAMPLE):
         lines += ["", f"Fewer than {SMALL_SAMPLE} jobs in a column, so the comparison is directional only. "
                   "Report every rate with its count."]
+    if baseline and baseline.get("notes"):
+        lines.extend(["", "Historical baseline notes"])
+        lines.extend(f"- {note}" for note in baseline["notes"].values())
+        if base_version == BASE_VERSION and baseline["notes"].get("frozen", "").startswith("2026-11-18"):
+            lines.append("- The owner-reported ‘1 day’ has unresolved unit and scope.")
     return "\n".join(lines) + "\n"
 
 
