@@ -5,3 +5,7 @@ __pycache__/
 .venv/
 factory/jobs/
 .worktrees/
+web/node_modules/
+web/dist/
+backend/bin/
+replay.html
