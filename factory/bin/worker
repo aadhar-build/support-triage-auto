@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Run one factory role locally. This command never advances the job.
+set -euo pipefail
+checkout=$(git rev-parse --path-format=absolute --git-common-dir)
+root=$(cd "${checkout%/*}" && pwd -P)
+exec go -C "$root/backend" run ./cmd/factory-worker -root "$root" -- "$@"
