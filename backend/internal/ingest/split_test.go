@@ -181,3 +181,31 @@ func TestReportOrderIndependent(t *testing.T) {
 		t.Errorf("counts differ: %v vs %v", ra.Counts, rb.Counts)
 	}
 }
+
+// TestConfigSumMatchesPython312 pins the tolerance check to Python 3.12's
+// compensated float sum(), which differs from naive (a+b)+c by one ulp at the
+// 1e-9 boundary. Accept/reject verdicts were taken from python3 3.12.3.
+func TestConfigSumMatchesPython312(t *testing.T) {
+	fr := func(a, b, c string) string {
+		return `{"seed": 1, "unit": "thread", "fractions": {"dev": ` + a + `, "eval": ` + b + `, "full": ` + c + `}}`
+	}
+	accept := [][3]string{{"0.1", "0.05", "0.850000001"}, {"0.4", "0.1", "0.499999999"}, {"1", "0.0", "0"}}
+	for _, c := range accept {
+		if _, err := ConfigFromJSON([]byte(fr(c[0], c[1], c[2]))); err != nil {
+			t.Errorf("%v: %v, want accepted", c, err)
+		}
+	}
+	// Ints are added without compensation, so the int mix sums differently
+	// from three compensated floats.
+	reject := map[[3]string]string{
+		{"0.25", "0.3", "0.449999999"}:       "fractions sum to 0.9999999989999999,",
+		{"1", "3.2847436310745673e-10", "1"}: "fractions sum to 2.000000000328474,",
+	}
+	for c, prefix := range reject {
+		_, err := ConfigFromJSON([]byte(fr(c[0], c[1], c[2])))
+		var ce *SplitConfigError
+		if !errors.As(err, &ce) || !strings.HasPrefix(ce.Msg, prefix) {
+			t.Errorf("%v: %v, want prefix %q", c, err, prefix)
+		}
+	}
+}

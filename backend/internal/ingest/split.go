@@ -121,7 +121,8 @@ func ConfigFromJSON(b []byte) (SplitConfig, error) {
 		return SplitConfig{}, cfgErr("fractions has unknown split name(s): %v", extra)
 	}
 	cfg := SplitConfig{Seed: seed}
-	total := 0.0
+	var vals [3]float64
+	var ints [3]bool
 	for i, n := range SplitNames {
 		v, ok := fr[n].(json.Number)
 		if !ok {
@@ -138,8 +139,9 @@ func ConfigFromJSON(b []byte) (SplitConfig, error) {
 			return SplitConfig{}, cfgErr("fraction '%s' must not be negative, got %v", n, v)
 		}
 		cfg.Fractions[i] = Fraction{Name: n, Value: f, Literal: string(v), IsInt: intLiteral.MatchString(string(v))}
-		total += f
+		vals[i], ints[i] = f, cfg.Fractions[i].IsInt
 	}
+	total := pySum(vals[:], ints[:])
 	if math.Abs(total-1) > sumTolerance {
 		return SplitConfig{}, cfgErr("fractions sum to %v, expected 1", total)
 	}
@@ -149,6 +151,32 @@ func ConfigFromJSON(b []byte) (SplitConfig, error) {
 func hashPrefix(seed int64, root uint64) uint64 {
 	sum := sha256.Sum256([]byte(strconv.FormatInt(seed, 10) + ":" + strconv.FormatUint(root, 10)))
 	return binary.BigEndian.Uint64(sum[:8])
+}
+
+// pySum adds numbers the way Python 3.12's builtin sum() does: in order from
+// 0, Neumaier-compensated for floats, plain addition for ints (isInt[i]), with
+// the compensation added at the end only when it is non-zero and finite.
+// Naive left-to-right addition can differ by one ulp and flip the 1e-9
+// tolerance verdict.
+func pySum(vals []float64, isInt []bool) float64 {
+	sum, c := 0.0, 0.0
+	for i, x := range vals {
+		if isInt[i] {
+			sum += x
+			continue
+		}
+		t := sum + x
+		if math.Abs(sum) >= math.Abs(x) {
+			c += (sum - t) + x
+		} else {
+			c += (x - t) + sum
+		}
+		sum = t
+	}
+	if c != 0 && !math.IsInf(c, 0) && !math.IsNaN(c) {
+		sum += c
+	}
+	return sum
 }
 
 // splitForU walks the cumulative fractions in order; u >= every sum falls
