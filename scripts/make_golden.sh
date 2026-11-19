@@ -32,6 +32,9 @@
 #   report        G/run_eval/metrics.json --thresholds evals/thresholds.json -o G/report/eval.html
 #   replay        --cases CASES --run W/run_synthetic --trace <normalized trace> --out G/replay/replay.html
 #   review_page   --cases CASES --run W/run_synthetic --out G/review_page/review.html
+#   golden_ingest --data TWCS --split-config data/split.json --out-prefix G/ingest/generated
+#   golden_ingest --data testdata/ingest/odd_cases.twcs.txt --split-config data/split.json
+#                 --out-prefix G/ingest/odd_cases
 #
 # Normalization: in every trace.jsonl, "code_version": "<40 hex>" becomes the
 # all-zero placeholder and "code_dirty": true|false becomes false. Nothing else is
@@ -83,7 +86,8 @@ RULES="$REPO/policies/rules.json"
 SPLIT="$REPO/data/split.json"
 DRIFT="$REPO/evals/drift.json"
 THRESH="$REPO/evals/thresholds.json"
-for f in "$RULES" "$SPLIT" "$DRIFT" "$THRESH"; do refuse_raw "repo input" "$f"; done
+ODD="$REPO/testdata/ingest/odd_cases.twcs.txt"
+for f in "$RULES" "$SPLIT" "$DRIFT" "$THRESH" "$ODD"; do refuse_raw "repo input" "$f"; done
 [ -z "$DATA" ] || DATA=$(realpath -m -- "$DATA")
 [ -z "$GOLD" ] || GOLD=$(realpath -m -- "$GOLD")
 CASES=$(realpath -m -- "$CASES")
@@ -121,7 +125,7 @@ normalize() { # in out
 }
 
 G="$W/g"
-mkdir -p "$G"/{run_synthetic,run_eval,drift,incidents,report,replay,review_page}
+mkdir -p "$G"/{run_synthetic,run_eval,drift,incidents,report,replay,review_page,ingest}
 PY="python3 -m triage"
 
 cli run_synthetic 0 1 -- $PY.run_synthetic --cases "$CASES" --rules "$RULES" \
@@ -197,10 +201,16 @@ mkdir -p "$OUT"
 rm -rf "${OUT:?}/policy"
 cp -R "$G/policy" "$OUT/policy"
 # --- end policy goldens (job 067) ---
+# --- ingest goldens (job 066) ---
+cli ingest_generated 0 -- python3 scripts/golden_ingest.py --data "$DATA" --split-config "$SPLIT" \
+  --out-prefix "$G/ingest/generated"
+cli ingest_odd_cases 0 -- python3 scripts/golden_ingest.py --data "$ODD" --split-config "$SPLIT" \
+  --out-prefix "$G/ingest/odd_cases"
+# --- end ingest goldens ---
 
 # Every CLI succeeded: replace the per-CLI subdirectories in --out.
 mkdir -p "$OUT"
-for d in run_synthetic run_eval drift incidents report replay review_page; do
+for d in run_synthetic run_eval drift incidents report replay review_page ingest; do
   rm -rf "${OUT:?}/$d"
   cp -R "$G/$d" "$OUT/$d"
 done
@@ -210,6 +220,7 @@ sha_line() { # file name
 }
 {
   sha_line "$GOLD" inputs/gold.csv
+  sha_line "$ODD" inputs/ingest/odd_cases.twcs.txt
   sha_line "$CASES" inputs/synthetic.json
   sha_line "$DATA" inputs/twcs.csv
 } >"$W/INPUTS.sha256"

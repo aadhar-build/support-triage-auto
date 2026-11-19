@@ -1,0 +1,48 @@
+{
+  "load": {
+    "rows_parsed": 20,
+    "rows_read": 29,
+    "rows_skipped": 9,
+    "skip_reasons": {
+      "author_id": 1,
+      "created_at": 1,
+      "field_count": 3,
+      "in_response_to_tweet_id": 1,
+      "inbound": 1,
+      "response_tweet_id": 1,
+      "tweet_id": 1
+    }
+  },
+  "split": {
+    "counts": {
+      "dev": 1,
+      "eval": 1,
+      "full": 5
+    },
+    "seed": 20261115,
+    "shares": {
+      "dev": 0.14285714285714285,
+      "eval": 0.14285714285714285,
+      "full": 0.7142857142857143
+    },
+    "targets": {
+      "dev": 0.1,
+      "eval": 0.05,
+      "full": 0.85
+    },
+    "total": 7
+  },
+  "threads": {
+    "brand_started": 1,
+    "broken_links": 1,
+    "cycle_tweets": 3,
+    "cycles": 2,
+    "duplicate_ids": 1,
+    "parent_link_disagreements": 1,
+    "response_id_fallbacks": 1,
+    "threads_built": 7,
+    "tweets_not_placed": 7,
+    "tweets_placed": 12,
+    "tweets_seen": 19
+  }
+}
