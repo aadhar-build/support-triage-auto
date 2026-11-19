@@ -1,0 +1,31 @@
+tweet_id,author_id,inbound,created_at,text,response_tweet_id,in_response_to_tweet_id
+100,oc_cust01,True,Mon Jan 02 10:00:00 +0000 2017,"made up line one
+line two",101,
+101,oc_BrandX,False,Mon Jan 02 10:05:00 +0000 2017,"she said ""hi""",102,100
+102,oc_cust01,True,Mon Jan 02 10:10:00 +0000 2017,"ab"cd,103,101
+103,oc_BrandY,False,Mon Jan 02 10:15:00 +0000 2017,ab"cd,,102
+200,oc_cust02,True,Mon Jan 02 15:30:00 -0530 2017, "a",,
+199,oc_cust03,True,Mon Jan 02 21:00:00 +0000 2017,made up tie,,
+300,oc_cust04,True,Tue Jan 03 09:00:00 +0000 2017,made up bare cr row,301,301,oc_BrandX,False,Tue Jan 03 09:01:00 +0000 2017,made up fallback reply,,
+
+400,oc_cust05,True,Wed Jan 04 08:00:00 +0000 2017,made up question,402,
+2,oc_cust06,True,Wed Jan 04 08:01:00 +0000 2017,made up question two,402,
+402,oc_BrandY,False,Wed Jan 04 08:02:00 +0000 2017,made up answer,,400
+500,oc_BrandX,False,Thu Jan 05 08:00:00 +0000 2017,made up orphan,,999999
+501,oc_cust07,True,Thu Jan 05 08:01:00 +0000 2017,made up below orphan,,500
+600,oc_cust08,True,Fri Jan 06 08:00:00 +0000 2017,made up loop a,,601
+601,oc_BrandX,False,Fri Jan 06 08:01:00 +0000 2017,made up loop b,,600
+602,oc_cust08,True,Fri Jan 06 08:02:00 +0000 2017,made up self loop,,602
+700,oc_BrandY,False,Sat Jan 07 08:00:00 +0000 2017,made up brand opener,701,
+701,oc_cust09,True,Sat Jan 07 08:01:00 +0000 2017,made up reply to brand,,700
+100,oc_cust01,True,Sun Jan 08 08:00:00 +0000 2017,made up duplicate copy,,
+""
+800,oc_cust10,True
+801,oc_cust10,True,Sun Jan 08 09:00:00 +0000 2017,made up long row,,,extra
+x12,oc_cust11,True,Sun Jan 08 09:01:00 +0000 2017,made up bad id,,
+802, ,True,Sun Jan 08 09:02:00 +0000 2017,made up blank author,,
+803,oc_cust12,maybe,Sun Jan 08 09:03:00 +0000 2017,made up bad inbound,,
+804,oc_cust13,True,Mon Feb 30 10:00:00 +0000 2017,made up bad date,,
+805,oc_cust14,True,Sun Jan 08 09:05:00 +0000 2017,made up bad responses,"1,,2",
+806,oc_cust15,True,Sun Jan 08 09:06:00 +0000 2017,made up bad parent,,abc
+1,oc_cust16,True,Mon Jan 09 08:00:00 +0000 2017,made up last row,,
