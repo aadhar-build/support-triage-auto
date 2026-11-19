@@ -94,6 +94,9 @@ printf '%s' '`+intakeArtifact+`' > "$2"
 	if err := json.Unmarshal([]byte(got), &audit); err != nil {
 		t.Fatal(err)
 	}
+	if audit["checked_eval_holdout_path_count"] != float64(0) {
+		t.Fatalf("missing explicit unconfigured holdout coverage: %v", audit["checked_eval_holdout_path_count"])
+	}
 	for k, v := range map[string]string{"harness": "codex", "model": "gpt-explicit", "cli_version": "codex-cli fixture", "candidate_sha": gitTest(t, root, "rev-parse", "HEAD")} {
 		if audit[k] != v {
 			t.Fatalf("%s = %v; want %q", k, audit[k], v)
@@ -106,7 +109,7 @@ printf '%s' '`+intakeArtifact+`' > "$2"
 }
 
 func TestLegacyClaudeUsesSubscriptionAndDoesNotWriteState(t *testing.T) {
-	root, job := fixture(t, "")
+	root, job := fixture(t, `,"eval_holdout_paths":["private/cases"]`)
 	t.Setenv("ANTHROPIC_API_KEY", "must-not-be-inherited")
 	t.Setenv("ANTHROPIC_BASE_URL", "must-not-be-inherited")
 	fakeCLI(t, "claude", `
@@ -123,6 +126,13 @@ printf '%s' '{"type":"result","subtype":"success","is_error":false,"result":`+js
 		t.Fatal(err)
 	}
 	wantFile(t, filepath.Join(job, "intake.md"), intakeArtifact)
+	var audit map[string]any
+	if err := readJSON(filepath.Join(job, "worker-intake.json"), &audit); err != nil || audit["checked_eval_holdout_path_count"] != float64(1) {
+		t.Fatalf("configured holdout coverage = %v, %v", audit["checked_eval_holdout_path_count"], err)
+	}
+	if audit["eval_holdout_policy_sha256"] != contentDigest([]byte(`["private/cases"]`)) {
+		t.Fatalf("configured policy digest = %v", audit["eval_holdout_policy_sha256"])
+	}
 }
 
 func TestUnknownAuthRefusesBeforeWorkerRuns(t *testing.T) {

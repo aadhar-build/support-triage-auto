@@ -17,6 +17,7 @@ import (
 )
 
 type snapshot struct {
+	holdoutPolicyDigest                                               string
 	temp, checkout, job, source, head, headRef, base, baseRef, branch string
 	reviewDir                                                         string
 	jobInputBytes                                                     int
@@ -119,6 +120,9 @@ func makeSnapshot(ctx context.Context, root, jobDir string, cfg config, state jo
 		fetch = append(fetch, s.base)
 	}
 	if _, err = git(ctx, s.checkout, fetch...); err != nil {
+		return snapshot{}, err
+	}
+	if err = s.checkEvalHoldouts(ctx, cfg.EvalHoldoutPaths); err != nil {
 		return snapshot{}, err
 	}
 	if s.base != "" {
