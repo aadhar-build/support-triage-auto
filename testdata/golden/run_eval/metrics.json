@@ -1,0 +1,1160 @@
+{
+  "action": {
+    "accuracy": {
+      "ci": [
+        0.9167024063390322,
+        0.9761477282752958
+      ],
+      "directional": false,
+      "n": 200,
+      "num": 191,
+      "value": 0.955
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          51,
+          0,
+          3,
+          2
+        ],
+        [
+          1,
+          71,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          58,
+          1
+        ],
+        [
+          0,
+          0,
+          2,
+          11
+        ]
+      ],
+      "labels": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ]
+    },
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 200,
+      "value": 0.9358905866011326
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9231693589161953,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.92577148109935,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9290009952705242,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9217796092796092,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9853879454747727,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9315075226092175,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "answer": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9659090909090909
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9444444444444444
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9239130434782609
+        },
+        "fn": 5,
+        "fp": 1,
+        "precision": {
+          "ci": [
+            0.8987925373197556,
+            0.9965972795909344
+          ],
+          "directional": false,
+          "n": 52,
+          "num": 51,
+          "value": 0.9807692307692307
+        },
+        "predicted": 52,
+        "support": 56,
+        "tn": 143,
+        "tnr": {
+          "ci": [
+            0.9617143276425165,
+            0.9987731129695979
+          ],
+          "directional": false,
+          "n": 144,
+          "num": 143,
+          "value": 0.9930555555555556
+        },
+        "tp": 51,
+        "tpr": {
+          "ci": [
+            0.807437601433565,
+            0.9612584227369118
+          ],
+          "directional": false,
+          "n": 56,
+          "num": 51,
+          "value": 0.9107142857142857
+        }
+      },
+      "ask": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9971910112359551
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.993006993006993
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9888579387186629
+        },
+        "fn": 1,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.9486702582520953,
+            1.0
+          ],
+          "directional": false,
+          "n": 71,
+          "num": 71,
+          "value": 1.0
+        },
+        "predicted": 71,
+        "support": 72,
+        "tn": 128,
+        "tnr": {
+          "ci": [
+            0.9708620041018919,
+            1.0
+          ],
+          "directional": false,
+          "n": 128,
+          "num": 128,
+          "value": 1.0
+        },
+        "tp": 71,
+        "tpr": {
+          "ci": [
+            0.9254321971571302,
+            0.9975441113595678
+          ],
+          "directional": false,
+          "n": 72,
+          "num": 71,
+          "value": 0.9861111111111112
+        }
+      },
+      "escalate": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 0.7971014492753623
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 0.8148148148148148
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 0.8333333333333334
+        },
+        "fn": 2,
+        "fp": 3,
+        "precision": {
+          "ci": [
+            0.5241027622679172,
+            0.9242875166308363
+          ],
+          "directional": true,
+          "n": 14,
+          "num": 11,
+          "value": 0.7857142857142857
+        },
+        "predicted": 14,
+        "support": 13,
+        "tn": 184,
+        "tnr": {
+          "ci": [
+            0.9539011683321797,
+            0.9945293625374
+          ],
+          "directional": false,
+          "n": 187,
+          "num": 184,
+          "value": 0.983957219251337
+        },
+        "tp": 11,
+        "tpr": {
+          "ci": [
+            0.5776482949136899,
+            0.9567427368172621
+          ],
+          "directional": true,
+          "n": 13,
+          "num": 11,
+          "value": 0.8461538461538461
+        }
+      },
+      "route": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.932475884244373
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9508196721311475
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 0.9698996655518395
+        },
+        "fn": 1,
+        "fp": 5,
+        "precision": {
+          "ci": [
+            0.8272947198845853,
+            0.9656246596634805
+          ],
+          "directional": false,
+          "n": 63,
+          "num": 58,
+          "value": 0.9206349206349206
+        },
+        "predicted": 63,
+        "support": 59,
+        "tn": 136,
+        "tnr": {
+          "ci": [
+            0.9196762460597111,
+            0.9847600484855022
+          ],
+          "directional": false,
+          "n": 141,
+          "num": 136,
+          "value": 0.9645390070921985
+        },
+        "tp": 58,
+        "tpr": {
+          "ci": [
+            0.9100406253761469,
+            0.9970018433070186
+          ],
+          "directional": false,
+          "n": 59,
+          "num": 58,
+          "value": 0.9830508474576272
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9563352895544779,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9553817281686133,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.954971578117091,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.9572741147741148,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.986551781899091,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 0.955,
+        "zero_filled": 0
+      }
+    }
+  },
+  "averaging": "Macro and weighted averages run over the included classes: the union of gold and predicted classes (support > 0 or predicted > 0), listed in included_classes. A per-class value that is null counts as zero in the average (zero_filled counts them) and still shows as null in per_class. Macro is the unweighted mean; weighted is sum(support * value) / sum(support).",
+  "cohort": {
+    "brand_population": "all",
+    "gold_revision": "sha256:a886a0645920dc6e278d5a682f6a6bad19e19e81e040a33c78a01a573e0bd043",
+    "name": "gold_random",
+    "split": "dev"
+  },
+  "config": {
+    "prices": {
+      "agent": 0.01,
+      "cheap": 0.0,
+      "larger": 0.002
+    },
+    "threshold": 0.5
+  },
+  "coverage": {
+    "gold_rows_unmatched": 1800,
+    "threads_routed": 200,
+    "threads_scored": 200,
+    "threads_without_gold": 0
+  },
+  "directional_below": 30,
+  "escalation": {
+    "accuracy": {
+      "ci": [
+        0.9428208558483829,
+        0.9892754385292123
+      ],
+      "directional": false,
+      "n": 200,
+      "num": 195,
+      "value": 0.975
+    },
+    "balanced_accuracy": {
+      "ci": null,
+      "directional": true,
+      "n": 200,
+      "value": 0.9150555327025915
+    },
+    "counts": {
+      "fn": 2,
+      "fp": 3,
+      "positives": 13,
+      "predicted_positives": 14,
+      "tn": 184,
+      "tp": 11
+    },
+    "f0_5": {
+      "ci": null,
+      "directional": true,
+      "n": 200,
+      "value": 0.7971014492753623
+    },
+    "f1": {
+      "ci": null,
+      "directional": true,
+      "n": 200,
+      "value": 0.8148148148148148
+    },
+    "f2": {
+      "ci": null,
+      "directional": true,
+      "n": 200,
+      "value": 0.8333333333333334
+    },
+    "fnr": {
+      "ci": [
+        0.04325726318273798,
+        0.4223517050863101
+      ],
+      "directional": true,
+      "n": 13,
+      "num": 2,
+      "value": 0.15384615384615385
+    },
+    "fpr": {
+      "ci": [
+        0.005470637462600011,
+        0.046098831667820195
+      ],
+      "directional": false,
+      "n": 187,
+      "num": 3,
+      "value": 0.016042780748663103
+    },
+    "mcc": {
+      "ci": null,
+      "directional": true,
+      "n": 200,
+      "value": 0.8020624647643684
+    },
+    "npv": {
+      "ci": [
+        0.9616476678846998,
+        0.9970463169953266
+      ],
+      "directional": false,
+      "n": 186,
+      "num": 184,
+      "value": 0.989247311827957
+    },
+    "precision": {
+      "ci": [
+        0.5241027622679172,
+        0.9242875166308363
+      ],
+      "directional": true,
+      "n": 14,
+      "num": 11,
+      "value": 0.7857142857142857
+    },
+    "prevalence": {
+      "ci": [
+        0.03837598764975976,
+        0.10802003749917945
+      ],
+      "directional": false,
+      "n": 200,
+      "num": 13,
+      "value": 0.065
+    },
+    "tnr": {
+      "ci": [
+        0.9539011683321797,
+        0.9945293625374
+      ],
+      "directional": false,
+      "n": 187,
+      "num": 184,
+      "value": 0.983957219251337
+    },
+    "tpr": {
+      "ci": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "directional": true,
+      "n": 13,
+      "num": 11,
+      "value": 0.8461538461538461
+    }
+  },
+  "intent": {
+    "accuracy": {
+      "ci": [
+        0.9811539940816791,
+        1.0
+      ],
+      "directional": false,
+      "n": 200,
+      "num": 200,
+      "value": 1.0
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          22,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          29,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          36,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          29,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          26,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          29,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          29
+        ]
+      ],
+      "labels": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ]
+    },
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 200,
+      "value": 1.0
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "account_access": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.9035781695514236,
+            1.0
+          ],
+          "directional": false,
+          "n": 36,
+          "num": 36,
+          "value": 1.0
+        },
+        "predicted": 36,
+        "support": 36,
+        "tn": 164,
+        "tnr": {
+          "ci": [
+            0.9771117529861488,
+            1.0
+          ],
+          "directional": false,
+          "n": 164,
+          "num": 164,
+          "value": 1.0
+        },
+        "tp": 36,
+        "tpr": {
+          "ci": [
+            0.9035781695514236,
+            1.0
+          ],
+          "directional": false,
+          "n": 36,
+          "num": 36,
+          "value": 1.0
+        }
+      },
+      "billing": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        },
+        "predicted": 29,
+        "support": 29,
+        "tn": 171,
+        "tnr": {
+          "ci": [
+            0.978028112302793,
+            1.0
+          ],
+          "directional": false,
+          "n": 171,
+          "num": 171,
+          "value": 1.0
+        },
+        "tp": 29,
+        "tpr": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        }
+      },
+      "complaint": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.8712669561953784,
+            1.0
+          ],
+          "directional": true,
+          "n": 26,
+          "num": 26,
+          "value": 1.0
+        },
+        "predicted": 26,
+        "support": 26,
+        "tn": 174,
+        "tnr": {
+          "ci": [
+            0.97839875484701,
+            1.0
+          ],
+          "directional": false,
+          "n": 174,
+          "num": 174,
+          "value": 1.0
+        },
+        "tp": 26,
+        "tpr": {
+          "ci": [
+            0.8712669561953784,
+            1.0
+          ],
+          "directional": true,
+          "n": 26,
+          "num": 26,
+          "value": 1.0
+        }
+      },
+      "delivery": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.8513404742740388,
+            1.0
+          ],
+          "directional": true,
+          "n": 22,
+          "num": 22,
+          "value": 1.0
+        },
+        "predicted": 22,
+        "support": 22,
+        "tn": 178,
+        "tnr": {
+          "ci": [
+            0.9788739210389701,
+            1.0
+          ],
+          "directional": false,
+          "n": 178,
+          "num": 178,
+          "value": 1.0
+        },
+        "tp": 22,
+        "tpr": {
+          "ci": [
+            0.8513404742740388,
+            1.0
+          ],
+          "directional": true,
+          "n": 22,
+          "num": 22,
+          "value": 1.0
+        }
+      },
+      "other": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        },
+        "predicted": 29,
+        "support": 29,
+        "tn": 171,
+        "tnr": {
+          "ci": [
+            0.978028112302793,
+            1.0
+          ],
+          "directional": false,
+          "n": 171,
+          "num": 171,
+          "value": 1.0
+        },
+        "tp": 29,
+        "tpr": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        }
+      },
+      "outage_technical": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        },
+        "predicted": 29,
+        "support": 29,
+        "tn": 171,
+        "tnr": {
+          "ci": [
+            0.978028112302793,
+            1.0
+          ],
+          "directional": false,
+          "n": 171,
+          "num": 171,
+          "value": 1.0
+        },
+        "tp": 29,
+        "tpr": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        }
+      },
+      "praise": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 200,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        },
+        "predicted": 29,
+        "support": 29,
+        "tn": 171,
+        "tnr": {
+          "ci": [
+            0.978028112302793,
+            1.0
+          ],
+          "directional": false,
+          "n": 171,
+          "num": 171,
+          "value": 1.0
+        },
+        "tp": 29,
+        "tpr": {
+          "ci": [
+            0.8830264055344442,
+            1.0
+          ],
+          "directional": true,
+          "n": 29,
+          "num": 29,
+          "value": 1.0
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 200,
+        "value": 1.0,
+        "zero_filled": 0
+      }
+    }
+  },
+  "kind": "gold",
+  "n": 200,
+  "operations": {
+    "cost_per_1000_usd": 7.74,
+    "prices_are_placeholders": true,
+    "tier_shares": {
+      "agent": {
+        "ci": [
+          0.6073185684304498,
+          0.736085329498138
+        ],
+        "directional": false,
+        "n": 200,
+        "num": 135,
+        "value": 0.675
+      },
+      "cheap": {
+        "ci": [
+          0.9811539940816791,
+          1.0
+        ],
+        "directional": false,
+        "n": 200,
+        "num": 200,
+        "value": 1.0
+      },
+      "larger": {
+        "ci": [
+          0.4264572195415849,
+          0.5637312405175983
+        ],
+        "directional": false,
+        "n": 200,
+        "num": 99,
+        "value": 0.495
+      }
+    }
+  },
+  "run_at": "2000-01-01T00:00:00Z",
+  "sample": {
+    "seed": 0,
+    "size": 200
+  },
+  "schema_version": "metrics/1"
+}

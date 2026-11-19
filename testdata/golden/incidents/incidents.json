@@ -1,0 +1,36 @@
+{
+  "baseline_factor": 3.0,
+  "baseline_lookback_hours": 168,
+  "config_version": "v1.1-draft",
+  "drafts_avoided": 40,
+  "incidents": 1,
+  "incidents_awaiting_approval": 1,
+  "label": "outage_technical",
+  "look_ahead": {
+    "baseline": "earlier_unassigned_only",
+    "brands": "known_at_event_time",
+    "labels": "first_turn_only",
+    "residual": [
+      "thread_links_from_full_file",
+      "dataset_snapshot"
+    ]
+  },
+  "members_per_incident": [
+    41
+  ],
+  "members_total": 41,
+  "min_burst": 30,
+  "minutes_first_message_to_incident": [
+    52.483333333333334
+  ],
+  "outage_threads": 268,
+  "reopens": 0,
+  "split": "full",
+  "unattributed_outage_threads": 0,
+  "warm_up": {
+    "events_at_min_burst": 0,
+    "hours": 170,
+    "outage_threads": 33
+  },
+  "window_hours": 2
+}

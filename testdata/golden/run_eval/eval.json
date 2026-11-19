@@ -1,0 +1,90 @@
+{
+  "action_accuracy": 0.955,
+  "action_accuracy_ci": [
+    0.9167024063390322,
+    0.9761477282752958
+  ],
+  "cost_per_1000_threads": 7.74,
+  "false_escalation_rate": 0.016042780748663103,
+  "false_escalation_rate_ci": [
+    0.005470637462600011,
+    0.046098831667820195
+  ],
+  "false_escalations": 3,
+  "gold_rows_unmatched": 1800,
+  "intent_accuracy": 1.0,
+  "intent_accuracy_ci": [
+    0.9811539940816791,
+    1.0
+  ],
+  "larger_answered": 0,
+  "larger_cache_read_tokens": 0,
+  "larger_cache_write_tokens": 0,
+  "larger_confirmed_usd": 0.0,
+  "larger_fallbacks": {
+    "api_error": 0,
+    "invalid_labels": 0,
+    "monthly_cap": 0,
+    "parse_error": 0,
+    "reservation_exceeded": 0,
+    "spend_cap": 0,
+    "spend_log": 0,
+    "too_long": 0,
+    "unknown_bill": 0
+  },
+  "larger_input_tokens": 0,
+  "larger_mode": "fake",
+  "larger_model": "fake-larger",
+  "larger_output_tokens": 0,
+  "larger_post_merge_eval": false,
+  "larger_prompt_version": null,
+  "larger_reservation_exceeded": 0,
+  "larger_stopped_by": null,
+  "larger_unconfirmed_usd": 0.0,
+  "max_spend_usd": null,
+  "missed_escalation_rate": 0.15384615384615385,
+  "missed_escalation_rate_ci": [
+    0.04325726318273798,
+    0.4223517050863101
+  ],
+  "missed_escalations": 2,
+  "month_to_date_usd": null,
+  "monthly_cap_usd": null,
+  "needs_person_share": 0.07,
+  "needs_person_share_ci": [
+    0.04215178292291873,
+    0.11405578216683726
+  ],
+  "prices": {
+    "agent": 0.01,
+    "cheap": 0.0,
+    "larger": 0.002
+  },
+  "prices_are_placeholders": true,
+  "sample_size": 200,
+  "seed": 0,
+  "split": "dev",
+  "threads_routed": 200,
+  "threads_scored": 200,
+  "threads_without_gold": 0,
+  "threshold": 0.5,
+  "tier_shares": {
+    "agent": 0.675,
+    "cheap": 1.0,
+    "larger": 0.495
+  },
+  "tier_shares_ci": {
+    "agent": [
+      0.6073185684304498,
+      0.736085329498138
+    ],
+    "cheap": [
+      0.9811539940816791,
+      1.0
+    ],
+    "larger": [
+      0.4264572195415849,
+      0.5637312405175983
+    ]
+  }
+}
