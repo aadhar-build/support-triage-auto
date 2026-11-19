@@ -91,6 +91,7 @@ func TestMalformedPrices(t *testing.T) {
 	cases := []struct{ name, content, problem string }{
 		{"missing_file", "", "not found"},
 		{"bad_json", "{not json", "not valid JSON"},
+		{"bad_utf8", "{\"version\": \"\xff\"}", "not valid JSON"},
 		{"bom", "\xef\xbb\xbf{}", "not valid JSON"},
 		{"list", "[]", "top level is not an object"},
 		{"missing_version", `{"models": {}}`, "version is missing or empty"},

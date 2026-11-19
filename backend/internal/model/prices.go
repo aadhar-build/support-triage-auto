@@ -10,6 +10,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/aadhar-build/support-triage-auto/backend/internal/policy"
 	"github.com/aadhar-build/support-triage-auto/backend/internal/route"
@@ -95,7 +96,7 @@ func LoadPrices(path string) (*Prices, error) {
 		return nil, fail("cannot read: %s", osDetail(err))
 	}
 	data, err := policy.ParseJSON(raw)
-	if err != nil {
+	if err != nil || !utf8.Valid(raw) { // Python decodes UTF-8 first; ParseJSON does not check it
 		return nil, fail("not valid JSON")
 	}
 	if data.Kind != policy.Object {
