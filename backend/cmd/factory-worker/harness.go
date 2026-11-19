@@ -228,7 +228,7 @@ func claudeSettings(checkout, stage string) (string, string, error) {
 			"allow": bash, "blockReadsOutsideWorkingDirectories": true, "blockWritesOutsideWorkingDirectories": true,
 		},
 		"sandbox": map[string]any{
-			"enabled": true, "requireSandbox": true, "autoAllowBashIfSandboxed": false,
+			"enabled": true, "failIfUnavailable": true, "autoAllowBashIfSandboxed": false,
 			"allowUnsandboxedCommands": false,
 			"filesystem":               map[string]any{"denyWrite": denyWrite},
 			"network":                  map[string]any{"allowedDomains": []string{}, "strictAllowlist": true},
