@@ -183,15 +183,15 @@ func TestUnicodeLowercase(t *testing.T) {
 		th   []turnSpec
 		want Labels
 	}{
-		{[]turnSpec{{true, "SIGN İN"}}, Labels{"other", "normal", "ask", 0.2}},
-		{[]turnSpec{{true, "LOGİN failed"}}, Labels{"other", "normal", "ask", 0.2}},
-		{[]turnSpec{{true, "İ LOVE IT"}}, Labels{"praise", "low", "answer", 0.6}},
+		{[]turnSpec{{true, "SIGN \u0130N"}}, Labels{"other", "normal", "ask", 0.2}},
+		{[]turnSpec{{true, "LOG\u0130N failed"}}, Labels{"other", "normal", "ask", 0.2}},
+		{[]turnSpec{{true, "\u0130 LOVE IT"}}, Labels{"praise", "low", "answer", 0.6}},
 		{[]turnSpec{{true, "LOCKED OUT"}}, Labels{"account_access", "normal", "route", 0.6}},
 		{[]turnSpec{{true, "locked\nout"}}, Labels{"account_access", "normal", "route", 0.6}},
 		{[]turnSpec{{true, "locked"}, {true, "out"}}, Labels{"account_access", "normal", "route", 0.6}},
-		{[]turnSpec{{true, "it’s down"}}, Labels{"outage_technical", "normal", "route", 0.6}},
+		{[]turnSpec{{true, "it\u2019s down"}}, Labels{"outage_technical", "normal", "route", 0.6}},
 		// U+212A KELVIN SIGN lowercases to k.
-		{[]turnSpec{{true, "LOCKED OUT"}}, Labels{"account_access", "normal", "route", 0.6}},
+		{[]turnSpec{{true, "LOC\u212AED OUT"}}, Labels{"account_access", "normal", "route", 0.6}},
 	}
 	for _, c := range cases {
 		if got := label(t, threadOf(1, c.th...)); got != c.want {
