@@ -2,6 +2,7 @@ package policy
 
 import (
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -121,6 +122,18 @@ func swapApostrophes(s string) []rune {
 	return r
 }
 
+// phrasePatterns returns the compiled patterns for the rule's current
+// Phrases. Patterns from RulesFromData are reused only while Phrases still
+// equals what they were compiled from; otherwise (a hand-built or edited
+// rule) Phrases are compiled now, as Python's check does on every call, so a
+// rule never silently matches nothing.
+func (r Rule) phrasePatterns() []*phrasePattern {
+	if len(r.patterns) == len(r.Phrases) && slices.Equal(r.compiledFrom, r.Phrases) {
+		return r.patterns
+	}
+	return compilePhrases(r.Phrases)
+}
+
 type hit struct {
 	start, end int
 	ruleID     string
@@ -141,7 +154,7 @@ func Check(draft string, customerTurns []string, rules []Rule) []Violation {
 	for _, rule := range rules {
 		if rule.Type == "banned_phrase" {
 			text := swapApostrophes(draft)
-			for _, p := range rule.patterns {
+			for _, p := range rule.phrasePatterns() {
 				for _, s := range p.findAll(text) {
 					add(s, rule.ID)
 				}

@@ -7,6 +7,7 @@ package policy
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"unicode/utf8"
 )
@@ -20,12 +21,15 @@ type RulesError struct {
 
 func (e *RulesError) Error() string { return e.Source + ": " + e.Problem }
 
-// Rule is one public reply rule.
+// Rule is one public reply rule. A Rule may be built by hand: Check always
+// enforces the current Phrases, compiling them on the spot when they are not
+// the ones RulesFromData compiled.
 type Rule struct {
-	ID, Type string
-	Phrases  []string
-	Detect   []string
-	patterns []*phrasePattern
+	ID, Type     string
+	Phrases      []string
+	Detect       []string
+	patterns     []*phrasePattern
+	compiledFrom []string // copy of Phrases when patterns were compiled
 }
 
 // Topic is one always-escalate topic.
@@ -68,7 +72,9 @@ func readRulesObject(path string) (Value, string, error) {
 	fail := func(format string, a ...any) error {
 		return &RulesError{source, fmt.Sprintf(format, a...)}
 	}
-	b, err := os.ReadFile(path)
+	// Read the normalised path, as Python's Path(path).read_text does: "x/"
+	// and "x/." open file x.
+	b, err := os.ReadFile(source)
 	if err != nil {
 		return Value{}, source, fail("cannot read rules file (%v)", err)
 	}
@@ -196,7 +202,7 @@ func RulesFromData(data Value, source string) ([]Rule, error) {
 				phrases = append(phrases, p.Str)
 			}
 			rules = append(rules, Rule{ID: id, Type: tv.Str, Phrases: phrases, Detect: []string{},
-				patterns: compilePhrases(phrases)})
+				patterns: compilePhrases(phrases), compiledFrom: slices.Clone(phrases)})
 			continue
 		}
 		dv, ok := item.Get("detect")

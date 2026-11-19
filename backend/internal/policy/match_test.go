@@ -105,3 +105,30 @@ func TestCompileOncePerRuleset(t *testing.T) {
 		t.Errorf("100 calls compiled %d patterns, want 0", after-before)
 	}
 }
+
+// A Rule built by hand (not by RulesFromData) is enforced from its Phrases,
+// as Python's check compiles rule.phrases on every call. It must never fail
+// open. Expected values are literals from the Python oracle.
+func TestHandBuiltRuleIsEnforced(t *testing.T) {
+	rules := []Rule{{ID: "p", Type: "banned_phrase", Phrases: []string{"full refund"}}}
+	want := []Violation{{"p", 2, 13, "FULL refund"}}
+	if got := Check("A FULL refund now", nil, rules); !reflect.DeepEqual(got, want) {
+		t.Errorf("Check = %#v, want %#v", got, want)
+	}
+	if IsSafeToSend("A FULL refund now", nil, rules) {
+		t.Error("IsSafeToSend = true for a hand-built banned phrase; want false")
+	}
+}
+
+// Changing a loaded rule's Phrases changes what Check enforces.
+func TestEditedPhrasesAreEnforced(t *testing.T) {
+	rules := mustRules(t, `{"public_reply_rules":[{"id":"p","type":"banned_phrase","phrases":["full refund"]}]}`)
+	rules[0].Phrases[0] = "lawyer"
+	if got := Check("A FULL refund now", nil, rules); len(got) != 0 {
+		t.Errorf("old phrase still enforced: %#v", got)
+	}
+	want := []Violation{{"p", 3, 9, "lawyer"}}
+	if got := Check("my lawyer", nil, rules); !reflect.DeepEqual(got, want) {
+		t.Errorf("Check = %#v, want %#v", got, want)
+	}
+}

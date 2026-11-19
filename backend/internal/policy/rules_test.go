@@ -98,3 +98,42 @@ func TestPythonRepr(t *testing.T) {
 		t.Errorf("got %v\nwant %s", err, want)
 	}
 }
+
+// Python's Path drops a trailing "/" and "/." before reading, so these load.
+func TestLoaderPathNormalised(t *testing.T) {
+	t.Chdir(t.TempDir())
+	body := `{"version":"v1","public_reply_rules":[{"id":"p","type":"banned_phrase","phrases":["x"]}],
+		"escalate_always":[{"id":"t-a","phrases":["lawyer"]}]}`
+	if err := os.WriteFile("r.json", []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"r.json/", "r.json/.", "./r.json/./"} {
+		if rules, err := LoadRules(p); err != nil || len(rules) != 1 {
+			t.Errorf("LoadRules(%q) = %d rules, %v; want 1 rule", p, len(rules), err)
+		}
+		if topics, err := LoadEscalateTopics(p); err != nil || len(topics) != 1 {
+			t.Errorf("LoadEscalateTopics(%q) = %d topics, %v; want 1 topic", p, len(topics), err)
+		}
+		if v, ok, err := RulesVersion(p); err != nil || !ok || v != "v1" {
+			t.Errorf("RulesVersion(%q) = %q, %v, %v; want v1", p, v, ok, err)
+		}
+	}
+}
+
+// RulesFromData and TopicsFromData check the top level themselves, as
+// Python's rules_from_data and topics_from_data do.
+func TestFromDataRejectsNonObject(t *testing.T) {
+	for _, s := range []string{`[1]`, `5`, `1.5`, `"s"`, `null`, `true`} {
+		data, err := ParseJSON([]byte(s))
+		if err != nil {
+			t.Fatal(err)
+		}
+		const want = "mem: top level must be a JSON object"
+		if rules, err := RulesFromData(data, "mem"); err == nil || err.Error() != want || rules != nil {
+			t.Errorf("RulesFromData(%s) = %v, %v; want %q", s, rules, err, want)
+		}
+		if topics, err := TopicsFromData(data, "mem"); err == nil || err.Error() != want || topics != nil {
+			t.Errorf("TopicsFromData(%s) = %v, %v; want %q", s, topics, err, want)
+		}
+	}
+}
