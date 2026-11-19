@@ -1,0 +1,2 @@
+{"at": "2026-10-01T00:00:00+00:00", "event": "open", "id": "o"}
+{"at": "2026-11-02T00:00:00+00:00", "event": "reserve", "id": "a", "model": "m", "run_id": "r", "split": "dev", "usd": false}

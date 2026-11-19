@@ -1,0 +1,29 @@
+{"mtd": "0.0", "op": "create", "result": null, "step": 0}
+{"mtd": "0.1", "op": "reserve", "result": "00000000000000000000000000000002", "step": 1}
+{"mtd": "0.000125", "op": "settle", "result": null, "step": 2}
+{"mtd": "0.200125", "op": "reserve", "result": "00000000000000000000000000000003", "step": 3}
+{"mtd": "0.200125", "op": "mark_unknown", "result": null, "step": 4}
+{"mtd": "0.500125", "op": "reserve", "result": "00000000000000000000000000000004", "step": 5}
+{"mtd": "0.500125", "op": "month_to_date", "result": "0.500125", "step": 6}
+{"error": "MonthlyCapError", "message": "monthly cap 1.0000 reached: month to date 0.5001 plus 0.9000", "mtd": "0.500125", "op": "reserve", "step": 7}
+{"mtd": "0.1", "op": "reserve", "result": "00000000000000000000000000000005", "step": 8}
+{"mtd": "0.30000000000000004", "op": "reserve", "result": "00000000000000000000000000000006", "step": 9}
+{"mtd": "0.6", "op": "reserve", "result": "00000000000000000000000000000007", "step": 10}
+{"mtd": "0.6", "op": "month_to_date", "result": "0.6", "step": 11}
+{"mtd": "0.500125", "op": "month_to_date", "result": "0.500125", "step": 12}
+{"mtd": "0.550125", "op": "reserve", "result": "00000000000000000000000000000008", "step": 13}
+{"mtd": "0.550125", "op": "month_to_date", "result": "0.550125", "step": 14}
+{"error": "SpendLogError", "message": "split must be one of dev, eval", "mtd": "0.6", "op": "reserve", "step": 15}
+{"error": "SpendLogError", "message": "reservation must be a finite number >= 0", "mtd": "0.6", "op": "reserve", "step": 16}
+{"error": "SpendLogError", "message": "reservation must be a finite number >= 0", "mtd": "0.6", "op": "reserve", "step": 17}
+{"error": "SpendLogError", "message": "reservation must be a finite number >= 0", "mtd": "0.6", "op": "reserve", "step": 18}
+{"error": "SpendLogError", "message": "token counts must be non-negative ints", "mtd": "0.6", "op": "settle", "step": 19}
+{"error": "SpendLogError", "message": "settled usd must be a finite number >= 0", "mtd": "0.6", "op": "settle", "step": 20}
+{"error": "SpendLogError", "message": "no reservation with that id", "mtd": "0.6", "op": "settle", "step": 21}
+{"error": "SpendLogError", "message": "no reservation with that id", "mtd": "0.6", "op": "mark_unknown", "step": 22}
+{"mtd": "0.55", "op": "settle", "result": null, "step": 23}
+{"error": "SpendLogError", "message": "reservation already settled or marked unknown", "mtd": "0.55", "op": "mark_unknown", "step": 24}
+{"error": "SpendLogError", "message": "reservation already settled or marked unknown", "mtd": "0.55", "op": "settle", "step": 25}
+{"mtd": "0.9500000000000001", "op": "reserve", "result": "00000000000000000000000000000009", "step": 26}
+{"mtd": "0.9501000000000001", "op": "reserve", "result": "0000000000000000000000000000000a", "step": 27}
+{"error": "SpendLogError", "message": "spend log <log> already exists; refusing to recreate it", "mtd": "0.9501000000000001", "op": "create", "step": 28}

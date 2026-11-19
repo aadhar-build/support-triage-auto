@@ -1,0 +1,16 @@
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/bad_utf8.json", "message": "thresholds file testdata/spend_log/thresholds/bad_utf8.json is not valid JSON"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/bool.json", "message": "thresholds file testdata/spend_log/thresholds/bool.json: api_spend_usd_per_month.max must be a finite number > 0"}
+{"file": "testdata/spend_log/thresholds/float.json", "value": "2.5"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/guardrails_list.json", "message": "thresholds file testdata/spend_log/thresholds/guardrails_list.json lacks guardrails.api_spend_usd_per_month.max"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/huge_float.json", "message": "thresholds file testdata/spend_log/thresholds/huge_float.json: api_spend_usd_per_month.max must be a finite number > 0"}
+{"file": "testdata/spend_log/thresholds/int.json", "value": "200.0"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/missing_key.json", "message": "thresholds file testdata/spend_log/thresholds/missing_key.json lacks guardrails.api_spend_usd_per_month.max"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/negative.json", "message": "thresholds file testdata/spend_log/thresholds/negative.json: api_spend_usd_per_month.max must be a finite number > 0"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/not_json.json", "message": "thresholds file testdata/spend_log/thresholds/not_json.json is not valid JSON"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/null.json", "message": "thresholds file testdata/spend_log/thresholds/null.json: api_spend_usd_per_month.max must be a finite number > 0"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/string.json", "message": "thresholds file testdata/spend_log/thresholds/string.json: api_spend_usd_per_month.max must be a finite number > 0"}
+{"file": "testdata/spend_log/thresholds/tiny.json", "value": "1e-300"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/top_string.json", "message": "thresholds file testdata/spend_log/thresholds/top_string.json lacks guardrails.api_spend_usd_per_month.max"}
+{"error": "SpendLogError", "file": "testdata/spend_log/thresholds/zero.json", "message": "thresholds file testdata/spend_log/thresholds/zero.json: api_spend_usd_per_month.max must be a finite number > 0"}
+{"file": "evals/thresholds.json", "value": "200.0"}
+{"file": "tests/fixtures/thresholds_spend.json", "value": "200.0"}
