@@ -124,7 +124,7 @@ Labels, thresholds, policy rules, taxonomy and guidelines belong to the owner. T
   6. The Go HTTP API and the TypeScript admin console, at parity with the replay, report, admin and review pages.
   7. The policy proposer (#29), the hard-case picker and review tools. Then Python is removed.
 - **Rules that change:** "standard library only" becomes "Go standard library first. Any third-party Go module or npm package needs Aadhar's approval and a pinned version." Tests stay offline, and use fixtures only.
-- **Demo on 6 Dec:** run on the current Python backend. Steps 1 and 6 (ingestion, plus the TypeScript console reading today's run files) are the first targets, so the demo shows the new console. The full port continues after the demo.
+- **Timing (owner decision, 19 Nov):** port everything now, not after the demo. Python stays only as the parity reference until each module's Go port matches it.
 - **The factory repo** (software-factory-mvp) keeps its Python orchestration scripts for now. They are tooling, not product code.
 
 ## Decision timing (owner decision, 18 Nov)
