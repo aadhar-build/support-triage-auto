@@ -1,5 +1,6 @@
 """Controlled reports use committed controller inputs and preserve evidence gaps."""
 
+import hashlib
 import json
 import os
 import runpy
@@ -66,7 +67,8 @@ class TestAdversarialReport(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         self.git("init", "-qb", "main")
-        for relpath in ("factory/bin/gate", "factory/bin/job", "factory/lib/factory.py", "factory/config.json"):
+        for relpath in ("factory/bin/gate", "factory/bin/job", "factory/lib/factory.py", "factory/config.json",
+                        "factory/lib/factory_recovery.py", "factory/lib/observations.py"):
             target = self.root / relpath
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(REPO / relpath, target)
@@ -115,6 +117,9 @@ class TestAdversarialReport(unittest.TestCase):
         for case_id in ("protected-path-edit", "weakened-or-skipped-tests", "out-of-scope-diff",
                         "protected-product-decision", "exhausted-retries"):
             self.assertEqual(cases[case_id]["outcome"], "caught", cases[case_id])
+        recovery_inputs = cases["exhausted-retries"]["evidence"]["source_sha256"]
+        for path in ("factory/lib/factory_recovery.py", "factory/lib/observations.py"):
+            self.assertEqual(recovery_inputs[path], hashlib.sha256((self.root / path).read_bytes()).hexdigest())
         hidden = cases["hidden-case-failure"]
         self.assertEqual(hidden["outcome"], "caught", hidden)
         self.assertTrue(hidden["evidence"]["public_probe_passed"])
@@ -142,6 +147,18 @@ class TestAdversarialReport(unittest.TestCase):
         result = self.run_report("--candidate", "HEAD")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("full Git object ID", result.stderr)
+
+    def test_recovery_probe_cannot_use_an_uncommitted_observation_module(self):
+        path = self.root / "factory" / "lib" / "observations.py"
+        original = path.read_bytes()
+        path.unlink()
+        candidate = self.commit("no observation reader")
+        path.write_bytes(original)
+
+        cases = {case["id"]: case for case in self.report("--candidate", candidate)["cases"]}
+
+        self.assertEqual(cases["exhausted-retries"]["outcome"], "missing")
+        self.assertEqual(cases["protected-path-edit"]["outcome"], "caught")
 
     def test_absent_candidate_gate_reports_missing_instead_of_detection(self):
         (self.root / "factory" / "bin" / "gate").unlink()

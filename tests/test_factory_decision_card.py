@@ -13,6 +13,9 @@ from observations import append_event, load_events
 CURRENT = "a" * 40
 OLDER = "b" * 40
 REPORT = {"path": "round-2/checks.json", "sha256": "c" * 64}
+ROOT = "factory/jobs/012-owner-card"
+SOURCE = "https://github.com/example/factory/issues/12"
+CANDIDATE_URL = f"https://github.com/example/factory/commit/{CURRENT}"
 DEMO = {"url": "https://example.com/demo/2", "verified": True}
 
 
@@ -45,8 +48,7 @@ class TestDecisionCard(unittest.TestCase):
     def test_links_verified_criteria_and_distinguishes_review_requirements(self):
         job = {
             "id": "012-owner-card", "stage": "review", "round": 2,
-            "candidate_url": f"https://example.com/commit/{CURRENT}",
-            "metrics_url": "https://example.com/metrics/12",
+            "candidate_url": CANDIDATE_URL, "source_url": SOURCE,
         }
         card = render_decision_card(job, [], guardrails(
             requirement("criterion:export", "pass", evidence=[REPORT], label="Export a report"),
@@ -54,24 +56,33 @@ class TestDecisionCard(unittest.TestCase):
             requirement("review:code", "stale", evidence=[REPORT]),
             requirement("review:security", "missing"),
             requirement("review:eval", "not_required", required=False),
-        ), {})
+        ), {}, verified_source_url=SOURCE)
 
-        self.assertIn(f"[`{CURRENT}`](https://example.com/commit/{CURRENT})", card)
+        self.assertIn(f"- **Candidate** — `{CURRENT}`\n", card)
+        self.assertNotIn(CANDIDATE_URL, card)
         self.assertIn("Export a report (`export`) — pass (required)", card)
-        self.assertIn("[round-2/checks.json](round-2/checks.json)", card)
+        self.assertIn(f"Local evidence reference `{ROOT}/round-2/checks.json`", card)
+        self.assertNotIn("](factory/jobs/", card)
+        self.assertIn(f"[GitHub issue]({SOURCE})", card)
         self.assertIn("test:unit` — fail (required)", card)
         self.assertIn("review:code` — stale (required)", card)
         self.assertIn("review:security` — missing (required)", card)
         self.assertIn("review:eval` — not required (optional)", card)
-        self.assertIn("[Job metrics](https://example.com/metrics/12)", card)
+        self.assertIn("observation ledger unavailable", card)
         self.assertIn("Resolve failed evidence for `test:unit`", card)
+
+    def test_job_tracker_fields_cannot_authenticate_themselves(self):
+        job = {"id": "012-owner-card", "source_url": SOURCE, "candidate_url": CANDIDATE_URL}
+        card = render_decision_card(job, [], guardrails(), {})
+        self.assertIn("Tracker link unavailable", card)
+        self.assertNotIn("https://github.com/", card)
 
     def test_assertions_and_tests_cannot_stand_in_for_verified_criterion_or_demo(self):
         events = [
             event("criterion", {"criterion_id": "export", "verdict": "pass"}, evidence=[REPORT]),
             event("demo", {"demo_id": "old", "criterion_id": "export", "verdict": "pass"}, OLDER, [DEMO]),
         ]
-        card = render_decision_card({"id": "012", "stage": "review"}, events, guardrails(
+        card = render_decision_card({"id": "012-card", "stage": "review"}, events, guardrails(
             requirement("criterion:export", "missing"),
             requirement("test:unit", "pass", evidence=[REPORT]),
             requirement("review:code", "pass"),
@@ -84,21 +95,25 @@ class TestDecisionCard(unittest.TestCase):
         self.assertIn("old` — stale", card)
         self.assertIn(OLDER, card)
 
-    def test_legacy_metrics_link_uses_only_stable_https_record_urls(self):
-        job = {"id": "012", "artifact_root": "factory/jobs/012"}
+    def test_job_metrics_use_the_local_ledger_and_ignore_unverified_job_urls(self):
+        job = {"id": "012-card"}
         record = "https://example.com/metrics/12"
         for suffix in (
+            "", "#elapsed-time",
             "?X-Amz-Signature=fixture-signature",
             "#access_token=fixture-token",
             "#access_token%3Dfixture-token",
         ):
             with self.subTest(suffix=suffix):
                 card = render_decision_card({**job, "metrics_url": record + suffix}, [], guardrails(), {})
-                self.assertIn("[Job metrics](factory/jobs/012/job.json)", card)
-                self.assertNotIn(suffix, card)
+                self.assertIn("observation ledger unavailable", card)
+                self.assertNotIn(record, card)
+                self.assertNotIn("job.json", card)
 
-        card = render_decision_card({**job, "metrics_url": record + "#elapsed-time"}, [], guardrails(), {})
-        self.assertIn(f"[Job metrics]({record}#elapsed-time)", card)
+        effort = event("owner_effort", {"minutes": 0})
+        card = render_decision_card(job, [effort], guardrails(), {})
+        self.assertIn("Local observation ledger `factory/jobs/012-card/observations/`", card)
+        self.assertIn("`ls -1 -- factory/jobs/012-card/observations`", card)
 
     def test_groups_current_and_stale_evidence_under_their_own_results(self):
         earlier_report = {"path": "round-1/checks.json", "sha256": "f" * 64}
@@ -110,17 +125,17 @@ class TestDecisionCard(unittest.TestCase):
              "verified": True, "evidence": [REPORT]},
         ]
         card = render_decision_card(
-            {"id": "012", "artifact_root": "factory/jobs/012"}, [], guardrails(checked), {},
+            {"id": "012-card"}, [], guardrails(checked), {},
         )
 
         current = next(line for line in card.splitlines() if "test:unit` — pass" in line)
         self.assertIn("Stale evidence", card)
         stale = next(line for line in card.splitlines() if "Stale evidence" in line)
-        self.assertIn("[round-2/checks.json](factory/jobs/012/round-2/checks.json)", current)
+        self.assertIn("Local evidence reference `factory/jobs/012-card/round-2/checks.json`", current)
         self.assertNotIn("round-1/checks.json", current)
         self.assertIn(OLDER, stale)
-        self.assertIn("[round-1/checks.json](factory/jobs/012/round-1/checks.json)", stale)
-        self.assertIn("[Job metrics](factory/jobs/012/job.json)", card)
+        self.assertIn("Local evidence reference `factory/jobs/012-card/round-1/checks.json`", stale)
+        self.assertIn("observation ledger unavailable", card)
 
     def test_demo_and_limitations_stay_independent_of_owner_and_technical_decisions(self):
         events = [
@@ -129,17 +144,19 @@ class TestDecisionCard(unittest.TestCase):
             event("owner_decision", {"disposition": "accepted", "material_follow_up": False}),
         ]
         card = render_decision_card(
-            {"id": "012", "stage": "review", "owner_changes": False}, events, guardrails(), {},
+            {"id": "012-card", "stage": "review", "owner_changes": False}, events, guardrails(), {},
         )
 
         self.assertIn("export-demo` — owner-reported demonstration", card)
-        self.assertIn("[https://example.com/demo/2](https://example.com/demo/2)", card)
+        self.assertIn("Evidence link unavailable", card)
+        self.assertNotIn("https://example.com/demo/2", card)
+        self.assertIn("No working-software demonstration available for the current candidate.", card)
         self.assertIn("`csv-only`", card)
         self.assertIn("Owner decision** — accepted", card)
         self.assertIn("Technical decision** — pending", card)
 
     def test_blocked_job_keeps_recovery_question_as_a_single_next_step(self):
-        job = {"id": "012", "stage": "needs-human", "owner_changes": False}
+        job = {"id": "012-card", "stage": "needs-human", "owner_changes": False}
         card = render_decision_card(job, [], {"requirements": []}, {
             "retry_exhausted": True, "owner_question": "Can the CSV export ship first?",
         })
@@ -153,7 +170,7 @@ class TestDecisionCard(unittest.TestCase):
 
     def test_shows_zero_and_bounds_elapsed_time_from_recorded_history(self):
         job = {
-            "id": "012", "stage": "needs-human", "owner_minutes": 50,
+            "id": "012-card", "stage": "needs-human", "owner_minutes": 50,
             "history": [
                 {"at": "2026-11-19T08:00:00Z", "stage": "intake"},
                 {"at": "2026-11-19T09:00:00Z", "stage": "needs-human"},
@@ -172,7 +189,7 @@ class TestDecisionCard(unittest.TestCase):
         self.assertIn("Owner active time** — 0 minutes (legacy aggregate)", standalone)
 
     def test_damaged_correction_makes_the_current_owner_decision_and_coverage_unknown(self):
-        job = {"id": "012", "stage": "needs-human", "round": 2}
+        job = {"id": "012-card", "stage": "needs-human", "round": 2}
 
         def append(folder, observation, supersedes=None):
             return append_event(folder, {

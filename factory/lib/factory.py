@@ -683,11 +683,34 @@ def _cell(value) -> str:
     return str(value)
 
 
+_MARKDOWN_CODE_TEXT = re.compile(r"://|www\.|@|#[0-9]|^(?:[-+]|[0-9]{1,9}[.)])(?: |$)", re.IGNORECASE)
+
+
+def markdown_code(value) -> str:
+    """Render a literal, single-line code span, including any embedded backticks."""
+    text = " ".join(str(value).split())
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    delimiter = "`" * (longest + 1)
+    if text.startswith("`") or text.endswith("`"):
+        text = f" {text} "
+    return f"{delimiter}{text}{delimiter}"
+
+
+def markdown_text(value, *, table_cell: bool = False) -> str:
+    """Render untrusted display text without Markdown markup or automatic links."""
+    text = " ".join(str(value).split())
+    if _MARKDOWN_CODE_TEXT.search(text):
+        span = markdown_code(text)
+        return span.replace("|", r"\|") if table_cell else span
+    return re.sub(r"([\\`*_\[\]<>~|#&])", r"\\\1", text)
+
+
 def render_scorecard(cards: dict[str, dict], baseline: dict | None) -> str:
     """Markdown: the frozen baseline, then every other version's card beside it."""
     base_version = (baseline or {}).get("version", BASE_VERSION)
     others = [v for v in sorted(cards) if v != base_version]
-    head = ["Metric", f"{base_version} baseline (frozen)"] + [f"{v} (n = {cards[v]['jobs']})" for v in others]
+    head = ["Metric", f"{markdown_text(base_version, table_cell=True)} baseline (frozen)"]
+    head += [f"{markdown_text(v, table_cell=True)} (n = {cards[v]['jobs']})" for v in others]
     lines = ["| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
     for label, key in SCORECARD_ROWS:
         row = [label, _cell((baseline or {}).get(key))]

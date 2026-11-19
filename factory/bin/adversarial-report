@@ -23,6 +23,7 @@ CONFIG = "factory/config.json"
 LIBRARY = "factory/lib/factory.py"
 GATE = "factory/bin/gate"
 JOB = "factory/bin/job"
+RECOVERY_MODULES = ("factory/lib/factory_recovery.py", "factory/lib/observations.py")
 WORKER_MODULE = "backend/go.mod"
 WORKER_DIRECTORY = "backend/cmd/factory-worker"
 GATE_FILES = (CONFIG, LIBRARY, GATE)
@@ -660,6 +661,8 @@ def collect(repo, candidate, temp):
         raise ValueError("candidate must identify a commit")
     source = temp / "candidate-controller"
     files = set(path for _, paths, _, _ in CASES.values() for path in paths)
+    # Older candidates can run without these imports. Read them only from the selected commit.
+    files.update(RECOVERY_MODULES)
     listing = run(["git", "ls-tree", "--full-tree", "-rz", resolved, "--", *sorted(files),
                    WORKER_MODULE, WORKER_DIRECTORY], repo, env=env).stdout
     source_digests = {}
@@ -692,6 +695,7 @@ def collect(repo, candidate, temp):
             observation = worker_cases[case_id]
         else:
             source_evidence = {path: source_digests.get(path) for path in paths}
+            source_evidence.update({path: source_digests[path] for path in RECOVERY_MODULES if path in source_digests})
         if probe is not None and None in source_evidence.values():
             observation = result("missing", "One or more required controller files were unavailable at this commit.")
         elif probe is not None:

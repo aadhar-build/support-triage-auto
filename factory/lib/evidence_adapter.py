@@ -16,7 +16,7 @@ from pathlib import Path
 
 import factory as F
 from guardrails import evaluate_guardrails, read_job_artifact
-from observations import load_events
+from observations import ObservationError, _artifact_path, _url, load_events
 
 
 _COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -30,6 +30,55 @@ _FINAL_RECEIPT = re.compile(
 _GITHUB_REMOTE = re.compile(
     r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)([a-zA-Z0-9-]+/[a-zA-Z0-9_.-]+?)(?:\.git)?/?"
 )
+
+
+_TRACKER_URL = re.compile(
+    r"https://github\.com/[A-Za-z0-9-]+/(?!\.{1,2}/)[A-Za-z0-9_.-]+/(?:issues|pull)/[1-9][0-9]*"
+)
+
+
+def tracker_url(value: str | None) -> str | None:
+    return value if isinstance(value, str) and _TRACKER_URL.fullmatch(value) else None
+
+
+def _report_artifact_path(value: str | None) -> str | None:
+    try:
+        return _artifact_path(value, "report evidence path")
+    except ObservationError:
+        return None
+
+
+def local_reference(job_id: str, path: str) -> str | None:
+    if not isinstance(job_id, str) or not F.valid_reporting_job_id(job_id):
+        return None
+    if path := _report_artifact_path(path):
+        return f"factory/jobs/{job_id}/{path}"
+    return None
+
+
+def _stable_evidence_url(value: str | None) -> str | None:
+    try:
+        return _url(value, "report evidence link")
+    except ObservationError:
+        return None
+
+
+def has_evidence_reference(ref: dict) -> bool:
+    return isinstance(ref, dict) and bool(
+        _report_artifact_path(ref.get("path")) or _stable_evidence_url(ref.get("url"))
+    )
+
+
+def evidence_reference(ref: dict, job_id: str, *, trusted_urls=(), label="Evidence") -> str | None:
+    if not isinstance(ref, dict):
+        return None
+    url = ref.get("url")
+    if url in trusted_urls and _stable_evidence_url(url):
+        return f"[{label}]({url})"
+    path = local_reference(job_id, ref.get("path"))
+    if path:
+        return f"Local {label.lower()} reference `{path}`"
+    return None
 
 
 def _unique_fields(pairs):
@@ -365,17 +414,8 @@ def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | N
     if first_gate and not any(row["id"] == _CHECKS and row["status"] == first_gate["status"]
                               for row in guardrails["requirements"]):
         first_gate = None
-    artifact_root = folder.relative_to(root).as_posix()
-    job = {**job, "artifact_root": artifact_root}
-    slug = github_repo(root)
-    url = f"{artifact_root}/job.json"
-    if slug:
-        repo = f"https://github.com/{slug}"
-        if type(job.get("pr")) is int and job["pr"] > 0:
-            url = f"{repo}/pull/{job['pr']}"
-        elif type(job.get("issue")) is int and job["issue"] > 0:
-            url = f"{repo}/issues/{job['issue']}"
-        if candidate["candidate_sha"]:
-            job["candidate_url"] = f"{repo}/commit/{candidate['candidate_sha']}"
+    # Legacy jobs store tracker numbers without the repository identity. Origin and
+    # its tracking refs can both refer to a different repository after a repoint.
+    job = {**job, "source_url": None, "candidate_url": None}
     return {"job": job, "events": events, "guardrails": guardrails, "diagnostics": guardrails["diagnostics"],
-            "url": url, "first_gate": first_gate}
+            "url": None, "first_gate": first_gate}

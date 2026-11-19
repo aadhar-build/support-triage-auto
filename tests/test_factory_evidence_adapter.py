@@ -80,6 +80,84 @@ class EvidenceAdapterIntegration(FactoryCLI, unittest.TestCase):
         self.assertIn("2 job directories have invalid IDs", markdown)
         self.assertNotIn(invalid, markdown)
 
+    def test_card_and_weekly_use_local_references_without_repository_provenance(self):
+        self.write_job(stage="merged", source_url="https://example.test/fake",
+                       candidate_url="https://example.test/candidate",
+                       metrics_url="https://example.test/metrics")
+        self.cli("job", "observe", JOB_ID, "-", input=json.dumps(self.effort()))
+        self.job_dir.joinpath("final-checks.md").write_text("GATE: PASS\n", encoding="utf-8")
+
+        card = self.cli("job", "card", JOB_ID).stdout
+        weekly = self.cli("scorecard", *self.WEEKLY).stdout
+        self.assertIn("Tracker link unavailable", card)
+        self.assertIn(f"`{JOB_ID}` (local job)", weekly)
+        self.assertIn(f"Local observation ledger `factory/jobs/{JOB_ID}/observations/`", card)
+        for markdown in (card, weekly):
+            self.assertIn(f"`factory/jobs/{JOB_ID}/final-checks.md`", markdown)
+            self.assertNotIn("](factory/jobs/", markdown)
+            self.assertNotIn("example.test", markdown)
+
+    def test_report_keeps_legacy_text_literal_in_markdown(self):
+        stage = "awaiting `legacy` [review](https://stage.example.invalid)"
+        first_title_line = "[preview](https://title.example.invalid)"
+        title = first_title_line + "\n# fake heading"
+        criterion = "Display <https://criterion.example.invalid> and www.example.invalid"
+        self.write_job(stage=stage, title=title)
+        self.broken_job("002-undated", stage=stage, history=[])
+        (self.job_dir / "spec.md").write_text(
+            f"## Acceptance criteria\n1. [display] {criterion}\n2. [nested] - Show the preview\n"
+        )
+
+        card = self.cli("job", "card", JOB_ID).stdout
+        weekly = self.cli("scorecard", *self.WEEKLY).stdout
+        self.assertIn(f"# Decision card · {JOB_ID} · `{first_title_line} # fake heading`", card)
+        self.assertIn(f"- **Stage** — ``{stage}``", card)
+        self.assertIn(f"- `{criterion}` (`display`) — missing (required)", card)
+        self.assertIn("- `- Show the preview` (`nested`) — missing (required)", card)
+        self.assertIn(f"Active job outcomes · ``{stage}`` 1.", weekly)
+        self.assertIn(f"(``{stage}``).", weekly)
+        self.assertNotIn("\n# fake heading", card)
+        report = json.loads(self.cli("scorecard", *self.WEEKLY, "--json").stdout)
+        self.assertEqual(report["outcomes"], {stage: 1})
+        self.assertEqual(report["undated_statuses"], {"002-undated": stage})
+
+    def test_legacy_scorecard_keeps_version_literal_in_a_markdown_table(self):
+        version = "legacy | `v1` [preview](https://version.example.invalid)\n# fake heading"
+        self.write_job(factory_version=version)
+
+        markdown = self.cli("scorecard").stdout
+        header = markdown.splitlines()[0]
+        self.assertIn(r"``legacy \| `v1` [preview](https://version.example.invalid) # fake heading`` (n = 1)", header)
+        self.assertNotIn("\n# fake heading", markdown)
+        report = json.loads(self.cli("scorecard", "--json").stdout)
+        self.assertEqual(report[version]["version"], version)
+
+    def test_candidate_is_plain_after_origin_is_repointed(self):
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit",
+                 "--allow-empty", "-qm", "Candidate")
+        head = self.git("rev-parse", "HEAD").stdout.strip()
+        self.git("branch", f"factory/{JOB_ID}", head)
+        self.git("update-ref", f"refs/remotes/origin/factory/{JOB_ID}", head)
+        replacement = "https://github.com/fixture/replacement"
+        self.write_job(source_url=f"{replacement}/pull/2", candidate_url=f"{replacement}/commit/{head}")
+        proposal = {**self.effort(), "kind": "recovery_decision",
+                    "evidence": [{"url": f"{replacement}/pull/2"}],
+                    "data": {"failure_id": "example", "cause": "timeout"}}
+        self.cli("job", "observe", JOB_ID, "-", input=json.dumps(proposal))
+        self.git("remote", "set-url", "origin", replacement + ".git")
+
+        card = self.cli("job", "card", JOB_ID).stdout
+        self.assertIn(f"- **Candidate** — `{head}`\n", card)
+        self.assertNotIn("/commit/", card)
+        weekly = self.cli("scorecard", *self.WEEKLY).stdout
+        self.assertIn("Tracker link unavailable", card)
+        self.assertIn(f"`{JOB_ID}` (local job)", weekly)
+        self.assertNotIn(replacement, card + weekly)
+        report = json.loads(self.cli("scorecard", *self.WEEKLY, "--json").stdout)
+        self.assertIsNone(report["links"][JOB_ID])
+        self.write_job(pr=None, source_url=f"{replacement}/issues/1")
+        self.assertNotIn(replacement, self.cli("job", "card", JOB_ID).stdout)
+
     def test_job_card_git_reads_disable_fetching_and_transport(self):
         self.write_job()
         tool = self.root / "stub"
@@ -143,7 +221,9 @@ os.execv({shutil.which('git')!r}, ['git', *sys.argv[1:]])
         self.assertEqual(weekly["delivered"]["first_gate"]["covered"], 0)
         self.assertTrue(any(gap["requirement"] == "checks" and gap["status"] == "unverified"
                             for gap in weekly["guardrails"]["gaps"]))
-        self.assertIn(head, self.cli("job", "card", JOB_ID).stdout)
+        unpublished = self.cli("job", "card", JOB_ID).stdout
+        self.assertIn(head, unpublished)
+        self.assertNotIn("/commit/", unpublished)
 
     def test_merge_requires_separate_final_check_evidence(self):
         self.write_job(stage="merged")

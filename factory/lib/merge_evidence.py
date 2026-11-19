@@ -147,5 +147,7 @@ def verify_merge_delivery(root: Path, cfg: dict, record: dict, as_of: datetime) 
     if round_number:
         clean["round"] = round_number
         record["merged_round"] = round_number
+        # The job's ledger pointer and local candidate corroborate this authenticated PR.
+        record["url"] = f"https://github.com/{repo}/pull/{job['pr']}"
     record.update(merged_at=clean["merged_at"], merged_candidate_sha=clean["candidate_sha"], merge_evidence=clean)
     return clean

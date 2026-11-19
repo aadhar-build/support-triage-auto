@@ -337,6 +337,48 @@ class TestClarifyCommands(unittest.TestCase):
         self.assertEqual((job["stage"], job["round"]), ("build", 2))
         self.assertNotIn("review_evidence", job)
 
+    def test_tally_exhaustion_surfaces_one_question_and_preserves_review_evidence(self):
+        self.evidence_fixture(round_number=2)
+        artifact = "round-2/review-code.md"
+        receipt = "round-2/worker-reviewer-code.json"
+        (self.d / artifact).write_text("VERDICT: CHANGES\n\nprivate-review-details\n")
+        self.write_evidence("reviewer-code", artifact, receipt)
+        before = {path: (self.d / path).read_bytes() for path in (artifact, receipt)}
+
+        lines = self.run_cmd("tally").splitlines()
+        self.assertEqual(len(lines), 2, lines)
+        status, question = lines
+
+        self.assertEqual(status, "007-t -> recovery (code:CHANGES)")
+        self.assertIn("follow-up debt", question)
+        self.assertIn("007-t", question)
+        self.assertEqual(question.count("?"), 1)
+        self.assertNotIn("private-review-details", question)
+        job = F.read_job(self.d)
+        self.assertEqual((job["stage"], job["round"]), ("recovery", 2))
+        self.assertEqual(job["history"][-1]["note"], "changes requested by code; 2 rounds used")
+        self.assertEqual({path: (self.d / path).read_bytes() for path in before}, before)
+        self.assertEqual(self.calls, [])
+        self.assertFalse((self.d / "observations").exists())
+
+    def test_tally_exhaustion_uses_only_the_reviewed_candidate(self):
+        from observations import append_event
+        from uuid import uuid4
+
+        self.evidence_fixture(round_number=2)
+        artifact = "round-2/review-code.md"
+        (self.d / artifact).write_text("VERDICT: CHANGES\n")
+        self.write_evidence("reviewer-code", artifact, "round-2/worker-reviewer-code.json")
+        for sha, proposal in ((self.base_sha, "split_scope"), ("b" * 40, "permitted_alternative")):
+            append_event(self.d, {"schema_version": 1, "job_id": "007-t", "kind": "recovery_decision",
+                                  "event_id": str(uuid4()), "origin": "real", "round": 2, "candidate_sha": sha,
+                                  "source": {"kind": "controller", "record_id": "proposal"},
+                                  "data": {"failure_id": "changes", "proposed_recovery": proposal}})
+        output = self.run_cmd("tally")
+        self.assertIn("reported scope split", output)
+        self.assertNotIn("alternative approach", output)
+        self.assertEqual(F.read_job(self.d)["stage"], "recovery")
+
     def test_tally_rejects_noncanonical_review_verdict(self):
         self.evidence_fixture()
         artifact = "round-1/review-code.md"

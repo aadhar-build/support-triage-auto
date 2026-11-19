@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone as tz
 from decimal import Decimal
 from statistics import median
-from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
-from factory import SMALL_SAMPLE
+from evidence_adapter import evidence_reference, tracker_url
+from factory import SMALL_SAMPLE, markdown_text, valid_reporting_job_id
 from factory_recovery import recovery_summary
 
 
@@ -96,7 +96,7 @@ class Job:
         self.record = record
         self.raw = record["job"]
         self.id = self.raw["id"]
-        self.url = record.get("url") or f"factory/jobs/{quote(self.id, safe='')}/job.json"
+        self.url = tracker_url(record.get("url"))
         self.events = current_events(record.get("events", []), as_of)
         self.diagnostics = list(record.get("diagnostics", []))
         self.by_kind = defaultdict(list)
@@ -641,8 +641,11 @@ def render_weekly_report(report):
     def links(ids):
         items = []
         for job in ids:
-            href = report["links"].get(job) or f"factory/jobs/{quote(job, safe='')}/job.json"
-            items.append(f"[{job}]({href})")
+            if not valid_reporting_job_id(job):
+                items.append("Job reference unavailable")
+                continue
+            href = tracker_url(report["links"].get(job))
+            items.append(f"[{job}]({href})" if href else f"`{job}` (local job)")
         return ", ".join(items) or "none"
 
     p = report["period"]
@@ -668,7 +671,7 @@ def render_weekly_report(report):
               f"Accepted with follow-up {a['accepted_with_follow_up']}, rejected {a['rejected']}, "
               f"abandoned {a['abandoned']}, failed {a['failed']}, pending {a['pending']}, "
               f"unobserved {a['unobserved']}.",
-              f"Active job outcomes · {', '.join(f'{k} {n}' for k, n in sorted(report['outcomes'].items())) or 'none'}. "
+              f"Active job outcomes · {', '.join(f'{markdown_text(k)} {n}' for k, n in sorted(report['outcomes'].items())) or 'none'}. "
               f"Terminal jobs with no recorded submission {a['no_recorded_submission']}. "
               f"Other jobs missing a submission time {a['submission_unobserved']}.",
               "", f"**Owner time** {show(e['known_minutes'])} known active minutes, "
@@ -707,36 +710,36 @@ def render_weekly_report(report):
               f"{show(g['effective_total'])} ({g['confirmed_effective_observed']} confirmed, "
               f"{g['incident_coverage_jobs']}/{g['eligible_jobs']} jobs covered)."]
     for gap in g["gaps"][:8]:
-        refs = []
-        for ref in gap["evidence"]:
-            if not isinstance(ref, dict):
-                continue
-            path = ref.get("path")
-            url = ref.get("url")
-            if url and url.startswith("https://"):
-                refs.append(f"[evidence](<{url}>)")
-            elif path:
-                refs.append(f"[evidence](factory/jobs/{quote(gap['job'], safe='')}/{quote(path)})")
-        if not refs:
-            for path in gap["legacy_paths"]:
-                refs.append(f"[historical record](factory/jobs/{quote(gap['job'], safe='')}/{quote(path)})")
-        lines.append(f"- {links([gap['job']])} · {gap['requirement']} · {gap['status']} {' '.join(refs)}".rstrip())
+        job_id = gap["job"]
+        trusted_urls = (tracker_url(report["links"].get(job_id)),)
+        refs = [evidence_reference(ref, job_id, trusted_urls=trusted_urls) for ref in gap["evidence"]]
+        references = [ref for ref in refs if ref]
+        if not references:
+            references = [ref for path in gap["legacy_paths"]
+                          if (ref := evidence_reference({"path": path}, job_id, label="Historical evidence"))]
+        if not references and (gap["evidence"] or gap["legacy_paths"]):
+            references = ["Evidence link unavailable"]
+        detail = " · ".join([links([job_id]), markdown_text(gap["requirement"]), gap["status"], *references])
+        lines.append(f"- {detail}")
     if len(g["gaps"]) > 8:
         lines.append(f"- {len(g['gaps'])-8} more requirement gaps in the JSON report.")
-    repeated = [f"{i['requirement']} {i['status']} on {i['jobs']} jobs" for i in g["repeated_gaps"]]
+    repeated = [f"{markdown_text(i['requirement'])} {i['status']} on {i['jobs']} jobs" for i in g["repeated_gaps"]]
     lines += ["", "**Recurring bottlenecks** " + (", ".join(repeated) or "No repeated requirement gap observed.")]
 
     for cause in report["recovery"]["reported_recurring"]:
         affected = [r for r in report["recovery"]["records"] if r["reported_cause"] == cause["cause"]]
-        lines.append(f"- Reported cause {cause['cause']} (unverified) · {cause['count']} distinct failures on "
+        lines.append(f"- Reported cause {markdown_text(cause['cause'])} (unverified) · {cause['count']} distinct failures on "
                      f"{links(dict.fromkeys(r['job'] for r in affected))}.")
         for row in affected[:3]:
+            job_id = row["job"]
+            trusted_urls = (tracker_url(report["links"].get(job_id)),)
             for ref in row["evidence"][:1]:
-                url = ref.get("url") or (f"factory/jobs/{quote(row['job'], safe='')}/{quote(ref['path'])}"
-                                         if ref.get("path") else None)
-                if url:
-                    lines.append(f"  - [{row['failure_id']} evidence](<{url}>)")
+                reference = evidence_reference(ref, job_id, trusted_urls=trusted_urls)
+                lines.append(f"  - {markdown_text(row['failure_id'])} · {reference or 'Evidence link unavailable'}")
 
+    if report["links"]:
+        lines += ["", "On the Factory host, run `factory/bin/job card <job-id>` from the repository root "
+                  "to inspect a local job and its evidence references."]
     rows = report["costs"]["totals"]
     lines += ["", "**Usage and cost**"]
     for kind in COST_TYPES:
@@ -752,18 +755,18 @@ def render_weekly_report(report):
                   ", ".join(f"{links([key])} " + ", ".join(f"{k}={v}" for k, v in row.items())
                             for key, row in report["legacy"].items()) + "."]
     if report["undated_jobs"]:
-        lines += ["", "Missing start time · " + ", ".join(f"{links([key])} ({show(stage)})"
+        lines += ["", "Missing start time · " + ", ".join(f"{links([key])} ({markdown_text(show(stage))})"
                       for key, stage in report["undated_statuses"].items()) + "."]
     if report["diagnostics"]:
         lines += ["", "Incomplete observation files · " + links(report["diagnostics"]) + "."]
     for c in report["task_cohorts"]:
-        lines += ["", f"{c['task_type']} / {c['task_size']} ({c['jobs']} jobs): median owner "
+        lines += ["", f"{markdown_text(c['task_type'])} / {markdown_text(c['task_size'])} ({c['jobs']} jobs): median owner "
                   f"{show(c['owner_minutes']['median'])} minutes ({c['owner_minutes']['sample']} measured)."]
     m = report["matched_tasks"]
     if m["candidate_keys"]:
         lines += ["", f"**Matched tasks** {len(m['pairs'])}/{m['candidate_keys']} keys comparable. "
                   "Observed owner-minute differences (factory minus direct) · " +
-                  (", ".join(f"{i['key']} {i['factory_minus_direct_minutes']:+g}" for i in m["pairs"]) or "unknown") + "."]
+                  (", ".join(f"{markdown_text(i['key'])} {i['factory_minus_direct_minutes']:+g}" for i in m["pairs"]) or "unknown") + "."]
     if report["small_sample"]:
         lines += ["", f"Small sample ({len(report['active_jobs'])} active jobs, threshold {SMALL_SAMPLE})."]
     return "\n".join(lines + ["", report["baseline"]]) + "\n"

@@ -7,7 +7,8 @@
 Checks, in order: protected paths untouched, every change inside the spec's
 ## Files list, then the main checkout's factory/checks.sh run inside the
 worktree (so a branch can't edit the checks it is judged by).
-Writes round-<n>/checks.md (or final-checks.md) and prints one line ending PASS or FAIL.
+Writes round-<n>/checks.md (or final-checks.md) and prints a PASS or FAIL status.
+When retries run out, the status is followed by a recovery question.
 A surviving .gate-publication.pending means publication was interrupted. Inspect
 the job and receipt before removing it: discard the receipt if the job is still
 in gate, or verify the committed transition and receipt if it has moved on.
@@ -23,8 +24,10 @@ import sys
 from contextlib import nullcontext
 from pathlib import Path
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import factory as F  # noqa: E402
+from factory_recovery import recovery_transition_output  # noqa: E402
 
 LOG_TAIL = 120
 
@@ -185,7 +188,8 @@ def main(argv: list[str]) -> int:
                     F.next_round_or_recovery(job, cfg["max_rounds"], "gate failed")
                 F.write_job(d, job)
                 F.remove_marker(marker)
-        print(f"{job_id} -> {job['stage']}: gate {verdict}")
+        status_line = f"{job_id} -> {job['stage']}: gate {verdict}"
+        print(recovery_transition_output(status_line, d, job, candidate_sha=candidate))
         return 0
     except F.FactoryBusy as e:
         print(f"REFUSED: {e}")
