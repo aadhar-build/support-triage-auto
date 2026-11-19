@@ -1,0 +1,17 @@
+{"in":"\u0130BM","lower":"i\u0307bm"}
+{"in":"\u0391\u03a3","lower":"\u03b1\u03c2"}
+{"in":"\u03a3","lower":"\u03c3"}
+{"in":"\u0391\u03a3\u0391","lower":"\u03b1\u03c3\u03b1"}
+{"in":"\u0391\u03a3.","lower":"\u03b1\u03c2."}
+{"in":"\u0391.\u03a3","lower":"\u03b1.\u03c2"}
+{"in":"\u0391\u03a3\u0301","lower":"\u03b1\u03c2\u0301"}
+{"in":"\u0386\u03a3","lower":"\u03ac\u03c2"}
+{"in":"\u0391\u03a3 \u0392","lower":"\u03b1\u03c2 \u03b2"}
+{"in":"\u03a3\u0391","lower":"\u03c3\u03b1"}
+{"in":"\u0391'\u03a3","lower":"\u03b1'\u03c2"}
+{"in":"\u0391\u03a3'\u0391","lower":"\u03b1\u03c3'\u03b1"}
+{"in":"ShopCo","lower":"shopco"}
+{"in":"SHOPCO","lower":"shopco"}
+{"in":"\u01c5","lower":"\u01c6"}
+{"in":"\u1e9e","lower":"\u00df"}
+{"in":"K","lower":"k"}
