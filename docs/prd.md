@@ -110,6 +110,23 @@ Labels, thresholds, policy rules, taxonomy and guidelines belong to the owner. T
 
 - **Admin / team lead only** (owner decision, 18 Nov): a real local console, run on demand and not always on (#27, #29), with the drill-down reports (#26). Selecting a conversation replays it turn by turn with its traces and the triage state at each turn (#28). The simulated customer and agent views are dropped.
 
+## Stack and migration (owner decision, 19 Nov; DRAFT pending Aadhar's approval)
+
+- **Backend in Go** (Aadhar chose Go on 19 Nov; Rust only for a measured hot path). **Frontend in TypeScript.** Python is avoided for new work.
+- **Nothing working is thrown away first.** Today's Python code (about 8,500 lines, 32 modules, 727 tests) becomes the reference implementation. Each Go port must match its Python module's output exactly on the synthetic set and generated data (golden files) before the Python module is deleted.
+- **One backend, one API.** A Go service and CLIs (`backend/`) expose JSON over a local HTTP API. A TypeScript admin console (`web/`) is the only UI: reports, drift, incidents, policies, and conversation-and-state replay with traces. The current HTML generators retire once the console has parity.
+- **Port order** (each step is one or more factory issues):
+  1. Ingestion, threads and splits, with streaming and a disk-backed thread index. This also fixes Astra's full-data memory finding.
+  2. Rules, policy checks, injection detection and quoting, then the router with its tiers.
+  3. Metrics, `run_synthetic` and `run_eval`, and the audit trace.
+  4. Spend log, price file and the paid tier (headless Claude Code on the subscription).
+  5. Drift, incidents and repeat contacts (with per-turn re-triage, #46).
+  6. The Go HTTP API and the TypeScript admin console, at parity with the replay, report, admin and review pages.
+  7. The policy proposer (#29), the hard-case picker and review tools. Then Python is removed.
+- **Rules that change:** "standard library only" becomes "Go standard library first. Any third-party Go module or npm package needs Aadhar's approval and a pinned version." Tests stay offline, and use fixtures only.
+- **Timing (owner decision, 19 Nov):** port everything now, not after the demo. Python stays only as the parity reference until each module's Go port matches it.
+- **The factory repo** (software-factory-mvp) keeps its Python orchestration scripts for now. They are tooling, not product code.
+
 ## Decision timing (owner decision, 18 Nov)
 
 - No look-ahead. Every decision, alert and count uses only what was known at that moment: no later turns and no later brand replies. After-the-fact replays are not allowed. Where zero look-ahead can't be reached, live monitoring becomes more urgent.
