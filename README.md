@@ -120,6 +120,10 @@ Default paths (`policies/rules.json`, `evals/thresholds.json`, `web/dist`) are
 relative to the working directory, so run from the repo root or pass `--rules`,
 `--thresholds` and `--web` explicitly. Ctrl-C stops it.
 
+The Go console has the Overview, Runs and per-run metrics pages only. The
+Python console (above) is still the one with the report, drift and policies
+pages until the later port slices land.
+
 ## Data and attribution
 
 This project uses **Customer Support on Twitter** by thoughtvector, published on Kaggle:
