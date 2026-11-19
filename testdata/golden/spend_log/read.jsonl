@@ -1,0 +1,138 @@
+{"clock": "2026-11-18T10:00:00+00:00", "log": "accepted_forms.jsonl", "mtd": "3.53125"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "accepted_forms.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "accepted_forms.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_id_empty.jsonl", "message": "spend log <log> line 1: bad id"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_id_empty.jsonl", "message": "spend log <log> line 1: bad id"}
+{"changed": false, "log": "bad_id_empty.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: bad id"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_id_int.jsonl", "message": "spend log <log> line 2: bad id"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_id_int.jsonl", "message": "spend log <log> line 2: bad id"}
+{"changed": false, "log": "bad_id_int.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: bad id"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_split.jsonl", "message": "spend log <log> line 2: bad split"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_split.jsonl", "message": "spend log <log> line 2: bad split"}
+{"changed": false, "log": "bad_split.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: bad split"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_split_list.jsonl", "message": "spend log <log> line 2: bad split"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_split_list.jsonl", "message": "spend log <log> line 2: bad split"}
+{"changed": false, "log": "bad_split_list.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: bad split"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_timestamp_date.jsonl", "message": "spend log <log> line 2: bad timestamp"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_timestamp_date.jsonl", "message": "spend log <log> line 2: bad timestamp"}
+{"changed": false, "log": "bad_timestamp_date.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: bad timestamp"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_timestamp_int.jsonl", "message": "spend log <log> line 1: bad timestamp"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_timestamp_int.jsonl", "message": "spend log <log> line 1: bad timestamp"}
+{"changed": false, "log": "bad_timestamp_int.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: bad timestamp"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_timestamp_word.jsonl", "message": "spend log <log> line 1: bad timestamp"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_timestamp_word.jsonl", "message": "spend log <log> line 1: bad timestamp"}
+{"changed": false, "log": "bad_timestamp_word.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: bad timestamp"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "bad_utf8.jsonl", "message": "spend log <log> line 2: not valid JSON"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "bad_utf8.jsonl", "message": "spend log <log> line 2: not valid JSON"}
+{"changed": false, "log": "bad_utf8.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: not valid JSON"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "blank_line.jsonl", "message": "spend log <log> line 2: not valid JSON"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "blank_line.jsonl", "message": "spend log <log> line 2: not valid JSON"}
+{"changed": false, "log": "blank_line.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: not valid JSON"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "duplicate_reservation.jsonl", "message": "spend log <log> line 3: duplicate reservation id"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "duplicate_reservation.jsonl", "message": "spend log <log> line 3: duplicate reservation id"}
+{"changed": false, "log": "duplicate_reservation.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 3: duplicate reservation id"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "empty.jsonl", "message": "spend log <log> line 1: missing open line"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "empty.jsonl", "message": "spend log <log> line 1: missing open line"}
+{"changed": false, "log": "empty.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: missing open line"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "lone_newline.jsonl", "message": "spend log <log> line 1: not valid JSON"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "lone_newline.jsonl", "message": "spend log <log> line 1: not valid JSON"}
+{"changed": false, "log": "lone_newline.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: not valid JSON"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "missing_event.jsonl", "message": "spend log <log> line 2: unknown event"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "missing_event.jsonl", "message": "spend log <log> line 2: unknown event"}
+{"changed": false, "log": "missing_event.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: unknown event"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "missing_field_at.jsonl", "message": "spend log <log> line 1: missing field at"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "missing_field_at.jsonl", "message": "spend log <log> line 1: missing field at"}
+{"changed": false, "log": "missing_field_at.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: missing field at"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "missing_field_split.jsonl", "message": "spend log <log> line 2: missing field split"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "missing_field_split.jsonl", "message": "spend log <log> line 2: missing field split"}
+{"changed": false, "log": "missing_field_split.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: missing field split"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "missing_field_token.jsonl", "message": "spend log <log> line 3: missing field cache_write_tokens"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "missing_field_token.jsonl", "message": "spend log <log> line 3: missing field cache_write_tokens"}
+{"changed": false, "log": "missing_field_token.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 3: missing field cache_write_tokens"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "missing_open.jsonl", "message": "spend log <log> line 1: missing open line"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "missing_open.jsonl", "message": "spend log <log> line 1: missing open line"}
+{"changed": false, "log": "missing_open.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 1: missing open line"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "not_json.jsonl", "message": "spend log <log> line 2: not valid JSON"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "not_json.jsonl", "message": "spend log <log> line 2: not valid JSON"}
+{"changed": false, "log": "not_json.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: not valid JSON"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "not_object.jsonl", "message": "spend log <log> line 2: not an object"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "not_object.jsonl", "message": "spend log <log> line 2: not an object"}
+{"changed": false, "log": "not_object.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: not an object"}}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "offset_months.jsonl", "mtd": "2.0"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "offset_months.jsonl", "mtd": "12.0"}
+{"changed": true, "log": "offset_months.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "open_after_line_1.jsonl", "message": "spend log <log> line 2: open event after line 1"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "open_after_line_1.jsonl", "message": "spend log <log> line 2: open event after line 1"}
+{"changed": false, "log": "open_after_line_1.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: open event after line 1"}}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "open_only.jsonl", "mtd": "0.0"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "open_only.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "open_only.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "partial_last_line.jsonl", "message": "spend log <log> line 2: partial last line"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "partial_last_line.jsonl", "message": "spend log <log> line 2: partial last line"}
+{"changed": false, "log": "partial_last_line.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: partial last line"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "second_settle.jsonl", "message": "spend log <log> line 4: second settle or unknown for one reservation"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "second_settle.jsonl", "message": "spend log <log> line 4: second settle or unknown for one reservation"}
+{"changed": false, "log": "second_settle.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 4: second settle or unknown for one reservation"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "settle_after_unknown.jsonl", "message": "spend log <log> line 4: second settle or unknown for one reservation"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "settle_after_unknown.jsonl", "message": "spend log <log> line 4: second settle or unknown for one reservation"}
+{"changed": false, "log": "settle_after_unknown.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 4: second settle or unknown for one reservation"}}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "settle_later_month.jsonl", "mtd": "0.125"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "settle_later_month.jsonl", "mtd": "0.25"}
+{"changed": true, "log": "settle_later_month.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "settle_usd_negative.jsonl", "message": "spend log <log> line 3: usd must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "settle_usd_negative.jsonl", "message": "spend log <log> line 3: usd must be a finite number >= 0"}
+{"changed": false, "log": "settle_usd_negative.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 3: usd must be a finite number >= 0"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "settle_without_reservation.jsonl", "message": "spend log <log> line 2: settle without a reservation"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "settle_without_reservation.jsonl", "message": "spend log <log> line 2: settle without a reservation"}
+{"changed": false, "log": "settle_without_reservation.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: settle without a reservation"}}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_asc.jsonl", "mtd": "0.6"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_asc.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "sum_asc.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_desc.jsonl", "mtd": "0.6"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_desc.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "sum_desc.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_float_int_float.jsonl", "mtd": "1.3"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_float_int_float.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "sum_float_int_float.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_int64_overflow.jsonl", "mtd": "9.223372036854776e+18"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_int64_overflow.jsonl", "mtd": "0.0"}
+{"changed": false, "log": "sum_int64_overflow.jsonl", "reserve": {"error": "MonthlyCapError", "message": "monthly cap 5.0000 reached: month to date 9223372036854775808.0000 plus 0.0010"}}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_int_first.jsonl", "mtd": "3.3000000000000003"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_int_first.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "sum_int_first.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_ints_only.jsonl", "mtd": "3.0"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_ints_only.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "sum_ints_only.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "sum_tenths.jsonl", "mtd": "1.0"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "sum_tenths.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "sum_tenths.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "timestamp_no_zone.jsonl", "message": "spend log <log> line 2: timestamp has no time zone"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "timestamp_no_zone.jsonl", "message": "spend log <log> line 2: timestamp has no time zone"}
+{"changed": false, "log": "timestamp_no_zone.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: timestamp has no time zone"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "token_negative.jsonl", "message": "spend log <log> line 3: input_tokens must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "token_negative.jsonl", "message": "spend log <log> line 3: input_tokens must be a finite number >= 0"}
+{"changed": false, "log": "token_negative.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 3: input_tokens must be a finite number >= 0"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "unknown_event.jsonl", "message": "spend log <log> line 2: unknown event"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "unknown_event.jsonl", "message": "spend log <log> line 2: unknown event"}
+{"changed": false, "log": "unknown_event.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: unknown event"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "unknown_without_reservation.jsonl", "message": "spend log <log> line 2: unknown without a reservation"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "unknown_without_reservation.jsonl", "message": "spend log <log> line 2: unknown without a reservation"}
+{"changed": false, "log": "unknown_without_reservation.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: unknown without a reservation"}}
+{"clock": "2026-11-18T10:00:00+00:00", "log": "unsettled_and_unknown.jsonl", "mtd": "0.35000000000000003"}
+{"clock": "2026-10-15T00:00:00-05:00", "log": "unsettled_and_unknown.jsonl", "mtd": "0.0"}
+{"changed": true, "log": "unsettled_and_unknown.jsonl", "reserve": "00000000000000000000000000000001"}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "usd_bool.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "usd_bool.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"changed": false, "log": "usd_bool.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: usd must be a finite number >= 0"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "usd_huge_float.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "usd_huge_float.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"changed": false, "log": "usd_huge_float.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: usd must be a finite number >= 0"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "usd_negative.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "usd_negative.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"changed": false, "log": "usd_negative.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: usd must be a finite number >= 0"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "usd_null.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "usd_null.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"changed": false, "log": "usd_null.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: usd must be a finite number >= 0"}}
+{"clock": "2026-11-18T10:00:00+00:00", "error": "SpendLogError", "log": "usd_string.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"clock": "2026-10-15T00:00:00-05:00", "error": "SpendLogError", "log": "usd_string.jsonl", "message": "spend log <log> line 2: usd must be a finite number >= 0"}
+{"changed": false, "log": "usd_string.jsonl", "reserve": {"error": "SpendLogError", "message": "spend log <log> line 2: usd must be a finite number >= 0"}}

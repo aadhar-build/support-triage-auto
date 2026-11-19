@@ -1,0 +1,13 @@
+{
+ "version": "v",
+ "models": {
+  "m": {
+   "bands": [
+    {
+     "input_usd_per_mtok": 1,
+     "output_usd_per_mtok": 1
+    }
+   ]
+  }
+ }
+}
