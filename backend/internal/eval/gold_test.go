@@ -94,6 +94,7 @@ func TestLoadGoldCSVQuirks(t *testing.T) {
 	assertGoldErr(t, "missing two", "thread_id,action\n", "gold file is missing column(s): intent, should_escalate")
 	extra := strings.Replace(goldHeader, "\n", ",x\n", 1)
 	assertGoldErr(t, "quoted two-line field", extra+"1,delivery,ask,0,\"p\nq\"\n2,weather,ask,0,y\n", "line 4: unknown intent 'weather'")
+	assertGoldErr(t, "bad row is itself a quoted two-line record", extra+"1,weather,ask,0,\"p\nq\"\n", "line 3: unknown intent 'weather'")
 	assertGoldErr(t, "blank before bad row", goldHeader+"\n1,weather,ask,0\n", "line 3: unknown intent 'weather'")
 	assertGoldErr(t, "007 then 7", goldHeader+"007,delivery,ask,0\n7,delivery,ask,0\n", "line 3: duplicate thread_id 7")
 	assertGoldErr(t, "delivéry", goldHeader+"1,delivéry,ask,0\n", "line 2: unknown intent 'delivéry'")
