@@ -1,0 +1,1357 @@
+{
+  "action": {
+    "accuracy": {
+      "ci": [
+        0.44861395082594024,
+        0.6860327362671276
+      ],
+      "directional": false,
+      "n": 63,
+      "num": 36,
+      "value": 0.5714285714285714
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          7,
+          7,
+          1,
+          0
+        ],
+        [
+          4,
+          16,
+          0,
+          0
+        ],
+        [
+          0,
+          4,
+          5,
+          0
+        ],
+        [
+          0,
+          11,
+          0,
+          8
+        ]
+      ],
+      "labels": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ]
+    },
+    "ids": [
+      [
+        [
+          "pra-01",
+          "pra-02",
+          "pra-03",
+          "pra-04",
+          "pra-05",
+          "pra-06",
+          "inj-05"
+        ],
+        [
+          "bil-02",
+          "bil-04",
+          "out-03",
+          "oth-01",
+          "oth-02",
+          "oth-04",
+          "inj-04"
+        ],
+        [
+          "out-02"
+        ],
+        []
+      ],
+      [
+        [
+          "com-01",
+          "com-03",
+          "com-06",
+          "com-07"
+        ],
+        [
+          "del-01",
+          "del-02",
+          "del-03",
+          "del-05",
+          "del-06",
+          "del-07",
+          "bil-01",
+          "bil-06",
+          "bil-07",
+          "com-05",
+          "rep-01",
+          "rep-02",
+          "rep-04",
+          "rep-05",
+          "rep-06",
+          "rep-07"
+        ],
+        [],
+        []
+      ],
+      [
+        [],
+        [
+          "acc-05",
+          "out-01",
+          "out-05",
+          "oth-03"
+        ],
+        [
+          "acc-01",
+          "acc-02",
+          "acc-06",
+          "out-04",
+          "out-07"
+        ],
+        []
+      ],
+      [
+        [],
+        [
+          "bil-05",
+          "com-04",
+          "com-08",
+          "oth-05",
+          "hard-01",
+          "hard-02",
+          "hard-03",
+          "hard-04",
+          "inj-01",
+          "inj-02",
+          "inj-03"
+        ],
+        [],
+        [
+          "del-04",
+          "bil-03",
+          "acc-03",
+          "acc-04",
+          "out-06",
+          "com-02",
+          "esc-01",
+          "rep-03"
+        ]
+      ]
+    ],
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 63,
+      "value": 0.4006342494714587
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6500565252796929,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.587361233912958,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.56058810490059,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.7226874003189793,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.8466300602928509,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.5608187134502924,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "answer": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5932203389830508
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5384615384615384
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.49295774647887325
+        },
+        "fn": 8,
+        "fp": 4,
+        "precision": {
+          "ci": [
+            0.35379677689163724,
+            0.8483377638586862
+          ],
+          "directional": true,
+          "n": 11,
+          "num": 7,
+          "value": 0.6363636363636364
+        },
+        "predicted": 11,
+        "support": 15,
+        "tn": 44,
+        "tnr": {
+          "ci": [
+            0.8044643483893369,
+            0.9671167756500444
+          ],
+          "directional": false,
+          "n": 48,
+          "num": 44,
+          "value": 0.9166666666666666
+        },
+        "tp": 7,
+        "tpr": {
+          "ci": [
+            0.24809225259746442,
+            0.6988336984894921
+          ],
+          "directional": true,
+          "n": 15,
+          "num": 7,
+          "value": 0.4666666666666667
+        }
+      },
+      "ask": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.46511627906976744
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5517241379310345
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.6779661016949152
+        },
+        "fn": 4,
+        "fp": 22,
+        "precision": {
+          "ci": [
+            0.2785227481181953,
+            0.5780792938687267
+          ],
+          "directional": false,
+          "n": 38,
+          "num": 16,
+          "value": 0.42105263157894735
+        },
+        "predicted": 38,
+        "support": 20,
+        "tn": 21,
+        "tnr": {
+          "ci": [
+            0.34617209277756,
+            0.6324793623392592
+          ],
+          "directional": false,
+          "n": 43,
+          "num": 21,
+          "value": 0.4883720930232558
+        },
+        "tp": 16,
+        "tpr": {
+          "ci": [
+            0.5839782779742401,
+            0.9193436467288
+          ],
+          "directional": true,
+          "n": 20,
+          "num": 16,
+          "value": 0.8
+        }
+      },
+      "escalate": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.7843137254901961
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5925925925925926
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.47619047619047616
+        },
+        "fn": 11,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.6755843804891231,
+            1.0
+          ],
+          "directional": true,
+          "n": 8,
+          "num": 8,
+          "value": 1.0
+        },
+        "predicted": 8,
+        "support": 19,
+        "tn": 44,
+        "tnr": {
+          "ci": [
+            0.9197016822179859,
+            1.0
+          ],
+          "directional": false,
+          "n": 44,
+          "num": 44,
+          "value": 1.0
+        },
+        "tp": 8,
+        "tpr": {
+          "ci": [
+            0.2314162039203038,
+            0.6372444853483988
+          ],
+          "directional": true,
+          "n": 19,
+          "num": 8,
+          "value": 0.42105263157894735
+        }
+      },
+      "route": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.7575757575757576
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.6666666666666666
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5952380952380952
+        },
+        "fn": 4,
+        "fp": 1,
+        "precision": {
+          "ci": [
+            0.43649056343635395,
+            0.9699474141282697
+          ],
+          "directional": true,
+          "n": 6,
+          "num": 5,
+          "value": 0.8333333333333334
+        },
+        "predicted": 6,
+        "support": 9,
+        "tn": 53,
+        "tnr": {
+          "ci": [
+            0.902283346415128,
+            0.996723596684648
+          ],
+          "directional": false,
+          "n": 54,
+          "num": 53,
+          "value": 0.9814814814814815
+        },
+        "tp": 5,
+        "tpr": {
+          "ci": [
+            0.2666473457440297,
+            0.811224570528086
+          ],
+          "directional": true,
+          "n": 9,
+          "num": 5,
+          "value": 0.5555555555555556
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6336630677561373,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.5773121443619529,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.5612452402514811,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.7058175742386269,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.8150916697428325,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.5714285714285714,
+        "zero_filled": 0
+      }
+    }
+  },
+  "averaging": "Macro and weighted averages run over the included classes: the union of gold and predicted classes (support > 0 or predicted > 0), listed in included_classes. A per-class value that is null counts as zero in the average (zero_filled counts them) and still shows as null in per_class. Macro is the unweighted mean; weighted is sum(support * value) / sum(support).",
+  "cohort": {
+    "brand_population": "all",
+    "gold_revision": "sha256:829cc51a54e69ce7eff6978a2b52b6a7e820bef08edce646ea048ebed45b7579",
+    "name": "synthetic",
+    "split": null
+  },
+  "config": {
+    "prices": null,
+    "threshold": 0.5
+  },
+  "coverage": null,
+  "directional_below": 30,
+  "escalation": {
+    "accuracy": {
+      "ci": [
+        0.713783402655744,
+        0.8996070607682313
+      ],
+      "directional": false,
+      "n": 63,
+      "num": 52,
+      "value": 0.8253968253968254
+    },
+    "balanced_accuracy": {
+      "ci": null,
+      "directional": true,
+      "n": 63,
+      "value": 0.7105263157894737
+    },
+    "counts": {
+      "fn": 11,
+      "fp": 0,
+      "positives": 19,
+      "predicted_positives": 8,
+      "tn": 44,
+      "tp": 8
+    },
+    "f0_5": {
+      "ci": null,
+      "directional": true,
+      "n": 63,
+      "value": 0.7843137254901961
+    },
+    "f1": {
+      "ci": null,
+      "directional": true,
+      "n": 63,
+      "value": 0.5925925925925926
+    },
+    "f2": {
+      "ci": null,
+      "directional": true,
+      "n": 63,
+      "value": 0.47619047619047616
+    },
+    "fnr": {
+      "ci": [
+        0.36275551465160105,
+        0.7685837960796962
+      ],
+      "directional": true,
+      "n": 19,
+      "num": 11,
+      "value": 0.5789473684210527
+    },
+    "fpr": {
+      "ci": [
+        0.0,
+        0.08029831778201396
+      ],
+      "directional": false,
+      "n": 44,
+      "num": 0,
+      "value": 0.0
+    },
+    "mcc": {
+      "ci": null,
+      "directional": true,
+      "n": 63,
+      "value": 0.5803810000880094
+    },
+    "npv": {
+      "ci": [
+        0.6763486849309407,
+        0.8844790287954026
+      ],
+      "directional": false,
+      "n": 55,
+      "num": 44,
+      "value": 0.8
+    },
+    "precision": {
+      "ci": [
+        0.6755843804891231,
+        1.0
+      ],
+      "directional": true,
+      "n": 8,
+      "num": 8,
+      "value": 1.0
+    },
+    "prevalence": {
+      "ci": [
+        0.20237537048735993,
+        0.4236060542541184
+      ],
+      "directional": false,
+      "n": 63,
+      "num": 19,
+      "value": 0.30158730158730157
+    },
+    "tnr": {
+      "ci": [
+        0.9197016822179859,
+        1.0
+      ],
+      "directional": false,
+      "n": 44,
+      "num": 44,
+      "value": 1.0
+    },
+    "tpr": {
+      "ci": [
+        0.2314162039203038,
+        0.6372444853483988
+      ],
+      "directional": true,
+      "n": 19,
+      "num": 8,
+      "value": 0.42105263157894735
+    }
+  },
+  "intent": {
+    "accuracy": {
+      "ci": [
+        0.5436701013442413,
+        0.7705055018729168
+      ],
+      "directional": false,
+      "n": 63,
+      "num": 42,
+      "value": 0.6666666666666666
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          11,
+          1,
+          0,
+          0,
+          0,
+          0,
+          3
+        ],
+        [
+          0,
+          6,
+          0,
+          0,
+          0,
+          0,
+          4
+        ],
+        [
+          0,
+          0,
+          4,
+          0,
+          0,
+          0,
+          3
+        ],
+        [
+          0,
+          0,
+          0,
+          3,
+          0,
+          0,
+          5
+        ],
+        [
+          0,
+          1,
+          0,
+          0,
+          3,
+          1,
+          3
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          7,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          8
+        ]
+      ],
+      "labels": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ]
+    },
+    "ids": [
+      [
+        [
+          "del-01",
+          "del-02",
+          "del-03",
+          "del-05",
+          "del-06",
+          "del-07",
+          "rep-02",
+          "rep-03",
+          "rep-04",
+          "rep-05",
+          "rep-06"
+        ],
+        [
+          "del-04"
+        ],
+        [],
+        [],
+        [],
+        [],
+        [
+          "com-05",
+          "hard-04",
+          "rep-01"
+        ]
+      ],
+      [
+        [],
+        [
+          "bil-01",
+          "bil-04",
+          "bil-05",
+          "bil-07",
+          "hard-01",
+          "hard-02"
+        ],
+        [],
+        [],
+        [],
+        [],
+        [
+          "bil-02",
+          "bil-03",
+          "bil-06",
+          "esc-01"
+        ]
+      ],
+      [
+        [],
+        [],
+        [
+          "acc-01",
+          "acc-02",
+          "acc-04",
+          "acc-06"
+        ],
+        [],
+        [],
+        [],
+        [
+          "acc-03",
+          "acc-05",
+          "rep-07"
+        ]
+      ],
+      [
+        [],
+        [],
+        [],
+        [
+          "out-02",
+          "out-04",
+          "out-07"
+        ],
+        [],
+        [],
+        [
+          "out-01",
+          "out-03",
+          "out-05",
+          "out-06",
+          "hard-03"
+        ]
+      ],
+      [
+        [],
+        [
+          "inj-01"
+        ],
+        [],
+        [],
+        [
+          "com-01",
+          "com-03",
+          "com-06"
+        ],
+        [
+          "com-07"
+        ],
+        [
+          "com-02",
+          "com-04",
+          "com-08"
+        ]
+      ],
+      [
+        [],
+        [],
+        [],
+        [],
+        [],
+        [
+          "pra-01",
+          "pra-02",
+          "pra-03",
+          "pra-04",
+          "pra-05",
+          "pra-06",
+          "inj-05"
+        ],
+        []
+      ],
+      [
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [
+          "oth-01",
+          "oth-02",
+          "oth-03",
+          "oth-04",
+          "oth-05",
+          "inj-02",
+          "inj-03",
+          "inj-04"
+        ]
+      ]
+    ],
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 63,
+      "value": 0.6090425531914894
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.7529475822980402,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6764176999471118,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6490954484432594,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.8475274725274725,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.9453048972590751,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6649659863945578,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "account_access": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.8695652173913043
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.7272727272727273
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.625
+        },
+        "fn": 3,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.5100999795960008,
+            1.0
+          ],
+          "directional": true,
+          "n": 4,
+          "num": 4,
+          "value": 1.0
+        },
+        "predicted": 4,
+        "support": 7,
+        "tn": 56,
+        "tnr": {
+          "ci": [
+            0.9358038555118846,
+            1.0
+          ],
+          "directional": false,
+          "n": 56,
+          "num": 56,
+          "value": 1.0
+        },
+        "tp": 4,
+        "tpr": {
+          "ci": [
+            0.2504542304090258,
+            0.8417830777373732
+          ],
+          "directional": true,
+          "n": 7,
+          "num": 4,
+          "value": 0.5714285714285714
+        }
+      },
+      "billing": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.7142857142857143
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.6666666666666666
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.625
+        },
+        "fn": 4,
+        "fp": 2,
+        "precision": {
+          "ci": [
+            0.40926987910258916,
+            0.9285223111419724
+          ],
+          "directional": true,
+          "n": 8,
+          "num": 6,
+          "value": 0.75
+        },
+        "predicted": 8,
+        "support": 10,
+        "tn": 51,
+        "tnr": {
+          "ci": [
+            0.8724547684904087,
+            0.9895899311661807
+          ],
+          "directional": false,
+          "n": 53,
+          "num": 51,
+          "value": 0.9622641509433962
+        },
+        "tp": 6,
+        "tpr": {
+          "ci": [
+            0.3126695474501864,
+            0.8318224187964902
+          ],
+          "directional": true,
+          "n": 10,
+          "num": 6,
+          "value": 0.6
+        }
+      },
+      "complaint": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.75
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5454545454545454
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.42857142857142855
+        },
+        "fn": 5,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.43849391955098227,
+            1.0
+          ],
+          "directional": true,
+          "n": 3,
+          "num": 3,
+          "value": 1.0
+        },
+        "predicted": 3,
+        "support": 8,
+        "tn": 55,
+        "tnr": {
+          "ci": [
+            0.9347128562105721,
+            1.0
+          ],
+          "directional": false,
+          "n": 55,
+          "num": 55,
+          "value": 1.0
+        },
+        "tp": 3,
+        "tpr": {
+          "ci": [
+            0.13684175946152105,
+            0.6942621454161981
+          ],
+          "directional": true,
+          "n": 8,
+          "num": 3,
+          "value": 0.375
+        }
+      },
+      "delivery": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.9322033898305084
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.8461538461538461
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.7746478873239436
+        },
+        "fn": 4,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.7411599827511859,
+            1.0
+          ],
+          "directional": true,
+          "n": 11,
+          "num": 11,
+          "value": 1.0
+        },
+        "predicted": 11,
+        "support": 15,
+        "tn": 48,
+        "tnr": {
+          "ci": [
+            0.9258973488472576,
+            1.0
+          ],
+          "directional": false,
+          "n": 48,
+          "num": 48,
+          "value": 1.0
+        },
+        "tp": 11,
+        "tpr": {
+          "ci": [
+            0.4804911034231324,
+            0.8910272389681718
+          ],
+          "directional": true,
+          "n": 15,
+          "num": 11,
+          "value": 0.7333333333333333
+        }
+      },
+      "other": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.35714285714285715
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.47058823529411764
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.6896551724137931
+        },
+        "fn": 0,
+        "fp": 18,
+        "precision": {
+          "ci": [
+            0.16501120939792674,
+            0.49988611514231246
+          ],
+          "directional": true,
+          "n": 26,
+          "num": 8,
+          "value": 0.3076923076923077
+        },
+        "predicted": 26,
+        "support": 8,
+        "tn": 37,
+        "tnr": {
+          "ci": [
+            0.5410297617609947,
+            0.7818710431117484
+          ],
+          "directional": false,
+          "n": 55,
+          "num": 37,
+          "value": 0.6727272727272727
+        },
+        "tp": 8,
+        "tpr": {
+          "ci": [
+            0.6755843804891231,
+            1.0
+          ],
+          "directional": true,
+          "n": 8,
+          "num": 8,
+          "value": 1.0
+        }
+      },
+      "outage_technical": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.75
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.5454545454545454
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.42857142857142855
+        },
+        "fn": 5,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.43849391955098227,
+            1.0
+          ],
+          "directional": true,
+          "n": 3,
+          "num": 3,
+          "value": 1.0
+        },
+        "predicted": 3,
+        "support": 8,
+        "tn": 55,
+        "tnr": {
+          "ci": [
+            0.9347128562105721,
+            1.0
+          ],
+          "directional": false,
+          "n": 55,
+          "num": 55,
+          "value": 1.0
+        },
+        "tp": 3,
+        "tpr": {
+          "ci": [
+            0.13684175946152105,
+            0.6942621454161981
+          ],
+          "directional": true,
+          "n": 8,
+          "num": 3,
+          "value": 0.375
+        }
+      },
+      "praise": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.8974358974358975
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.9333333333333333
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 63,
+          "value": 0.9722222222222222
+        },
+        "fn": 0,
+        "fp": 1,
+        "precision": {
+          "ci": [
+            0.5291051942301386,
+            0.9775830911367038
+          ],
+          "directional": true,
+          "n": 8,
+          "num": 7,
+          "value": 0.875
+        },
+        "predicted": 8,
+        "support": 7,
+        "tn": 55,
+        "tnr": {
+          "ci": [
+            0.9055414182080672,
+            0.9968408710355361
+          ],
+          "directional": false,
+          "n": 56,
+          "num": 55,
+          "value": 0.9821428571428571
+        },
+        "tp": 7,
+        "tpr": {
+          "ci": [
+            0.6456611570247934,
+            1.0
+          ],
+          "directional": true,
+          "n": 7,
+          "num": 7,
+          "value": 1.0
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.7674929944642546,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6900824665530548,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6575342555852048,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.8585164835164835,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.9504676141468594,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 63,
+        "value": 0.6666666666666666,
+        "zero_filled": 0
+      }
+    }
+  },
+  "kind": "synthetic",
+  "n": 63,
+  "operations": null,
+  "run_at": "2000-01-01T00:00:00Z",
+  "sample": {
+    "seed": null,
+    "size": null
+  },
+  "schema_version": "metrics/1"
+}
