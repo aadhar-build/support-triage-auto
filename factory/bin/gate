@@ -8,12 +8,19 @@ Checks, in order: protected paths untouched, every change inside the spec's
 ## Files list, then the main checkout's factory/checks.sh run inside the
 worktree (so a branch can't edit the checks it is judged by).
 Writes round-<n>/checks.md (or final-checks.md) and prints one line ending PASS or FAIL.
+A surviving .gate-publication.pending means publication was interrupted. Inspect
+the job and receipt before removing it: discard the receipt if the job is still
+in gate, or verify the committed transition and receipt if it has moved on.
 """
 
 from __future__ import annotations
 
+import fcntl
+import hashlib
+import os
 import subprocess
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
@@ -22,79 +29,176 @@ import factory as F  # noqa: E402
 LOG_TAIL = 120
 
 
+def resolve_commit(wt: Path, ref: str) -> str:
+    return F.run(["git", "rev-parse", "--verify", "--end-of-options", ref + "^{commit}"], cwd=wt).strip()
+
+
+def read_spec(path: Path) -> bytes:
+    try:
+        return path.read_bytes()
+    except OSError as e:
+        raise F.FactoryError("could not read spec.md for the gate") from e
+
+
+def changed_paths(wt: Path, base: str, candidate: str) -> list[str]:
+    # Check both sides of moves and preserve the exact path bytes Git emits.
+    res = subprocess.run(
+        ["git", "diff", "--name-only", "--no-renames", "-z", f"{base}...{candidate}", "--"],
+        cwd=wt, capture_output=True,
+    )
+    if res.returncode != 0:
+        raise F.FactoryError("git diff --name-only failed while reading changed paths")
+    return [os.fsdecode(path) for path in res.stdout.split(b"\0") if path]
+
+
+def display_path(path: str) -> str:
+    return path if path.isprintable() else repr(path)
+
+
 def main(argv: list[str]) -> int:
     if not argv:
         print(__doc__.strip())
         return 2
     final = "--final" in argv
     job_id = argv[0]
+    gate_fd = None
+    merge_token = next((arg.split("=", 1)[1] for arg in argv[1:]
+                        if arg.startswith("--merge-token=")), None)
     try:
         root = F.repo_root()
         cfg = F.load_config(root)
         d = F.job_dir(root, job_id)
-        job = F.read_job(d)
-        if not final and job["stage"] != "gate":
-            raise F.FactoryError(f"job is in {job['stage']}, not gate")
-        wt = root / job["worktree"]
+        with F.job_mutex(d):
+            F.require_admission(d, final=final, token=merge_token)
+            job = F.read_job(d)
+            if not final and job["stage"] != "gate":
+                raise F.FactoryError(f"job is in {job['stage']}, not gate")
+            F.require_prerequisites(d, job, "gate")
+            wt = root / job["worktree"]
+            # Lock the worktree directory itself so concurrent gates share an
+            # inode without adding a file to Git status. Job commands use a
+            # different mutex and can still run while checks are in flight.
+            try:
+                gate_fd = os.open(wt, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                fcntl.flock(gate_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as e:
+                raise F.FactoryBusy("another gate is running on this worktree. Retry after it exits") from e
+            except OSError as e:
+                raise F.FactoryError("could not lock the gate worktree directory") from e
         status = ["git", "status", "--porcelain", "-z", "--untracked-files=all"]
         if F.run(status, cwd=wt):
             raise F.FactoryError("worktree must be clean before the gate runs")
-        candidate = F.run(["git", "rev-parse", "HEAD"], cwd=wt).strip()
-        changed = F.changed_files(wt, cfg["base_branch"], job)
+        candidate = resolve_commit(wt, "HEAD")
+        base_branch = cfg["base_branch"]
+        F.fetch_base(wt, base_branch)
+        stacked = job.get("stacked_on_branch")
+        base_ref = f"refs/heads/{stacked}" if stacked else f"refs/remotes/origin/{base_branch}"
+        base = resolve_commit(wt, base_ref)
+        spec = d / "spec.md"
+        spec_bytes = read_spec(spec)
+        try:
+            allowed = F.allowed_files(spec_bytes.decode("utf-8"))
+        except UnicodeDecodeError as e:
+            raise F.FactoryError("spec.md must be valid UTF-8") from e
+
+        changed = changed_paths(wt, base, candidate)
         problems: list[str] = []
 
         prot = F.protected_violations(changed, cfg["protected_paths"])
         if prot:
-            problems.append("Protected paths changed (only the owner may change these): " + ", ".join(prot))
+            problems.append("Protected paths changed (only the owner may change these): "
+                            + ", ".join(map(display_path, prot)))
 
-        spec = d / "spec.md"
-        allowed = F.allowed_files(spec.read_text()) if spec.exists() else []
         if not allowed:
             problems.append("spec.md has no ## Files list, so scope can't be checked")
         else:
             out = F.scope_violations(changed, allowed + cfg.get("always_in_scope", []))
             if out:
-                problems.append("Changed files not listed in the spec's ## Files: " + ", ".join(out))
+                problems.append("Changed files not listed in the spec's ## Files: "
+                                + ", ".join(map(display_path, out)))
 
         if not changed:
             problems.append("The branch has no changes against the base")
 
         checks = root / "factory" / "checks.sh"
+        # The checks child retains the lock if this gate process dies first.
+        # The lock lasts until every copy of its descriptor is closed.
         res = subprocess.run(["bash", str(checks)], cwd=str(wt), capture_output=True, text=True,
+                             pass_fds=(gate_fd,),
                              timeout=cfg.get("checks_timeout_s", 1200))
         log = (res.stdout + res.stderr).splitlines()
         if res.returncode != 0:
             problems.append(f"checks.sh exited {res.returncode}")
 
-        if candidate != F.run(["git", "rev-parse", "HEAD"], cwd=wt).strip() or F.run(status, cwd=wt):
-            raise F.FactoryError("worktree changed while the gate ran")
         verdict = "FAIL" if problems else "PASS"
-        lines = [f"GATE: {verdict}", f"CANDIDATE: {candidate}", "", "## Summary"]
+        spec_digest = hashlib.sha256(spec_bytes).hexdigest()
+        lines = [f"GATE: {verdict}", f"CANDIDATE: {candidate}", f"BASE: {base}",
+                 f"SPEC-DIGEST: {spec_digest}", "", "## Summary"]
         lines += [f"- {p}" for p in problems] or ["- Protected paths untouched, scope respected, checks passed."]
         lines += [f"- {len(changed)} file(s) changed", "", "## Changed files", ""]
-        lines += [f"- {c}" for c in changed] or ["- (none)"]
+        lines += [f"- {display_path(c)}" for c in changed] or ["- (none)"]
         lines += ["", f"## checks.sh output (last {LOG_TAIL} lines)", "", "```"] + log[-LOG_TAIL:] + ["```", ""]
 
-        if final:
-            (d / "final-checks.md").write_text("\n".join(lines))
-            print(f"{job_id} final gate {verdict}")
-            return 0
-        rd = d / f"round-{job['round']}"
-        rd.mkdir(exist_ok=True)
-        (rd / "checks.md").write_text("\n".join(lines))
-        if verdict == "PASS":
-            F.move(job, "review", "gate passed")
-        else:
-            F.next_round_or_recovery(job, cfg["max_rounds"], "gate failed")
-        F.write_job(d, job)
+        # Reserve the job only for final validation and publication. Keep the
+        # job mutex short while Git checks refs and status. A child final gate
+        # uses the parent merge's existing reservation.
+        reservation = nullcontext() if merge_token is not None else F.job_operation(d, "publish-gate")
+        with reservation:
+            with F.job_mutex(d):
+                F.require_admission(d, final=final, token=merge_token)
+                if F.read_job(d) != job:
+                    raise F.FactoryError("job changed while the gate ran")
+                F.require_prerequisites(d, job, "gate")
+            if candidate != resolve_commit(wt, "HEAD") or F.run(status, cwd=wt):
+                raise F.FactoryError("worktree changed while the gate ran")
+            if base != resolve_commit(wt, base_ref):
+                raise F.FactoryError("base changed while the gate ran")
+            if spec_bytes != read_spec(spec):
+                raise F.FactoryError("spec.md changed while the gate ran")
+            with F.job_mutex(d):
+                F.require_admission(d, final=final, token=merge_token)
+                if F.read_job(d) != job:
+                    raise F.FactoryError("job changed while the gate ran")
+                F.require_prerequisites(d, job, "gate")
+                receipt = "\n".join(lines).encode("utf-8")
+                if final:
+                    F.atomic_write(d / "final-checks.md", receipt)
+                    print(f"{job_id} final gate {verdict}")
+                    return 0
+                round_number = job["round"]
+                if type(round_number) is not int or round_number < 1:
+                    raise F.FactoryError("invalid round number")
+                rd = d / f"round-{round_number}"
+                if rd.is_symlink():
+                    raise F.FactoryError("round directory must not be a symlink")
+                rd.mkdir(exist_ok=True)
+                if not rd.is_dir():
+                    raise F.FactoryError("round path must be a directory")
+                # A surviving marker makes an interrupted receipt/state publication
+                # fail closed until the operator reconciles it.
+                marker = d / ".gate-publication.pending"
+                F.atomic_write(marker, f"round-{round_number}\n".encode())
+                F.atomic_write(rd / "checks.md", receipt)
+                if verdict == "PASS":
+                    F.move(job, "review", "gate passed")
+                else:
+                    F.next_round_or_recovery(job, cfg["max_rounds"], "gate failed")
+                F.write_job(d, job)
+                F.remove_marker(marker)
         print(f"{job_id} -> {job['stage']}: gate {verdict}")
         return 0
+    except F.FactoryBusy as e:
+        print(f"REFUSED: {e}")
+        return os.EX_TEMPFAIL if final and merge_token is not None else 1
     except F.FactoryError as e:
         print(f"REFUSED: {e}")
         return 1
     except subprocess.TimeoutExpired:
         print(f"REFUSED: checks.sh timed out for {job_id}")
         return 1
+    finally:
+        if gate_fd is not None:
+            os.close(gate_fd)
 
 
 if __name__ == "__main__":
