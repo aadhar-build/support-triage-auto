@@ -1,0 +1,19 @@
+{"source":"policies/rules.json","value":{"effect":"escalate","min_conversations":3,"report_window_hours":72,"window_days":7}}
+{"source":"tests/fixtures/repeat_contact_rules.json","value":{"effect":"escalate","min_conversations":3,"report_window_hours":72,"window_days":7}}
+{"source":"tests/fixtures/propose_change_proposed_repeat.json","value":{"effect":"escalate","min_conversations":2,"report_window_hours":72,"window_days":7}}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/block-not-object.json: 'repeat_contact' is missing or is not an object","source":"testdata/context_signals/bad_repeat/block-not-object.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/bool-min.json: 'min_conversations' must be an int of at least 2","source":"testdata/context_signals/bad_repeat/bool-min.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/bool-report.json: 'report_window_hours' must be a finite number above 0","source":"testdata/context_signals/bad_repeat/bool-report.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/bool-window.json: 'window_days' must be a finite number above 0","source":"testdata/context_signals/bad_repeat/bool-window.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/effect-other.json: 'effect' must be \"escalate\"","source":"testdata/context_signals/bad_repeat/effect-other.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/min-below-2.json: 'min_conversations' must be an int of at least 2","source":"testdata/context_signals/bad_repeat/min-below-2.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/min-float.json: 'min_conversations' must be an int of at least 2","source":"testdata/context_signals/bad_repeat/min-float.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/no-block.json: 'repeat_contact' is missing or is not an object","source":"testdata/context_signals/bad_repeat/no-block.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/no-effect.json: 'effect' is missing","source":"testdata/context_signals/bad_repeat/no-effect.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/no-min_conversations.json: 'min_conversations' is missing","source":"testdata/context_signals/bad_repeat/no-min_conversations.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/no-report_window_hours.json: 'report_window_hours' is missing","source":"testdata/context_signals/bad_repeat/no-report_window_hours.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/no-window_days.json: 'window_days' is missing","source":"testdata/context_signals/bad_repeat/no-window_days.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/not-json.json: not valid JSON","source":"testdata/context_signals/bad_repeat/not-json.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/str-window.json: 'window_days' must be a finite number above 0","source":"testdata/context_signals/bad_repeat/str-window.json"}
+{"error":"repeat_contact rule in testdata/context_signals/bad_repeat/zero-window.json: 'window_days' must be a finite number above 0","source":"testdata/context_signals/bad_repeat/zero-window.json"}
+{"error":"repeat_contact rule in testdata/context_signals/missing_rule.json: cannot read file (<detail>)","source":"testdata/context_signals/missing_rule.json"}
