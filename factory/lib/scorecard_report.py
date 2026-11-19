@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone as tz
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from statistics import median
 from zoneinfo import ZoneInfo
 
@@ -207,7 +207,7 @@ def effort_report(jobs, merged, period):
     unknown_rework = unclassified_minutes = missing_rework_amounts = 0
     known = []
     covered = 0
-    rework_flags = 0
+    rework_flags = rework_covered = 0
     for job in jobs:
         begin = max(period.start, job.started or period.start)
         end = min(period.end, period.as_of, job.ended or period.as_of)
@@ -221,6 +221,7 @@ def effort_report(jobs, merged, period):
         undated = any(not instant(e.get("occurred_at")) for e in job.by_kind["owner_effort"])
         complete = complete and not undated and all(e["data"].get("minutes") is not None for e in rows)
         covered += complete
+        rework_covered += complete and all(row["data"].get("rework") is not None for row in rows)
         for e in rows:
             d = e["data"]
             if d.get("rework") is None:
@@ -247,7 +248,8 @@ def effort_report(jobs, merged, period):
     return dict(known_minutes=sum(known) if known or not jobs else None, covered_jobs=covered,
                 eligible_jobs=len(jobs), unknown_jobs=len(jobs)-covered,
                 activities={a: sum(minutes[a]) if minutes[a] or all_covered else None for a in ACTIVITIES},
-                rework_minutes=sum(rework) if rework_flags or (all_covered and not unknown_rework) else None,
+                rework_minutes=sum(rework) if rework_flags or rework_covered or (all_covered and not unknown_rework) else None,
+                rework_covered_jobs=rework_covered,
                 rework_total_minutes=sum(rework) if all_covered and not (unknown_rework or missing_rework_amounts) else None,
                 unknown_rework_entries=unknown_rework, unclassified_minutes=unclassified_minutes,
                 unknown_rework_amount_entries=missing_rework_amounts,
@@ -355,6 +357,90 @@ def defects(merged, days, as_of):
     return result
 
 
+@dataclass(eq=False)
+class CostItem:
+    dimension: tuple
+    amount: Decimal | None
+    status: str
+    ambiguous_issuer: bool
+
+
+def exact_amount(values):
+    if not values:
+        return None
+    # Retain every input decimal place, plus enough integer digits for the sum.
+    integer_digits = max(1, max(v.adjusted() + 1 for v in values))
+    fraction_digits = max(0, max(-v.as_tuple().exponent for v in values))
+    with localcontext() as context:
+        context.prec = integer_digits + fraction_digits + len(str(len(values)))
+        return format(sum(values), "f")
+
+
+def cost_ledger(jobs, totals):
+    """Resolve one source identity across every job and currency before assigning amounts."""
+    in_week = {(item["job"], item["event_id"]) for items in totals.values() for item in items}
+    identities = defaultdict(list)
+    for job in jobs:
+        for event in job.by_kind["usage_cost"]:
+            data, source = event["data"], event["source"]
+            if data.get("billing_item"):
+                identity = ("billing", data["billing_item"])
+            else:
+                identity = ("window", source["kind"], source["record_id"],
+                            data.get("window_start"), data.get("window_end"))
+            identities[identity].append((job.id, event))
+
+    weekly, by_job = defaultdict(list), defaultdict(list)
+    for entries in identities.values():
+        issuers = defaultdict(list)
+        for job_id, event in entries:
+            issuers[event["source"].get("provider")].append((job_id, event))
+        ambiguous = len(entries) > 1 and None in issuers
+        # An unscoped reference can refer to any issuer with the same item ID.
+        for records in ([entries] if ambiguous else issuers.values()):
+            dimensions, amounts = set(), set()
+            observed_jobs = defaultdict(set)
+            complete = True
+            for job_id, event in records:
+                data = event["data"]
+                unit = (data["cost_type"], data.get("unit"), data.get("currency"))
+                dimensions.add(unit)
+                amounts.add(Decimal(str(data["amount"])) if data.get("amount") is not None else None)
+                if (job_id, event["event_id"]) in in_week:
+                    observed_jobs[unit].add(job_id)
+                else:
+                    complete = False
+            for unit, owners in observed_jobs.items():
+                if ambiguous or not complete or len(dimensions) != 1 or len(amounts) != 1:
+                    item = CostItem(unit, None, "conflicting", ambiguous)
+                else:
+                    item = CostItem(unit, next(iter(amounts)), "shared" if len(owners) > 1 else "allocated", False)
+                weekly[unit].append(item)
+                for job_id in owners:
+                    by_job[job_id].append(item)
+    return weekly, by_job
+
+
+def cohort_costs(jobs, allocations):
+    items = defaultdict(set)
+    observed = defaultdict(set)
+    for job in jobs:
+        for item in allocations[job.id]:
+            items[item.dimension].add(item)
+            observed[item.dimension[0]].add(job.id)
+    totals = []
+    for (kind, unit, currency), entries in sorted(items.items(), key=lambda e: tuple(v or "" for v in e[0])):
+        counts = Counter(item.status for item in entries)
+        known = exact_amount([item.amount for item in entries if item.status == "allocated"])
+        totals.append(dict(cost_type=kind, unit=unit, currency=currency, known_amount=known,
+                           recorded_amount=known if counts["allocated"] == len(entries) else None,
+                           allocated_items=counts["allocated"], shared_items=counts["shared"],
+                           conflicting_items=counts["conflicting"]))
+    coverage = {kind: dict(covered=len(observed[kind]), eligible=len(jobs), unknown=len(jobs)-len(observed[kind]))
+                for kind in COST_TYPES}
+    return totals, coverage
+
+
 def costs(jobs, active, period):
     totals = defaultdict(list)
     unattributed = []
@@ -379,33 +465,21 @@ def costs(jobs, active, period):
             totals[key].append(dict(job=j.id, source=e.get("source"), event_id=e["event_id"],
                                     origin=e["origin"], amount=str(d["amount"]), billing_item=d.get("billing_item"),
                                     window_start=d.get("window_start"), window_end=d.get("window_end")))
+    ledger, allocations = cost_ledger(jobs, totals)
     rows = []
     for (kind, unit, currency), items in totals.items():
-        # One bill can be referenced by multiple jobs. Conflicting amounts stay visible.
-        grouped = defaultdict(set)
-        issuers = defaultdict(list)
-        for item in items:
-            source = item["source"] or {}
-            if item["billing_item"]:
-                bill = (item["origin"], item["billing_item"])
-                issuer = source.get("provider")
-                issuers[bill].append(issuer)
-                identity = (*bill, issuer)
-            else:
-                identity = (item["job"], item["event_id"])
-            grouped[identity].add(Decimal(item["amount"]))
-        ambiguous = any(len(values) > 1 and None in values for values in issuers.values())
-        conflict = ambiguous or any(len(v) > 1 for v in grouped.values())
-        amount = None if conflict else str(sum(next(iter(v)) for v in grouped.values()))
-        rows.append(dict(cost_type=kind, unit=unit, currency=currency, amount=amount,
-                         conflict=conflict, ambiguous_billing_item=ambiguous, items=items))
+        entries = ledger[kind, unit, currency]
+        conflict = any(item.status == "conflicting" for item in entries)
+        amount = None if conflict else exact_amount([item.amount for item in entries])
+        rows.append(dict(cost_type=kind, unit=unit, currency=currency, amount=amount, conflict=conflict,
+                         ambiguous_billing_item=any(item.ambiguous_issuer for item in entries), items=items))
     coverage = {}
     active_ids = {job.id for job in active}
     for kind in COST_TYPES:
         ids = {item["job"] for row in rows if row["cost_type"] == kind for item in row["items"]}
         coverage[kind] = dict(jobs_with_amount=len(ids & active_ids), eligible_jobs=len(active_ids),
                               other_jobs_with_amount=len(ids - active_ids))
-    return dict(totals=rows, coverage=coverage, unattributed=unattributed)
+    return dict(totals=rows, coverage=coverage, unattributed=unattributed), allocations
 
 
 def escalations(jobs, p):
@@ -545,20 +619,47 @@ def recovery_report(active, period):
                  linked_effort_entries=len(linked_effort), untimed_effort_entries=len(linked_effort)-len(amounts)))
 
 
-def comparisons(active, full):
-    groups, matched = defaultdict(list), defaultdict(list)
-    for j in active:
-        c = j.context
-        if c.get("task_type") and c.get("task_size"):
-            groups[c["task_type"], c["task_size"]].append(j)
-        if c.get("matched_task_key"):
-            matched[c["matched_task_key"]].append(j)
+def task_cohorts(active, period, defect_window_days, allocations, dimensions):
+    groups = defaultdict(list)
+    for job in active:
+        labels = tuple(job.context.get(dimension) for dimension in dimensions)
+        if all(labels):
+            groups[labels].append(job)
+    classified = sum(len(jobs) for jobs in groups.values())
+    coverage = dict(covered=classified, eligible=len(active), unknown=len(active)-classified,
+                    minimum_jobs=SMALL_SAMPLE, small_groups=[])
     cohorts = []
-    for (kind, size), jobs in sorted(groups.items()):
-        if len(jobs) >= SMALL_SAMPLE:
-            values = [full[j.id] for j in jobs if j.id in full]
-            cohorts.append(dict(task_type=kind, task_size=size, jobs=len(jobs),
-                                owner_minutes=sample(values, len(jobs))))
+    for labels, jobs in sorted(groups.items()):
+        count = len(jobs)
+        cohort = dict(zip(dimensions, labels), jobs=count)
+        if count < SMALL_SAMPLE:
+            coverage["small_groups"].append(cohort)
+            continue
+        merged = [j for j in jobs if period.contains(j.merged)]
+        effort, full = effort_report(jobs, merged, period)
+        delivered = delivery(merged, jobs, period)
+        acceptance, states = outcomes(jobs, period)
+        guard, interruptions = guardrails(jobs, period)
+        recovery, linked_effort = recovery_report(jobs, period)
+        interruptions.update(linked_effort)
+        totals, cost_coverage = cohort_costs(jobs, allocations)
+        cohort.update(merged_jobs=len(merged), lead_hours=delivered["lead_hours"],
+                      agent_elapsed_minutes=delivered["agent_elapsed_minutes"], first_gate=delivered["first_gate"],
+                      owner_minutes=sample(list(full.values()), count), owner_effort=effort,
+                      acceptance=acceptance, outcomes=states, escaped_defects=defects(merged, defect_window_days, period.as_of),
+                      guardrails={k: v for k, v in guard.items() if k not in {"gaps", "repeated_gaps"}},
+                      interruptions=interruptions, recovery=recovery, escalations=escalations(jobs, period),
+                      cost_totals=totals, cost_coverage=cost_coverage)
+        cohorts.append(cohort)
+    return cohorts, coverage
+
+
+def matched_tasks(active, full):
+    matched = defaultdict(list)
+    for job in active:
+        key = job.context.get("matched_task_key")
+        if key:
+            matched[key].append(job)
     pairs = []
     for key, jobs in sorted(matched.items()):
         modes = {j.context.get("workflow_mode"): j for j in jobs}
@@ -571,8 +672,8 @@ def comparisons(active, full):
             continue
         pairs.append(dict(key=key, factory_job=a.id, direct_job=b.id, factory_minutes=full[a.id],
                           direct_minutes=full[b.id], factory_minus_direct_minutes=full[a.id]-full[b.id]))
-    return cohorts, dict(candidate_keys=len(matched), pairs=pairs, excluded_keys=len(matched)-len(pairs),
-                         interpretation="Observed differences across comparable recorded tasks.")
+    return dict(candidate_keys=len(matched), pairs=pairs, excluded_keys=len(matched)-len(pairs),
+                interpretation="Observed differences across comparable recorded tasks.")
 
 
 def weekly_report(job_records, start, as_of, timezone, defect_window_days):
@@ -629,13 +730,20 @@ def weekly_report(job_records, start, as_of, timezone, defect_window_days):
     guard, interrupted = guardrails(active, week)
     recovery, linked_effort = recovery_report(active, week)
     interrupted.update(linked_effort)
-    cohorts, matched = comparisons(active, full)
+    weekly_costs, allocations = costs(jobs, active, week)
+    dimensions = ("task_type", "task_size")
+    cohorts, cohort_coverage = task_cohorts(active, week, defect_window_days, allocations, dimensions)
+    by_dimension = {}
+    for dimension in dimensions:
+        rows, coverage = task_cohorts(active, week, defect_window_days, allocations, (dimension,))
+        by_dimension[dimension] = dict(cohorts=rows, coverage=coverage)
     result.update(active_jobs=[j.id for j in active], small_sample=len(active) < SMALL_SAMPLE,
                   delivered=delivery(merged, active, week), acceptance=acceptance, outcomes=states,
                   owner_effort=effort, escaped_defects=defects(merged, defect_window_days, cutoff),
-                  costs=costs(jobs, active, week), escalations=escalations(active, week), guardrails=guard,
+                  costs=weekly_costs, escalations=escalations(active, week), guardrails=guard,
                   interruptions=interrupted, recovery=recovery,
-                  task_cohorts=cohorts, matched_tasks=matched)
+                  task_cohorts=cohorts, task_cohort_coverage=cohort_coverage, task_cohorts_by=by_dimension,
+                  matched_tasks=matched_tasks(active, full))
     return result
 
 
@@ -780,9 +888,50 @@ def render_weekly_report(report):
                       for key, stage in report["undated_statuses"].items()) + "."]
     if report["diagnostics"]:
         lines += ["", "Incomplete observation files · " + links(report["diagnostics"]) + "."]
-    for c in report["task_cohorts"]:
-        lines += ["", f"{markdown_text(c['task_type'])} / {markdown_text(c['task_size'])} ({c['jobs']} jobs): median owner "
-                  f"{show(c['owner_minutes']['median'])} minutes ({c['owner_minutes']['sample']} measured)."]
+    lines += ["", "**Task type and size**",
+              "Each view groups the same active jobs. Counts across views overlap. Groups and individual "
+              f"measures with fewer than {SMALL_SAMPLE} observations are small samples."]
+    views = [(("task_type", "task_size"), "Type and size", "both labels",
+              report["task_cohorts"], report["task_cohort_coverage"])]
+    for dimension, view in report["task_cohorts_by"].items():
+        label = "Type" if dimension == "task_type" else "Size"
+        views.append(((dimension,), label, f"a {label.lower()} label", view["cohorts"], view["coverage"]))
+    for dimensions, title, classification, rows, coverage in views:
+        def label_for(row):
+            return " / ".join(markdown_text(row[d]) for d in dimensions)
+
+        lines += ["", f"{title} · {coverage['covered']}/{coverage['eligible']} active jobs have {classification} "
+                  f"({coverage['unknown']} unknown)."]
+        for c in rows[:2]:
+            lead, elapsed, effort = c["lead_hours"], c["agent_elapsed_minutes"], c["owner_effort"]
+            guard, owner = c["guardrails"], c["owner_minutes"]
+            lines.append(f"- {label_for(c)} · {c['jobs']} active, {c['merged_jobs']} merged. "
+                         f"Accepted as built {frequency(c['acceptance']['rate'])}. "
+                         f"Median lead {show(lead['median'])} hours ({lead['sample']}/{c['merged_jobs']} timed, "
+                         f"{lead['excluded']} unknown). Median elapsed to ready {show(elapsed['median'])} minutes "
+                         f"({elapsed['sample']}/{c['merged_jobs']} timed, {elapsed['excluded']} unknown).")
+            lines.append(f"  Owner active time {show(effort['known_minutes'])} known minutes "
+                         f"({effort['covered_jobs']}/{c['jobs']} fully covered, {effort['unknown_jobs']} unknown). "
+                         f"Median whole-job owner time {show(owner['median'])} minutes "
+                         f"({owner['sample']}/{c['jobs']} measured, {owner['excluded']} unknown). "
+                         f"Rework {show(effort['rework_minutes'])} known minutes "
+                         f"({effort['rework_covered_jobs']}/{c['jobs']} fully covered, "
+                         f"{c['jobs']-effort['rework_covered_jobs']} unknown). "
+                         f"Guardrails {guard['covered_requirements']}/{guard['eligible_requirements']} applicable "
+                         f"requirements verified, {guard['proven_requirements']} passing, "
+                         f"{guard['eligible_requirements']-guard['covered_requirements']} unknown. "
+                         f"{guard['jobs_without_requirement_inventory']} jobs lack an inventory.")
+        small = coverage["small_groups"]
+        if small:
+            labels = [f"{label_for(c)} ({c['jobs']})" for c in small[:4]]
+            lines += ["", f"Small sample groups, by active job count · {', '.join(labels)}."]
+        omitted = max(0, len(rows)-2) + max(0, len(small)-4)
+        if omitted:
+            lines.append(f"{omitted} additional groups appear in the JSON report.")
+    if any(rows for _, _, _, rows, _ in views):
+        lines += ["", "The JSON report includes group outcomes, defect follow-up, escalations, recovery and "
+                  "costs. Cost subtotals include uniquely attributable recorded amounts. Shared and conflicting "
+                  "items are counted separately."]
     m = report["matched_tasks"]
     if m["candidate_keys"]:
         lines += ["", f"**Matched tasks** {len(m['pairs'])}/{m['candidate_keys']} keys comparable. "

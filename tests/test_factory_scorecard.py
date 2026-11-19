@@ -130,6 +130,169 @@ class WeeklyScorecard(unittest.TestCase):
         self.assertEqual(report(a, sample("b", "direct", 5, "m"))["matched_tasks"]["pairs"], [])
         self.assertEqual(report(a, b)["task_cohorts"], [])
 
+    def test_cohort_metrics_use_each_outcomes_eligible_population(self):
+        context = event("task_context", 1, task_type="docs", task_size="small")
+        accepted = event("owner_decision", 2, disposition="accepted", material_follow_up=False)
+        accepted["candidate_sha"] = "a" * 40
+        charge = event("usage_cost", 5, cost_type="incremental_charge", unit="currency",
+                       currency="USD", amount="0.00", billing_item="shared-invoice")
+        known = record("known", events=[context, accepted, charge,
+                       event("owner_effort", 3, activity="correction", minutes=5, rework=True),
+                       event("owner_effort_coverage", 4, day=6, scope="job", complete=True)])
+        known["guardrails"] = dict(coverage=dict(eligible=2, covered=1, proven=0), requirements=[
+            dict(id="test", required=True, status="fail"), dict(id="review", required=True, status="unverified")])
+        others = [record(f"other-{i}", events=[context]) for i in range(7)]
+        others[0]["events"].append(dict(accepted, source={"kind": "reviewer"}))
+        unclassified_effort = event("owner_effort", 8, activity="review", minutes=3, rework=None)
+        others[1]["events"].extend([unclassified_effort, event("owner_effort_coverage", 9, 6, scope="job", complete=True)])
+        merged_only = record("merged-only", history=[(5, "merged")], events=[context])
+        ongoing = record("ongoing", history=[(3, "intake")], events=[context])
+        separate = record("separate", events=[dict(context, data=dict(task_type="docs", task_size="large")), charge])
+        result = report(known, *others, merged_only, ongoing, separate, window=None)
+        self.assertEqual(len(result["task_cohorts"]), 1)
+        cohort = result["task_cohorts"][0]
+        self.assertEqual(cohort["jobs"], 10)
+        self.assertEqual(cohort.get("acceptance", {}).get("rate"),
+                         dict(numerator=1, eligible=8, covered=1, unknown=7, percent=None))
+        self.assertEqual(cohort["merged_jobs"], 9)
+        self.assertEqual(cohort["lead_hours"], dict(median=96, sample=8, excluded=1))
+        self.assertEqual(cohort["agent_elapsed_minutes"], dict(median=4320, sample=8, excluded=1))
+        self.assertEqual(cohort["owner_minutes"], dict(median=4, sample=2, excluded=8))
+        self.assertEqual(cohort["owner_effort"]["rework_minutes"], 5)
+        self.assertIsNone(cohort["owner_effort"]["rework_total_minutes"])
+        self.assertEqual(cohort["owner_effort"]["covered_jobs"], 2)
+        self.assertEqual(cohort["owner_effort"]["rework_covered_jobs"], 1)
+        self.assertEqual(cohort["guardrails"]["covered_requirements"], 1)
+        self.assertEqual(cohort["guardrails"]["proven_requirements"], 0)
+        self.assertEqual(cohort["guardrails"]["jobs_without_requirement_inventory"], 9)
+        self.assertIsNone(cohort["guardrails"]["effective_total"])
+        self.assertEqual(cohort["cost_coverage"]["incremental_charge"], dict(covered=1, eligible=10, unknown=9))
+        self.assertEqual(cohort["cost_coverage"]["subscription_charge"]["unknown"], 10)
+        self.assertIsNone(cohort["escaped_defects"]["rate"])
+        self.assertIsNone(cohort["interruptions"]["verified_safe"]["percent"])
+        self.assertIsNone(cohort["escalations"]["precision"]["percent"])
+        summary = render_weekly_report(result).split("**Task type and size**")[-1]
+        self.assertIn("1/8", summary)
+        self.assertIn("7 unknown", summary)
+        self.assertIn("Median whole-job owner time 4.0 minutes (2/10 measured, 8 unknown)", summary)
+        self.assertIn("8/9", summary)
+        self.assertIn("1/10", summary)
+
+    def test_cohort_inventory_shows_small_and_unclassified_groups_at_cutoff(self):
+        odd_label = "[fake](https://example.test)"
+        labeled = record(events=[event("task_context", 1, task_type=odd_label, task_size="small")])
+        late = record("late", events=[event("task_context", 1, 12, task_type="docs", task_size="small")])
+        missing_size = record("missing", events=[event("task_context", 1, task_type="docs")])
+        controlled = record("controlled", events=[event("task_context", 1, task_type="docs", task_size="small")],
+                            origin="controlled")
+        fake_label = event("task_context", 1, task_type="demo", task_size="small")
+        fake_label["origin"] = "controlled"
+        result = report(labeled, late, missing_size, controlled, record("real", events=[fake_label]), cutoff=at(8))
+        self.assertEqual(result.get("task_cohort_coverage"), dict(
+            covered=1, eligible=4, unknown=3, minimum_jobs=10,
+            small_groups=[dict(task_type=odd_label, task_size="small", jobs=1)]))
+        self.assertEqual(result["task_cohorts"], [])
+        summary = render_weekly_report(result)
+        self.assertIn("1/4 active jobs", summary)
+        self.assertIn("3 unknown", summary)
+        self.assertIn("Small sample", summary)
+        self.assertIn(f"`{odd_label}`", summary)
+        self.assertNotIn("**Task type and size**", render_weekly_report(report(labeled, timezone=None)))
+
+    def test_cohort_recovery_counts_only_linked_effort_and_distinguishes_reported_recurrence(self):
+        label = event("task_context", 1, task_type="docs", task_size="small")
+        linked = [event("interruption", 2, interruption_id="i", started_at=at(3), outcome="unresolved"),
+                  event("owner_effort", 3, activity="recovery", minutes=0, rework=True),
+                  event("owner_effort", 4, activity="recovery", minutes=22, rework=True)]
+        linked.extend(event("recovery_decision", n, failure_id=f"f{n}", cause="timeout",
+                            interruption_event_ids=["2"], owner_effort_event_ids=["3"]) for n in (5, 6))
+        result = report(record("first", events=[label, *linked]),
+                        *(record(f"j-{i}", events=[label]) for i in range(9)))
+        cohort = result["task_cohorts"][0]
+        self.assertEqual(cohort["interruptions"].get("known_owner_minutes"), 0)
+        self.assertEqual(cohort["interruptions"]["linked_effort_entries"], 1)
+        self.assertEqual(cohort["recovery"]["reported_recurring"], [dict(cause="timeout", count=2)])
+        self.assertEqual(cohort["recovery"]["recurring"], [])
+        self.assertEqual([r["cause"] for r in cohort["recovery"]["records"]], [None, None])
+
+    def test_cost_subtotals_allocate_unique_items_once_and_withhold_shared_or_conflicting_items(self):
+        label = event("task_context", 1, task_type="docs", task_size="small")
+        def charge(n, bill, amount, kind="incremental_charge", currency="USD"):
+            row = event("usage_cost", n, cost_type=kind, unit="currency", currency=currency,
+                        amount=amount, billing_item=bill)
+            row["source"]["provider"] = "synthetic"
+            return row
+        events = [charge(2, "one", "2.20"), charge(3, "one", "2.20"), charge(4, "shared", "30.00"),
+                  charge(5, "disputed", "5"), charge(6, "disputed", "8"),
+                  charge(7, "estimated", "4.00", "api_equivalent_estimate"),
+                  charge(8, "eur", "0.00", currency="EUR")]
+        prior = record("prior", history=[(1, "intake"), (1, "merged")], events=[charge(9, "shared", "30.00")])
+        result = report(prior, record("first", events=[label, *events]),
+                        *(record(f"j-{i}", events=[label]) for i in range(9)))
+        cohort = result["task_cohorts"][0]
+        totals = {(r["cost_type"], r["currency"]): r for r in cohort.get("cost_totals", [])}
+        self.assertIn(("incremental_charge", "USD"), totals)
+        usd = totals["incremental_charge", "USD"]
+        self.assertEqual((usd["known_amount"], usd["allocated_items"], usd["shared_items"],
+                          usd["conflicting_items"]), ("2.20", 1, 1, 1))
+        self.assertIsNone(usd["recorded_amount"])
+        self.assertEqual(totals["api_equivalent_estimate", "USD"]["recorded_amount"], "4.00")
+        self.assertEqual(totals["incremental_charge", "EUR"]["recorded_amount"], "0.00")
+
+    def test_week_and_cohort_share_billing_identity_and_exact_decimal_subtotals(self):
+        label = event("task_context", 1, task_type="docs", task_size="small")
+        def money(n, amount, currency="USD", bill=None):
+            row = event("usage_cost", n, cost_type="incremental_charge", unit="currency",
+                        currency=currency, amount=amount, billing_item=bill, window_start=at(3), window_end=at(4))
+            row["source"] = dict(kind="billing", provider="test-provider", record_id="source-window")
+            return row
+        def totals(*entries):
+            result = report(record("first", events=[label, *entries]), *(record(f"j-{i}", events=[label]) for i in range(9)))
+            return ({r["currency"]: r["amount"] for r in result["costs"]["totals"]},
+                    {r["currency"]: r["recorded_amount"] for r in result["task_cohorts"][0]["cost_totals"]})
+        weekly, cohort = totals(money(2, "2.20"), money(3, "2.20"),
+                                money(4, "1234567890123456789012345678.12", bill="big"),
+                                money(5, "0.000000000000000001", bill="tiny"))
+        exact = {"USD": "1234567890123456789012345680.320000000000000001"}
+        self.assertEqual(weekly, exact)
+        self.assertEqual(cohort, exact)
+        weekly, cohort = totals(money(6, "3", bill="disputed"), money(7, "4", "EUR", "disputed"))
+        self.assertEqual(weekly, {"USD": None, "EUR": None})
+        self.assertEqual(cohort, weekly)
+
+    def test_independent_type_and_size_views_keep_partially_labeled_jobs(self):
+        for dimension, other in (("task_type", "task_size"), ("task_size", "task_type")):
+            def labeled(name, **labels):
+                return record(name, events=[event("task_context", 1, **labels)])
+            rows = [labeled(f"j-{i}", **{dimension: "shared", other: "a" if i < 6 else "b"}) for i in range(12)]
+            rows.extend([labeled("only-one", **{other: "a"}), labeled("only-other", **{dimension: "different"}),
+                         dict(labeled("demo", **{dimension: "shared", other: "a"}), origin="controlled")])
+            result = report(*rows)
+            self.assertEqual(result["task_cohorts"], [])
+            view = result.get("task_cohorts_by", {}).get(dimension, {})
+            self.assertEqual(view.get("coverage", {}).get("covered"), 13)
+            self.assertEqual(view["coverage"]["unknown"], 1)
+            self.assertEqual(view["coverage"]["eligible"], 14)
+            self.assertEqual(view["cohorts"][0][dimension], "shared")
+            self.assertEqual(view["cohorts"][0]["jobs"], 12)
+            self.assertEqual(sorted(r["jobs"] for r in result["task_cohort_coverage"]["small_groups"]), [6, 6])
+            self.assertIn("shared · 12 active", render_weekly_report(result))
+
+    def test_unsubmitted_dispositions_and_partial_zero_rework_remain_visible(self):
+        label = event("task_context", 1, task_type="docs", task_size="small")
+        free = record("free", events=[label, event("owner_effort_coverage", 2, 6, scope="job", complete=True)])
+        others = [record(f"other-{i}", events=[label]) for i in range(6)]
+        terminal = [record(stage, history=[(1, "intake"), (4, stage)], events=[label])
+                    for stage in ("failed", "abandoned", "rejected")]
+        cohort = report(free, *others, *terminal)["task_cohorts"][0]
+        self.assertEqual(cohort.get("outcomes"), dict(merged=7, failed=1, abandoned=1, rejected=1))
+        self.assertEqual(cohort["acceptance"]["rate"]["eligible"], 7)
+        self.assertEqual(cohort["acceptance"]["no_recorded_submission"], 3)
+        effort = cohort["owner_effort"]
+        self.assertEqual(effort["known_minutes"], 0)
+        self.assertEqual(effort["rework_minutes"], 0)
+        self.assertIsNone(effort["rework_total_minutes"])
+
     def test_ratings_and_acceptance_require_owner_source(self):
         judgment = event("owner_decision", 1, disposition="accepted", material_follow_up=False)
         judgment["source"]["kind"] = "reviewer"
