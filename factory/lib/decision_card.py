@@ -316,7 +316,7 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
 
 
 def render_decision_card(job: dict, events: list[dict], guardrails: dict, recovery: dict, *,
-                         verified_source_url: str | None = None) -> str:
+                         verified_source_url: str | None = None, verified_candidate_url: str | None = None) -> str:
     """Return a Markdown card using current observations and read-only guardrail results."""
     events = sorted(
         (event for event in events if event.get("origin") == "real"),
@@ -331,6 +331,10 @@ def render_decision_card(job: dict, events: list[dict], guardrails: dict, recove
     source = tracker_url(verified_source_url)
     links = partial(_references, job_id=job_id, trusted_urls=(source,))
     candidate_display = markdown_code(candidate) if candidate else "unknown"
+    if source and candidate:
+        expected = f"{source.rsplit('/', 2)[0]}/commit/{candidate}"
+        if verified_candidate_url == expected:
+            candidate_display = f"[{candidate_display}]({expected})"
     heading = f"# Decision card · {identifier}"
     if title:
         heading += f" · {markdown_text(title)}"

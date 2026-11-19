@@ -864,17 +864,26 @@ def changed_files(worktree: Path, base: str, job: dict | None = None) -> list[st
 # --------------------------------------------------------------------------
 
 
-def repo_slug(root: Path) -> str:
-    url = run(["git", "remote", "get-url", "origin"], cwd=root).strip()
+def repo_slug(root: Path, *, remote: str | None = None) -> str:
+    url = remote if remote is not None else run(["git", "remote", "get-url", "origin"], cwd=root).strip()
     m = re.search(r"github\.com[:/]+([^/]+/[^/]+?)(?:\.git)?/?$", url)
     if not m:
-        raise FactoryError(f"origin is not a GitHub repo: {url}")
+        raise FactoryError("origin is not a GitHub repo")
     return m.group(1)
 
 
 def gh_api(root: Path, method: str, path: str, fields: dict | None = None, check: bool = True):
     """Call the GitHub REST API for this repo. `path` is relative to repos/<owner>/<repo>."""
-    cmd = ["gh", "api", "-X", method, f"repos/{repo_slug(root)}/{path}" if path else f"repos/{repo_slug(root)}"]
+    from job_links import PublicGitHubResponse, public_repo
+
+    remote = run(["git", "remote", "get-url", "origin"], cwd=root).removesuffix("\n")
+    repo = repo_slug(root, remote=remote)
+    cmd = ["gh", "api", "-X", method, f"repos/{repo}/{path}" if path else f"repos/{repo}"]
+    link_endpoint = (method == "GET" and re.fullmatch(r"issues/[1-9][0-9]*", path)
+                     or method == "POST" and path == "pulls")
+    capture = link_endpoint and os.environ.get("GH_HOST", "github.com") == "github.com" and public_repo(remote) == repo
+    if capture:
+        cmd += ["--hostname", "github.com"]
     for key, value in (fields or {}).items():
         if isinstance(value, list):
             for v in value:
@@ -900,7 +909,8 @@ def gh_api(root: Path, method: str, path: str, fields: dict | None = None, check
     else:
         out = run(cmd, check=check)
     try:
-        return json.loads(out) if out.strip() else None
+        data = json.loads(out) if out.strip() else None
+        return PublicGitHubResponse(data, repo) if capture and isinstance(data, dict) else data
     except json.JSONDecodeError:
         return None
 

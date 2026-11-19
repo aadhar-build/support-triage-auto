@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import factory as F
+from job_links import public_repo, verified_links
 from guardrails import evaluate_guardrails, read_job_artifact
 from observations import ObservationError, _artifact_path, _open_job, _url, load_events
 
@@ -27,11 +28,6 @@ _FINAL_RECEIPT = re.compile(
     rb"GATE: PASS\nCANDIDATE: (?P<candidate_sha>[0-9a-f]{40}|[0-9a-f]{64})\n"
     rb"BASE: (?P<base_sha>[0-9a-f]{40}|[0-9a-f]{64})\nSPEC-DIGEST: (?P<spec_digest>[0-9a-f]{64})\n\n"
 )
-_GITHUB_REMOTE = re.compile(
-    r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)([a-zA-Z0-9-]+/[a-zA-Z0-9_.-]+?)(?:\.git)?/?"
-)
-
-
 _TRACKER_URL = re.compile(
     r"https://github\.com/[A-Za-z0-9-]+/(?!\.{1,2}/)[A-Za-z0-9_.-]+/(?:issues|pull)/[1-9][0-9]*"
 )
@@ -122,13 +118,12 @@ def _git(root: Path, *args: str) -> str | None:
         )
     except (OSError, UnicodeError, subprocess.TimeoutExpired):
         return None
-    return result.stdout.strip() if result.returncode == 0 else None
+    return result.stdout.removesuffix("\n") if result.returncode == 0 else None
 
 
 def github_repo(root: Path) -> str | None:
     remote = _git(root, "remote", "get-url", "origin")
-    match = _GITHUB_REMOTE.fullmatch(remote or "")
-    return match[1] if match else None
+    return public_repo(remote)
 
 
 def _bindings(root: Path, cfg: dict, job: dict, spec: bytes | None) -> tuple[dict, bool]:
@@ -461,7 +456,8 @@ def _receipt_rows(verifier, folder: Path, job: dict, bindings: dict, as_of: date
     return rows, first
 
 
-def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | None = None) -> dict:
+def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | None = None,
+                     verify_github_links=False) -> dict:
     """Collect as-of observations and read local technical evidence independently."""
     cutoff = as_of or datetime.now(timezone.utc)
     job, state = _job_state(folder)
@@ -502,10 +498,15 @@ def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | N
     if first_gate and not any(row["id"] == _CHECKS and row["status"] == first_gate["status"]
                               for row in guardrails["requirements"]):
         first_gate = None
-    # Legacy jobs store tracker numbers without the repository identity. Origin and
-    # its tracking refs can both refer to a different repository after a repoint.
-    job = {**job, "source_url": None, "candidate_url": None}
+    source, commit_link = None, None
+    if verify_github_links and job.get("origin") != "controlled":
+        source, commit_link = verified_links(root, job, candidate["candidate_sha"], github_repo)
+        if source and state != read_job_artifact(folder, "job.json"):
+            source, commit_link = None, None
+        elif commit_link and _commit(root, f"refs/heads/factory/{job['id']}") != candidate["candidate_sha"]:
+            commit_link = None
+    job = {**job, "source_url": source, "candidate_url": commit_link}
     worker_receipts, worker_diagnostics = read_worker_receipts(folder, job, as_of=cutoff)
     return {"job": job, "events": events, "worker_receipts": worker_receipts,
             "worker_receipt_diagnostics": worker_diagnostics, "guardrails": guardrails, "diagnostics": guardrails["diagnostics"],
-            "url": None, "first_gate": first_gate}
+            "url": source, "candidate_url": commit_link, "first_gate": first_gate}
