@@ -15,6 +15,13 @@ the split's threads attributed to NAME at their last inbound turn are sampled an
 (context_signals.brand_attribution). Stdout then also gives brand_threads, excluded_threads,
 excluded_other_brand and excluded_unattributed (over the whole split, before sampling), and
 the report gains a "brand" object. --brand cannot be combined with --metrics-out.
+
+--larger real swaps the fake larger tier for ModelLargerTier (headless Claude Code on the
+subscription login). It runs only on the dev split, or on the eval split behind
+--post-merge-eval; --split full is always refused. Before any data is read it loads the
+owner's price file (--prices), the monthly cap (--thresholds) and the spend log
+(--spend-log, outside the repo), and refuses with exit 2 if any is missing or bad, or the
+month is already at its cap. --max-spend-usd caps one run (at most MAX_RUN_SPEND_USD).
 """
 
 from __future__ import annotations
@@ -24,7 +31,9 @@ import hashlib
 import json
 import math
 import random
+import os
 import sys
+import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
@@ -34,8 +43,12 @@ from triage.cheap_tier import CheapTier
 from triage.context_signals import brand_attribution
 from triage.evaluate import GoldFileError, load_gold, report_to_json, report_to_markdown, score
 from triage.loader import HeaderError
+from triage.model_prices import PricesError, UnknownBillError, load_prices
+from triage.model_tier import MAX_RUN_SPEND_USD, PROMPT_VERSION, ClaudeCodeClient, \
+    ModelLargerTier
 from triage.policy_check import RulesError
 from triage.router import DEFAULT_CONFIDENCE_THRESHOLD, route_threads
+from triage.spend_log import SpendLog, SpendLogError, load_monthly_cap
 from triage.split import DEFAULT_SPLIT_PATH, SPLIT_NAMES, SplitConfigError, load_split_config, \
     split_threads
 from triage.threads import build_threads
@@ -45,6 +58,10 @@ from triage.trace import REPO_ROOT, RunInfo, TraceError, build_record, check_tra
 
 DEFAULT_DATA = "data/raw/twcs.csv"
 DEFAULT_RULES_PATH = REPO_ROOT / "policies" / "rules.json"
+DEFAULT_PRICES_PATH = REPO_ROOT / "policies" / "model_prices.json"
+DEFAULT_THRESHOLDS_PATH = REPO_ROOT / "evals" / "thresholds.json"
+DEFAULT_SPEND_LOG = "~/.local/state/support-triage/spend-log.jsonl"
+DEFAULT_LARGER_MODEL = "claude-haiku-5-5"
 ATTRIBUTION = "first-tweet mention or brand reply known at the last inbound turn"
 
 
@@ -76,7 +93,58 @@ def _parser() -> argparse.ArgumentParser:
                    help="which gold set this is; required with --metrics-out")
     p.add_argument("--run-at", default=None,
                    help="ISO 8601 UTC time ending in Z for the metrics file (default: now)")
+    p.add_argument("--larger", choices=("fake", "real"), default="fake",
+                   help="larger tier: fake stand-in (default) or a real model via Claude Code")
+    p.add_argument("--max-spend-usd", type=float, default=MAX_RUN_SPEND_USD,
+                   help="per-run cap in API-equivalent USD, at most %.2f" % MAX_RUN_SPEND_USD)
+    p.add_argument("--larger-model", default=DEFAULT_LARGER_MODEL)
+    p.add_argument("--prices", default=str(DEFAULT_PRICES_PATH),
+                   help="owner price file (real mode only)")
+    p.add_argument("--thresholds", default=str(DEFAULT_THRESHOLDS_PATH),
+                   help="thresholds file holding the monthly cap (real mode only)")
+    p.add_argument("--spend-log", default=DEFAULT_SPEND_LOG,
+                   help="durable monthly spend log outside the repo (real mode only)")
+    p.add_argument("--create-spend-log", action="store_true",
+                   help="start a new spend log; refused when the file exists")
+    p.add_argument("--claude-bin", default="claude")
+    p.add_argument("--post-merge-eval", action="store_true",
+                   help="opt in to one real eval-split scoring run after a prompt merge")
     return p
+
+
+def _real_preflight(args, clock):
+    """Refuse a real run before any data is read. Returns (prices, spend_log, cap)."""
+    if args.split == "full":
+        raise _Fail("--larger real never runs on the full split")
+    if args.split == "eval" and not args.post_merge_eval:
+        raise _Fail("--larger real on the eval split needs --post-merge-eval")
+    if args.post_merge_eval and args.split != "eval":
+        raise _Fail("--post-merge-eval only applies to --split eval")
+    try:
+        prices = load_prices(args.prices)
+        prices.band(args.larger_model, 0)
+    except PricesError as e:
+        raise _Fail("bad prices file: %s" % " ".join(str(e).split()))
+    except UnknownBillError:
+        raise _Fail("prices file %s has no price for model %s" % (args.prices,
+                                                                  args.larger_model))
+    try:
+        cap = load_monthly_cap(args.thresholds)
+        path = os.path.expanduser(args.spend_log)
+        if args.create_spend_log:
+            SpendLog(path, cap)  # refuses a path inside the repo before anything is made
+            parent = os.path.dirname(os.path.abspath(path))
+            os.makedirs(parent, mode=0o700, exist_ok=True)
+            SpendLog.create(path)
+        log = SpendLog(path, cap, clock=clock)
+        mtd = log.month_to_date()
+    except SpendLogError as e:
+        raise _Fail(" ".join(str(e).split()))
+    except OSError as e:
+        raise _Fail("cannot prepare spend log: %s" % (e.strerror or e))
+    if mtd >= cap:
+        raise _Fail("monthly cap reached: month to date %.4f of %.4f USD" % (mtd, cap))
+    return prices, log, cap
 
 
 def _resolve_run_at(value: Optional[str]) -> str:
@@ -141,7 +209,7 @@ def _with_brand(text: str, fmt: str, counts: dict) -> str:
     return text.rstrip("\n") + "\n" + "\n".join(lines) + "\n"
 
 
-def _run(args) -> str:
+def _run(args, model_client=None, clock=None) -> str:
     if args.sample_size < 1:
         raise _Fail("--sample-size must be at least 1, got %d" % args.sample_size)
     if not math.isfinite(args.threshold) or not (0.0 <= args.threshold <= 1.0):
@@ -150,6 +218,11 @@ def _run(args) -> str:
     for name, price in prices.items():
         if not math.isfinite(price) or price < 0:
             raise _Fail("--price-%s must be a finite number >= 0, got %r" % (name, price))
+    if not math.isfinite(args.max_spend_usd) or not 0 <= args.max_spend_usd <= MAX_RUN_SPEND_USD:
+        raise _Fail("--max-spend-usd must be a finite number in [0, %.2f], got %r"
+                    % (MAX_RUN_SPEND_USD, args.max_spend_usd))
+    if args.post_merge_eval and args.larger != "real":
+        raise _Fail("--post-merge-eval needs --larger real")
     if args.metrics_out is not None and args.cohort is None:
         raise _Fail("--cohort is required with --metrics-out")
     if args.metrics_out is not None and args.brand is not None:
@@ -164,6 +237,9 @@ def _run(args) -> str:
         rules_ver = effective.version if args.trace is not None else None
     except RulesError as e:
         raise _Fail("bad rules file: %s" % " ".join(str(e).split()))
+    real = args.larger == "real"
+    if real:
+        model_prices, spend_log, monthly_cap = _real_preflight(args, clock)
 
     try:
         gold = load_gold(args.gold)
@@ -205,11 +281,37 @@ def _run(args) -> str:
                         % (args.split, args.brand))
     sample = random.Random(args.seed).sample(kept, min(args.sample_size, len(kept)))
 
-    routed = route_threads(sample, CheapTier(prices["cheap"]), FakeLargerTier(
-        price_per_call=prices["larger"]), FakeAgentTier(prices["agent"]),
-        threshold=args.threshold, topics=topics)
+    cheap = CheapTier(prices["cheap"])
+    if real:
+        client = model_client if model_client is not None else ClaudeCodeClient(
+            args.larger_model, claude_bin=args.claude_bin)
+        larger = ModelLargerTier(client, cheap, model_prices, spend_log, args.larger_model,
+                                 run_id=uuid.uuid4().hex, split=args.split,
+                                 max_spend_usd=args.max_spend_usd,
+                                 price_per_call=prices["larger"])
+    else:
+        larger = FakeLargerTier(price_per_call=prices["larger"])
+    routed = route_threads(sample, cheap, larger, FakeAgentTier(prices["agent"]),
+                           threshold=args.threshold, topics=topics)
+    usage = {"larger_mode": args.larger, "larger_model": larger.model_id}
+    if real:
+        try:
+            mtd = spend_log.month_to_date()
+        except SpendLogError:
+            mtd = None  # the run already happened; the report says the figure is unknown
+        usage.update(
+            larger_prompt_version=PROMPT_VERSION, larger_post_merge_eval=args.post_merge_eval,
+            larger_input_tokens=larger.input_tokens, larger_output_tokens=larger.output_tokens,
+            larger_cache_write_tokens=larger.cache_write_tokens,
+            larger_cache_read_tokens=larger.cache_read_tokens,
+            larger_confirmed_usd=larger.confirmed_usd,
+            larger_unconfirmed_usd=larger.unconfirmed_usd, max_spend_usd=args.max_spend_usd,
+            monthly_cap_usd=monthly_cap, month_to_date_usd=mtd,
+            larger_stopped_by=larger.stopped_by, larger_answered=larger.answered,
+            larger_reservation_exceeded=larger.reservation_exceeded,
+            larger_fallbacks=dict(larger.fallbacks))
     report = score(routed, gold, prices, sample_size=args.sample_size, seed=args.seed,
-                   split=args.split, threshold=args.threshold)
+                   split=args.split, threshold=args.threshold, larger_usage=usage)
     text = report_to_json(report) if args.format == "json" else report_to_markdown(report)
     if brand_counts is not None:
         text = _with_brand(text, args.format, brand_counts)
@@ -236,6 +338,13 @@ def _run(args) -> str:
     summary = ("routed=%d scored=%d without_gold=%d gold_unmatched=%d split=%s"
                % (report.threads_routed, report.threads_scored, report.threads_without_gold,
                   report.gold_rows_unmatched, args.split))
+    mtd = report.month_to_date_usd
+    larger_part = (" larger=%s spend_usd=%.4f unconfirmed_usd=%.4f month_to_date_usd=%s "
+                   "stopped_by=%s" % (args.larger, report.larger_confirmed_usd,
+                                      report.larger_unconfirmed_usd,
+                                      "n/a" if mtd is None else "%.4f" % mtd,
+                                      report.larger_stopped_by or "none"))
+    summary = summary.replace(" split=", larger_part + " split=", 1)
     summary += " topics_loaded=%d" % len(topics)
     summary += " brand=%s rules_loaded=%d repeat_contact=%s" % (
         label, len(effective.rules), "on" if effective.repeat_contact is not None else "off")
@@ -246,10 +355,11 @@ def _run(args) -> str:
     return summary
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: Optional[List[str]] = None, *, model_client=None, clock=None) -> int:
+    """`model_client` replaces ClaudeCodeClient and `clock` goes to SpendLog: test seams."""
     args = _parser().parse_args(argv)
     try:
-        summary = _run(args)
+        summary = _run(args, model_client=model_client, clock=clock)
     except (_Fail, TraceError) as e:
         print("error: %s" % e, file=sys.stderr)
         return 2

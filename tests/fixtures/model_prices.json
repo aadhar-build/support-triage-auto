@@ -1,0 +1,14 @@
+{
+  "version": "test-fixture",
+  "as_of": "made-up",
+  "source": "Made-up test prices, not real prices.",
+  "models": {
+    "fixture-model": {
+      "bands": [
+        {"max_input_tokens": 100000, "input_usd_per_mtok": 1.0, "output_usd_per_mtok": 5.0},
+        {"max_input_tokens": null, "input_usd_per_mtok": 2.0, "output_usd_per_mtok": 10.0,
+         "cache_write_usd_per_mtok": 2.5, "cache_read_usd_per_mtok": 0.2}
+      ]
+    }
+  }
+}
