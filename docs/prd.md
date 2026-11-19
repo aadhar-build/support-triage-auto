@@ -112,7 +112,7 @@ Labels, thresholds, policy rules, taxonomy and guidelines belong to the owner. T
 
 ## Stack and migration (owner decision, 19 Nov; DRAFT pending Aadhar's approval)
 
-- **Backend in Go** (language choice pending Aadhar's confirmation; Rust only for a measured hot path). **Frontend in TypeScript.** Python is avoided for new work.
+- **Backend in Go** (Aadhar chose Go on 19 Nov; Rust only for a measured hot path). **Frontend in TypeScript.** Python is avoided for new work.
 - **Nothing working is thrown away first.** Today's Python code (about 8,500 lines, 32 modules, 727 tests) becomes the reference implementation. Each Go port must match its Python module's output exactly on the synthetic set and generated data (golden files) before the Python module is deleted.
 - **One backend, one API.** A Go service and CLIs (`backend/`) expose JSON over a local HTTP API. A TypeScript admin console (`web/`) is the only UI: reports, drift, incidents, policies, and conversation-and-state replay with traces. The current HTML generators retire once the console has parity.
 - **Port order** (each step is one or more factory issues):
