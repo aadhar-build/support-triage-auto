@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """The factory's job tool: the only writer of job.json.
 
-Each command prints one line, so the orchestrator's context stays small.
-
   job queue                   open issue numbers labelled for the factory
   job labels                  create the factory's labels in the repo
   job create <issue>          start a job for a labelled issue; writes issue.md
@@ -24,6 +22,9 @@ Each command prints one line, so the orchestrator's context stays small.
   job reject <id>             reason on stdin; comments, unlabels, closes the PR
   job record <id> <key> <v>   owner-reported numbers for the scorecard: owner_minutes,
                               cost_usd, escaped (true/false), owner_changes (true/false)
+  job observe <id> <file|->   append one v1 JSON observation from a file or stdin
+  job card <id>               render the owner's decision card
+  job recovery <id>           report recovery evidence as JSON
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -42,6 +44,7 @@ from contextlib import ExitStack, contextmanager
 from functools import wraps
 from pathlib import Path, PurePosixPath
 
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import factory as F  # noqa: E402
 
@@ -853,8 +856,24 @@ def cmd_labels(root: Path, cfg: dict, args: list[str]) -> str:
     return "labels created: " + (", ".join(made) or "none (already exist)")
 
 
-RECORDABLE = {"owner_minutes": float, "cost_usd": float,
-              "escaped": lambda v: v.lower() == "true", "owner_changes": lambda v: v.lower() == "true"}
+def _record_number(value: str) -> float:
+    try:
+        number = float(value)
+        if math.isfinite(number) and number >= 0:
+            return number
+    except ValueError:
+        pass
+    raise F.FactoryError("expected a finite nonnegative number")
+
+
+def _record_bool(value: str) -> bool:
+    if value not in ("true", "false"):
+        raise F.FactoryError("expected true or false")
+    return value == "true"
+
+
+RECORDABLE = {"owner_minutes": _record_number, "cost_usd": _record_number,
+              "escaped": _record_bool, "owner_changes": _record_bool}
 
 
 @_admitted("record")
@@ -865,6 +884,56 @@ def cmd_record(root: Path, cfg: dict, args: list[str]) -> str:
     job[args[1]] = RECORDABLE[args[1]](args[2])
     F.write_job(d, job)
     return f"{job['id']}: {args[1]} = {job[args[1]]}"
+
+
+def cmd_observe(root: Path, cfg: dict, args: list[str]) -> str:
+    from evidence_adapter import read_reporting_job
+    from observations import MAX_EVENT_BYTES, ObservationError, append_event, decode_event_json
+
+    if len(args) != 2:
+        raise F.FactoryError("usage: job observe <id> <file|->")
+    d = F.reporting_job_dir(root, args[0])
+    try:
+        if args[1] == "-":
+            raw = sys.stdin.buffer.read(MAX_EVENT_BYTES + 1)
+        else:
+            fd = os.open(args[1], os.O_RDONLY | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    raise F.FactoryError("expected a regular observation input file")
+                raw = stream.read(MAX_EVENT_BYTES + 1)
+    except OSError as exc:
+        raise F.FactoryError("cannot read observation input") from exc
+    read_reporting_job(d)
+    try:
+        return json.dumps(append_event(d, decode_event_json(raw)), indent=2)
+    except ObservationError as exc:
+        raise F.FactoryError(str(exc)) from exc
+
+
+def cmd_card(root: Path, cfg: dict, args: list[str]) -> str:
+    from decision_card import render_decision_card
+    from evidence_adapter import reporting_record
+    from factory_recovery import recovery_summary
+
+    d = F.reporting_job_dir(root, args[0])
+    record = reporting_record(root, cfg, d)
+    job, events = record["job"], record["events"]
+    return render_decision_card(job, events, record["guardrails"], recovery_summary(job, events)).rstrip("\n")
+
+
+def cmd_recovery(root: Path, cfg: dict, args: list[str]) -> str:
+    from evidence_adapter import read_reporting_job
+    from factory_recovery import recovery_summary
+    from observations import load_events
+
+    d = F.reporting_job_dir(root, args[0])
+    job = read_reporting_job(d)
+    events, diagnostics = load_events(d, include_ancestry=True)
+    if job.get("origin") != "controlled":
+        events = [event for event in events if event["origin"] == "real"]
+    return json.dumps({**recovery_summary(job, events), "diagnostics": diagnostics,
+                       "incident_and_interruption_source_verification": "unavailable"}, indent=2)
 
 
 def cmd_reconcile_operation(root: Path, cfg: dict, args: list[str]) -> str:
@@ -896,6 +965,7 @@ COMMANDS = {
     "advance": (cmd_advance, 2), "intake": (cmd_intake, 1), "worktree": (cmd_worktree, 1),
     "pr": (cmd_pr, 1), "clarify": (cmd_clarify, 1), "pickup": (cmd_pickup, 1), "answers": (cmd_answers, 1),
     "tally": (cmd_tally, 1), "decide": (cmd_decide, 1),
+    "observe": (cmd_observe, 2), "card": (cmd_card, 1), "recovery": (cmd_recovery, 1),
     "reconcile-operation": (cmd_reconcile_operation, 3),
     "merge": (cmd_merge, 1), "re-review": (cmd_rereview, 1), "reject": (cmd_reject, 1), "record": (cmd_record, 3),
 }
