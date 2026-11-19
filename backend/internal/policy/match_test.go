@@ -132,3 +132,52 @@ func TestEditedPhrasesAreEnforced(t *testing.T) {
 		t.Errorf("Check = %#v, want %#v", got, want)
 	}
 }
+
+// A Topic built by hand (not by TopicsFromData) is matched from its Phrases,
+// exactly like a loaded one, so it can never silently match nothing.
+// Expected values are literals from Python's matched_topics run on the same
+// topics loaded through topics_from_data.
+func TestHandBuiltTopicIsMatched(t *testing.T) {
+	topics := []Topic{{ID: "t-a", Phrases: []string{"legal action"}}, {ID: "t-b", Phrases: []string{"lawyer"}}}
+	if got, want := MatchedTopics([]string{"I will take LEGAL  action", "ID"}, topics), []string{"t-a"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("MatchedTopics = %#v, want %#v", got, want)
+	}
+	if got, want := MatchedTopics([]string{"my lawyer’s note"}, topics), []string{"t-b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("MatchedTopics = %#v, want %#v", got, want)
+	}
+}
+
+// Changing a loaded topic's Phrases changes what MatchedTopics matches.
+func TestEditedTopicPhrasesAreMatched(t *testing.T) {
+	topics, err := TopicsFromData(mustData(t, `{"escalate_always":[{"id":"t-a","phrases":["legal action"]}]}`), "mem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	topics[0].Phrases[0] = "lawyer"
+	if got := MatchedTopics([]string{"legal action now"}, topics); len(got) != 0 {
+		t.Errorf("old phrase still matched: %#v", got)
+	}
+	if got, want := MatchedTopics([]string{"my lawyer"}, topics), []string{"t-a"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("MatchedTopics = %#v, want %#v", got, want)
+	}
+}
+
+// A hand-built Topic is not validated, as a hand-built Rule is not: its
+// Phrases are compiled as they are. No phrases match nothing. An empty
+// phrase is Python's (?<!\w)(?!\w), which re.search finds in "help!" but not
+// in "abc" (literals from Python).
+func TestHandBuiltTopicOddPhrases(t *testing.T) {
+	for _, phrases := range [][]string{nil, {}} {
+		topics := []Topic{{ID: "t-a", Phrases: phrases}}
+		if got := MatchedTopics([]string{"legal action"}, topics); got == nil || len(got) != 0 {
+			t.Errorf("Phrases %#v: MatchedTopics = %#v, want []string{}", phrases, got)
+		}
+	}
+	topics := []Topic{{ID: "t-a", Phrases: []string{""}}}
+	if got, want := MatchedTopics([]string{"help!"}, topics), []string{"t-a"}; !reflect.DeepEqual(got, want) {
+		t.Errorf(`"" on "help!": MatchedTopics = %#v, want %#v`, got, want)
+	}
+	if got := MatchedTopics([]string{"abc"}, topics); len(got) != 0 {
+		t.Errorf(`"" on "abc": MatchedTopics = %#v, want none`, got)
+	}
+}

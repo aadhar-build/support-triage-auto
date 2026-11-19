@@ -32,11 +32,14 @@ type Rule struct {
 	compiledFrom []string // copy of Phrases when patterns were compiled
 }
 
-// Topic is one always-escalate topic.
+// Topic is one always-escalate topic. A Topic may be built by hand:
+// MatchedTopics always matches the current Phrases, compiling them on the
+// spot when they are not the ones TopicsFromData compiled.
 type Topic struct {
-	ID       string
-	Phrases  []string
-	patterns []*phrasePattern
+	ID           string
+	Phrases      []string
+	patterns     []*phrasePattern
+	compiledFrom []string // copy of Phrases when patterns were compiled
 }
 
 var (
@@ -281,7 +284,8 @@ func TopicsFromData(data Value, source string) ([]Topic, error) {
 			}
 			phrases = append(phrases, p.Str)
 		}
-		topics = append(topics, Topic{ID: id, Phrases: phrases, patterns: compilePhrases(phrases)})
+		topics = append(topics, Topic{ID: id, Phrases: phrases,
+			patterns: compilePhrases(phrases), compiledFrom: slices.Clone(phrases)})
 	}
 	return topics, nil
 }

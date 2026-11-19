@@ -134,6 +134,17 @@ func (r Rule) phrasePatterns() []*phrasePattern {
 	return compilePhrases(r.Phrases)
 }
 
+// phrasePatterns is Rule.phrasePatterns for a Topic: patterns from
+// TopicsFromData are reused only while Phrases still equals what they were
+// compiled from; a hand-built or edited topic is compiled now, so it never
+// silently matches nothing.
+func (t Topic) phrasePatterns() []*phrasePattern {
+	if len(t.patterns) == len(t.Phrases) && slices.Equal(t.compiledFrom, t.Phrases) {
+		return t.patterns
+	}
+	return compilePhrases(t.Phrases)
+}
+
 type hit struct {
 	start, end int
 	ruleID     string
@@ -198,7 +209,7 @@ func MatchedTopics(customerTurns []string, topics []Topic) []string {
 	out := []string{}
 	for _, topic := range topics {
 	search:
-		for _, p := range topic.patterns {
+		for _, p := range topic.phrasePatterns() {
 			for _, text := range texts {
 				if p.search(text) {
 					out = append(out, topic.ID)
