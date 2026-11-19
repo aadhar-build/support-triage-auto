@@ -225,6 +225,63 @@ cli ingest_generated 0 -- python3 scripts/golden_ingest.py --data "$DATA" --spli
 cli ingest_odd_cases 0 -- python3 scripts/golden_ingest.py --data "$ODD" --split-config "$SPLIT" \
   --out-prefix "$G/ingest/odd_cases"
 # --- end ingest goldens ---
+# --- brand_rules conformance goldens (job 088) ---
+# `python3 -m triage.brand_rules --conformance`, one run per case, from the repo
+# root with repo-relative paths, for backend/internal/policy's
+# TestConformanceGolden. Exits 0, 1 and 2 are all part of the reference.
+# G/brand_rules/conformance.txt holds, per case, the lines
+#   case <name>
+#   args <arg> <arg> ...        (single spaces; no argument contains a space)
+#   exit <code>
+#   stdout <line>               (one per stdout line)
+#   stderr <line>               (one per stderr line)
+#   end
+# The repo realpath is replaced by <repo> (a literal replacement, not a regex).
+# Nothing else is rewritten. Inputs are committed made-up fixtures, plus the live
+# policies/rules.json and brands/ for the all-defaults case.
+BR_PAIR=tests/fixtures/brand_rules
+BR_MINE=testdata/brand_rules
+BR_CASES=(
+  "ok_same --conformance --brand same --rules $BR_PAIR/rules.json --brands-dir $BR_PAIR/brands"
+  "differ_version --conformance --brand same --rules $BR_PAIR/rules_other_version.json --brands-dir $BR_PAIR/brands"
+  "broken --conformance --brand broken --rules $BR_PAIR/rules.json --brands-dir $BR_PAIR/brands"
+  "bad_name --conformance --brand Bad --rules $BR_PAIR/rules.json --brands-dir $BR_MINE/no-such-brands-dir"
+  "not_found --conformance --brand gamma --rules $BR_PAIR/rules.json --brands-dir tests/fixtures/brands"
+  "missing_rules --conformance --brand same --rules $BR_MINE/no-such-rules.json --brands-dir $BR_PAIR/brands"
+  "alpha_vs_pair --conformance --brand alpha --rules $BR_PAIR/rules.json --brands-dir tests/fixtures/brands"
+  "badrule --conformance --brand badrule --rules $BR_MINE/numeq_rules.json --brands-dir $BR_MINE/brands"
+  "badrepeat --conformance --brand badrepeat --rules $BR_MINE/numeq_rules.json --brands-dir $BR_MINE/brands"
+  "numeq --conformance --brand numeq --rules $BR_MINE/numeq_rules.json --brands-dir $BR_MINE/brands"
+  "numdiff --conformance --brand numdiff --rules $BR_MINE/numdiff_rules.json --brands-dir $BR_MINE/brands"
+  "defaults --conformance"
+)
+for f in "$BR_PAIR" "$BR_MINE" tests/fixtures/brands policies/rules.json brands; do
+  refuse_raw "repo input" "$f"
+done
+mkdir -p "$G/brand_rules"
+for c in "${BR_CASES[@]}"; do
+  read -r -a br_argv <<<"$c"
+  br_name=${br_argv[0]}
+  br_args=("${br_argv[@]:1}")
+  for f in "${br_args[@]}"; do
+    case "$f" in --*) ;; *) refuse_raw "repo input" "$f" ;; esac
+  done
+  br_rc=0
+  python3 -m triage.brand_rules "${br_args[@]}" >"$W/br.out" 2>"$W/br.err" || br_rc=$?
+  case "$br_rc" in 0|1|2) ;; *) echo "make_golden.sh: brand_rules $br_name exited $br_rc" >&2; exit "$br_rc" ;; esac
+  {
+    printf 'case %s\n' "$br_name"
+    printf 'args %s\n' "${br_args[*]}"
+    printf 'exit %s\n' "$br_rc"
+    while IFS= read -r l; do printf 'stdout %s\n' "${l//"$REPO"/<repo>}"; done <"$W/br.out"
+    while IFS= read -r l; do printf 'stderr %s\n' "${l//"$REPO"/<repo>}"; done <"$W/br.err"
+    printf 'end\n'
+  } >>"$G/brand_rules/conformance.txt"
+done
+mkdir -p "$OUT"
+rm -rf "${OUT:?}/brand_rules"
+cp -R "$G/brand_rules" "$OUT/brand_rules"
+# --- end brand_rules conformance goldens (job 088) ---
 
 # Every CLI succeeded: replace the per-CLI subdirectories in --out.
 mkdir -p "$OUT"
