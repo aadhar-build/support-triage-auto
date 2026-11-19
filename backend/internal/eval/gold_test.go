@@ -177,6 +177,15 @@ func TestLoadGoldDecodePrecedence(t *testing.T) {
 		{"row ends on the boundary with LF", pad(h, 8192-len(bad)) + bad + "\xff\n", weather3},
 		{"row ends on the boundary with CR", trim(pad(hcr, 8192-len(bad))) + "\r" + trim(bad) + "\r" + "\xff\r", "decode"},
 		{"truncated tail in chunk 2 after a boundary LF row", pad(h, 8192-len(bad)) + bad + "\xc3", weather3},
+		// Criterion 13's literals (Fable's second ruling), each confirmed against Python 3.12.
+		{"CR bad row ending at 8192, then e2 82 at end of file", trim(pad(hcr, 8192-len(bad))) + "\r1,weather,ask,0\r\xe2\x82", "decode"},
+		{"LF bad row, then ed a0 at end of file", h + bad + "\xed\xa0", weather2},
+		{"LF bad row, then ed a0 80 at end of file", h + bad + "\xed\xa0\x80", "decode"},
+		{"ff at raw offset 8191", pad(h+bad, 8191) + "\xff", "decode"},
+		{"ff at raw offset 8192", pad(h+bad, 8192) + "\xff", weather2},
+		{"BOM, ff at raw offset 8191", pad(bom+h+bad, 8191) + "\xff", "decode"},
+		{"BOM, ff at raw offset 8192", pad(bom+h+bad, 8192) + "\xff", weather2},
+		{"valid character straddling 8192", trim(pad(h+"1,delivery,ask,0\n", 8192)) + "é\n", "ok"},
 		{"valid file, invalid byte after the last row", h + "1,delivery,ask,0\n\xff", "decode"},
 		{"valid file, invalid byte in a later chunk", pad(h+"1,delivery,ask,0\n", 9000) + "\xfe", "decode"},
 	}
@@ -185,6 +194,10 @@ func TestLoadGoldDecodePrecedence(t *testing.T) {
 		var de *GoldDecodeError
 		var ge *GoldFileError
 		switch {
+		case c.want == "ok":
+			if err != nil {
+				t.Errorf("%s: got %v, want a clean load", c.name, err)
+			}
 		case c.want == "decode":
 			if !errors.As(err, &de) {
 				t.Errorf("%s: got %v, want GoldDecodeError", c.name, err)

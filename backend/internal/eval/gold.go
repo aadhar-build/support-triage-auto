@@ -61,51 +61,88 @@ var asciiDigits = regexp.MustCompile(`^[0-9]+$`)
 
 const textChunk = 8192
 
-// decodeChecker reproduces when CPython's TextIOWrapper (8192-byte chunks,
-// incremental UTF-8 decoder) would have raised UnicodeDecodeError, so a
-// decode error and a row error are reported in Python's order.
-type decodeChecker struct {
-	data    []byte
-	checked int // data[:checked] is known valid
+// decodeSim simulates CPython's TextIOWrapper reads (8192-byte chunks, a
+// non-final incremental UTF-8 decode per read, a final decode on the
+// zero-byte read) so a decode error and a row error are reported in
+// Python's order. Offsets are raw file offsets, BOM included.
+type decodeSim struct {
+	data []byte
+	pos  int  // bytes read
+	dec  int  // bytes decoded into complete characters
+	eof  bool // the zero-byte read (final decode) has happened
 }
 
-// invalidAt returns the offset of the first invalid byte in data[from:to],
-// ignoring an incomplete but so-far-valid sequence at to (the incremental
-// decoder keeps it for the next chunk), and the length of that tail.
-func invalidAt(data []byte, from, to int) (bad, tail int) {
-	for i := from; i < to; {
-		r, size := utf8.DecodeRune(data[i:to])
+// heldTail reports whether data[i:end] is an incomplete sequence CPython's
+// decoder holds for the next read: utf8.FullRune is false, or it is \xED
+// followed by \xA0-\xBF.
+func heldTail(data []byte, i, end int) bool {
+	t := data[i:end]
+	return !utf8.FullRune(t) || (len(t) == 2 && t[0] == 0xED && t[1] >= 0xA0 && t[1] <= 0xBF)
+}
+
+// read performs one read and decode.
+func (d *decodeSim) read() error {
+	if d.eof {
+		return nil
+	}
+	n := len(d.data)
+	if d.pos == n {
+		d.eof = true
+		if d.dec < n {
+			return &GoldDecodeError{d.dec}
+		}
+		return nil
+	}
+	d.pos = min(d.pos+textChunk, n)
+	for i := d.dec; i < d.pos; {
+		r, size := utf8.DecodeRune(d.data[i:d.pos])
 		if r == utf8.RuneError && size == 1 {
-			if !utf8.FullRune(data[i:to]) {
-				return -1, to - i
+			if heldTail(d.data, i, d.pos) {
+				break
 			}
-			return i, 0
+			return &GoldDecodeError{i}
 		}
 		i += size
+		d.dec = i
 	}
-	return -1, 0
+	return nil
 }
 
 // before is called before a record ending at raw offset e is checked.
-func (d *decodeChecker) before(e int) error {
-	n := len(d.data)
-	b := min((e+textChunk-1)/textChunk*textChunk, n)
-	bad, tail := invalidAt(d.data, d.checked, b)
-	if bad < 0 && e > 0 && d.data[e-1] == '\r' && e == b-tail {
-		// The reader must look past a trailing \r to see whether \n follows.
-		if b == n {
-			if tail > 0 {
-				return &GoldDecodeError{b - tail}
-			}
-		} else {
-			b = min(b+textChunk, n)
-			bad, tail = invalidAt(d.data, d.checked, b)
+func (d *decodeSim) before(e int) error {
+	for d.pos < e {
+		if err := d.read(); err != nil {
+			return err
 		}
 	}
-	if bad >= 0 {
-		return &GoldDecodeError{bad}
+	n := len(d.data)
+	switch {
+	case e > 0 && d.data[e-1] == '\r':
+		// The reader looks past a bare \r for a \n, reading until one
+		// complete character after e is decoded or the final decode runs.
+		for d.dec <= e && !d.eof {
+			if err := d.read(); err != nil {
+				return err
+			}
+		}
+	case e == n && (e == 0 || d.data[e-1] != '\n'):
+		// No line end at end of file: the reader takes the zero-byte read.
+		for !d.eof {
+			if err := d.read(); err != nil {
+				return err
+			}
+		}
 	}
-	d.checked = max(d.checked, b-tail)
+	return nil
+}
+
+// finish runs the remaining reads and the final decode.
+func (d *decodeSim) finish() error {
+	for !d.eof {
+		if err := d.read(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -116,7 +153,7 @@ func LoadGold(path string) (Gold, error) {
 	if err != nil {
 		return Gold{}, err
 	}
-	dc := &decodeChecker{data: data}
+	dc := &decodeSim{data: data}
 	bom := 0
 	if bytes.HasPrefix(data, []byte("\xef\xbb\xbf")) {
 		bom = 3
@@ -157,14 +194,16 @@ func LoadGold(path string) (Gold, error) {
 		err = goldErr("gold file is empty: expected columns %s", strings.Join(GoldColumns, ", "))
 	}
 	if err == ingest.ErrInvalidUTF8 {
-		bad, _ := invalidAt(data, 0, len(data))
-		return Gold{}, &GoldDecodeError{max(bad, 0)}
+		if ferr := dc.finish(); ferr != nil {
+			return Gold{}, ferr
+		}
+		return Gold{}, &GoldDecodeError{len(data)}
 	}
 	if err != nil {
 		return Gold{}, err
 	}
-	if bad, tail := invalidAt(data, dc.checked, len(data)); bad >= 0 || tail > 0 {
-		return Gold{}, &GoldDecodeError{len(data) - tail}
+	if err := dc.finish(); err != nil {
+		return Gold{}, err
 	}
 	return g, nil
 }
