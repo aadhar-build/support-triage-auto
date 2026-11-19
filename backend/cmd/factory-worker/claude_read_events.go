@@ -104,6 +104,10 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 			continue
 		}
 		switch event.Type {
+		case "system":
+			if event.Subtype != "thinking_tokens" || !validClaudeThinkingTokens(line) {
+				return nil, errClaudeReadStream
+			}
 		case "rate_limit_event":
 		case "assistant", "user":
 			var blocks []claudeReadBlock
@@ -181,6 +185,21 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 		return nil, errClaudeReadStream
 	}
 	return []byte(final), nil
+}
+
+func validClaudeThinkingTokens(line []byte) bool {
+	// The caller verifies the event type, subtype, and session. Require their
+	// exact keys here because encoding/json matches struct fields case-insensitively.
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(line, &fields) != nil || len(fields) != 6 ||
+		fields["type"] == nil || fields["subtype"] == nil || fields["session_id"] == nil {
+		return false
+	}
+	var id string
+	var total, delta *int64
+	return json.Unmarshal(fields["uuid"], &id) == nil && strings.TrimSpace(id) != "" &&
+		json.Unmarshal(fields["estimated_tokens"], &total) == nil && total != nil &&
+		json.Unmarshal(fields["estimated_tokens_delta"], &delta) == nil && delta != nil
 }
 
 func claudeEvidenceRead(data json.RawMessage, expected map[string][]byte, supplemental *supplementalReviewReads) (claudeReadProof, bool) {

@@ -8,6 +8,7 @@ import (
 )
 
 const claudeReadInit = `{"type":"system","subtype":"init","session_id":"test-session"}`
+const claudeThinkingTokens = `{"type":"system","subtype":"thinking_tokens","session_id":"test-session","uuid":"cd18d57a-39f1-4d8f-b486-26c0f937a60a","estimated_tokens":42,"estimated_tokens_delta":0}`
 const claudeReadCall = `{"type":"assistant","session_id":"test-session","parent_tool_use_id":null,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/tmp/evidence/spec.txt"}}]}}`
 const claudeReadReceipt = `{"type":"user","session_id":"test-session","parent_tool_use_id":null,"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"1\tfirst\n2\tsecond\n3\t"}]},"tool_use_result":{"type":"text","file":{"filePath":"/tmp/evidence/spec.txt","content":"first\nsecond\n","numLines":3,"startLine":1,"totalLines":3}}}`
 const claudeReadVerdict = `{"type":"assistant","session_id":"test-session","parent_tool_use_id":null,"message":{"role":"assistant","content":[{"type":"text","text":"VERDICT: PASS\n\n## Summary\n- Evidence checked."}]}}`
@@ -19,6 +20,55 @@ func TestValidateClaudeReadEventsAcceptsCompleteReadBeforeVerdict(t *testing.T) 
 	got, err := validateClaudeReadEvents([]byte(stream), expected, nil)
 	if err != nil || string(got) != "VERDICT: PASS\n\n## Summary\n- Evidence checked." {
 		t.Fatalf("got artifact %q, error %v", got, err)
+	}
+}
+
+func TestValidateClaudeReadEventsIgnoresNativeThinkingTelemetry(t *testing.T) {
+	expected := map[string][]byte{"/tmp/evidence/spec.txt": []byte("first\nsecond\n")}
+	updatedTelemetry := strings.NewReplacer(
+		`"estimated_tokens":42`, `"estimated_tokens":41`,
+		`"estimated_tokens_delta":0`, `"estimated_tokens_delta":-1`,
+		`cd18d57a-39f1-4d8f-b486-26c0f937a60a`, `1c86a776-4e90-44f6-a13d-126fd0cf530d`,
+	).Replace(claudeThinkingTokens)
+	stream := strings.Join([]string{claudeReadInit, claudeReadCall, claudeThinkingTokens, claudeReadReceipt, claudeReadVerdict, updatedTelemetry, claudeReadFinal}, "\n")
+	got, err := validateClaudeReadEvents([]byte(stream), expected, nil)
+	if err != nil || string(got) != "VERDICT: PASS\n\n## Summary\n- Evidence checked." {
+		t.Fatalf("got artifact %q, error %v", got, err)
+	}
+
+	withoutRead := strings.Join([]string{claudeReadInit, claudeThinkingTokens, claudeReadVerdict, claudeReadFinal}, "\n")
+	if got, err := validateClaudeReadEvents([]byte(withoutRead), expected, nil); got != nil || err != errClaudeEvidenceReads {
+		t.Fatalf("wanted an evidence refusal, got artifact %q and error %v", got, err)
+	}
+	withoutVerdict := strings.Join([]string{claudeReadInit, claudeReadCall, claudeReadReceipt, claudeThinkingTokens, claudeReadFinal}, "\n")
+	if got, err := validateClaudeReadEvents([]byte(withoutVerdict), expected, nil); got != nil || err != errClaudeReadStream {
+		t.Fatalf("wanted a missing verdict refusal, got artifact %q and error %v", got, err)
+	}
+}
+
+func TestValidateClaudeReadEventsRefusesMalformedThinkingTelemetry(t *testing.T) {
+	expected := map[string][]byte{"/tmp/evidence/spec.txt": []byte("first\nsecond\n")}
+	for _, tc := range []struct{ name, beforeInit, telemetry, afterResult string }{
+		{"before init", claudeThinkingTokens, "", ""},
+		{"after result", "", "", claudeThinkingTokens},
+		{"cross session", "", strings.Replace(claudeThinkingTokens, `"test-session"`, `"other-session"`, 1), ""},
+		{"unknown subtype", "", strings.Replace(claudeThinkingTokens, `"thinking_tokens"`, `"other_telemetry"`, 1), ""},
+		{"duplicate count", "", strings.Replace(claudeThinkingTokens, `"estimated_tokens":42`, `"estimated_tokens":1,"estimated_tokens":42`, 1), ""},
+		{"missing delta", "", strings.Replace(claudeThinkingTokens, `,"estimated_tokens_delta":0`, "", 1), ""},
+		{"misnamed field", "", strings.Replace(claudeThinkingTokens, `"estimated_tokens_delta"`, `"Estimated_Tokens_Delta"`, 1), ""},
+		{"string count", "", strings.Replace(claudeThinkingTokens, `"estimated_tokens":42`, `"estimated_tokens":"42"`, 1), ""},
+		{"null count", "", strings.Replace(claudeThinkingTokens, `"estimated_tokens":42`, `"estimated_tokens":null`, 1), ""},
+		{"fractional count", "", strings.Replace(claudeThinkingTokens, `"estimated_tokens":42`, `"estimated_tokens":0.25`, 1), ""},
+		{"boolean delta", "", strings.Replace(claudeThinkingTokens, `"estimated_tokens_delta":0`, `"estimated_tokens_delta":true`, 1), ""},
+		{"blank UUID", "", strings.Replace(claudeThinkingTokens, `"cd18d57a-39f1-4d8f-b486-26c0f937a60a"`, `" "`, 1), ""},
+		{"embedded result", "", strings.TrimSuffix(claudeThinkingTokens, "}") + `,"result":"VERDICT: PASS"}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stream := strings.Join([]string{tc.beforeInit, claudeReadInit, claudeReadCall, claudeReadReceipt, tc.telemetry, claudeReadVerdict, claudeReadFinal, tc.afterResult}, "\n")
+			if got, err := validateClaudeReadEvents([]byte(stream), expected, nil); got != nil || err != errClaudeReadStream {
+				t.Fatalf("wanted invalid stream refusal, got artifact %q and error %v", got, err)
+			}
+		})
 	}
 }
 
