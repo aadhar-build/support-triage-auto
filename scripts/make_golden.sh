@@ -201,6 +201,24 @@ mkdir -p "$OUT"
 rm -rf "${OUT:?}/policy"
 cp -R "$G/policy" "$OUT/policy"
 # --- end policy goldens (job 067) ---
+# --- context_signals goldens (job 087) ---
+# scripts/golden_context_signals.py dumps triage.context_signals as
+# G/context_signals/{records,counts,attribution,loaders,lower_cases}.jsonl and
+# lower.txt, for backend/internal/policy. Customer ids are written as ordinals.
+# Loader sources are repo-relative. Only exit 0 is accepted.
+CS_ARGS=(--rules policies/rules.json --rules tests/fixtures/repeat_contact_rules.json
+  --rules tests/fixtures/propose_change_proposed_repeat.json)
+for f in testdata/context_signals/bad_repeat/*.json; do CS_ARGS+=(--rules "$f"); done
+CS_ARGS+=(--rules testdata/context_signals/missing_rule.json)
+for f in "${CS_ARGS[@]}"; do
+  case "$f" in --*) ;; *) refuse_raw "repo input" "$f" ;; esac
+done
+mkdir -p "$G/context_signals"
+cli context_signals 0 -- python3 scripts/golden_context_signals.py --out "$G/context_signals" \
+  --twcs "$DATA" "${CS_ARGS[@]}"
+rm -rf "${OUT:?}/context_signals"
+cp -R "$G/context_signals" "$OUT/context_signals"
+# --- end context_signals goldens (job 087) ---
 # --- ingest goldens (job 066) ---
 cli ingest_generated 0 -- python3 scripts/golden_ingest.py --data "$DATA" --split-config "$SPLIT" \
   --out-prefix "$G/ingest/generated"
