@@ -36,6 +36,10 @@ def main(argv: list[str]) -> int:
         if not final and job["stage"] != "gate":
             raise F.FactoryError(f"job is in {job['stage']}, not gate")
         wt = root / job["worktree"]
+        status = ["git", "status", "--porcelain", "-z", "--untracked-files=all"]
+        if F.run(status, cwd=wt):
+            raise F.FactoryError("worktree must be clean before the gate runs")
+        candidate = F.run(["git", "rev-parse", "HEAD"], cwd=wt).strip()
         changed = F.changed_files(wt, cfg["base_branch"], job)
         problems: list[str] = []
 
@@ -62,8 +66,10 @@ def main(argv: list[str]) -> int:
         if res.returncode != 0:
             problems.append(f"checks.sh exited {res.returncode}")
 
+        if candidate != F.run(["git", "rev-parse", "HEAD"], cwd=wt).strip() or F.run(status, cwd=wt):
+            raise F.FactoryError("worktree changed while the gate ran")
         verdict = "FAIL" if problems else "PASS"
-        lines = [f"GATE: {verdict}", "", "## Summary"]
+        lines = [f"GATE: {verdict}", f"CANDIDATE: {candidate}", "", "## Summary"]
         lines += [f"- {p}" for p in problems] or ["- Protected paths untouched, scope respected, checks passed."]
         lines += [f"- {len(changed)} file(s) changed", "", "## Changed files", ""]
         lines += [f"- {c}" for c in changed] or ["- (none)"]

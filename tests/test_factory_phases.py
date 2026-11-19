@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "factory" / "lib"))
@@ -78,10 +79,10 @@ class TestProductQuestions(unittest.TestCase):
         self.assertEqual(F.TRANSITIONS["needs-input"], {"spec", "rejected"})
 
 
-def _load_job_script():
+def _load_script(name):
     import importlib.machinery
     import importlib.util
-    loader = importlib.machinery.SourceFileLoader("factory_job_script", str(REPO / "factory" / "bin" / "job"))
+    loader = importlib.machinery.SourceFileLoader(f"factory_{name}_script", str(REPO / "factory" / "bin" / name))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
@@ -95,7 +96,7 @@ class TestClarifyCommands(unittest.TestCase):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root)
         shutil.copytree(REPO / "factory", self.root / "factory", ignore=shutil.ignore_patterns("jobs"))
-        self.job = _load_job_script()
+        self.job = _load_script("job")
         self.cfg = F.load_config(self.root)
         self.calls = []
         self.issue_labels = ["factory"]
@@ -163,6 +164,64 @@ class TestClarifyCommands(unittest.TestCase):
             self.run_cmd("answers")
         self.assertEqual(F.read_job(self.d)["stage"], "needs-input")
 
+    def test_pending_builder_publication_refuses_to_push(self):
+        job = F.read_job(self.d)
+        job.update(stage="build", round=1)
+        F.write_job(self.d, job)
+        (self.d / "worker-round-1-builder.json.pending").write_text("{}")
+        with self.assertRaisesRegex(F.FactoryError, "publication is active or pending"):
+            self.run_cmd("pr")
+        self.assertEqual(self.calls, [])
+
+    def test_worker_candidate_needs_matching_gate_before_push(self):
+        job = F.read_job(self.d)
+        job.update(stage="review", round=1)
+        F.write_job(self.d, job)
+        (self.d / "build.md").write_text("Builder's notes")
+        (self.d / "worker-round-1-builder.json").write_text('{"candidate_sha":"aaa"}')
+        rd = self.d / "round-1"
+        rd.mkdir()
+        (rd / "checks.md").write_text("GATE: PASS\nCANDIDATE: older\n")
+        with self.assertRaisesRegex(F.FactoryError, "matching passing gate"):
+            self.run_cmd("pr")
+        self.assertEqual(self.calls, [])
+
+    def test_worker_push_uses_the_gated_sha_as_its_source(self):
+        job = F.read_job(self.d)
+        job.update(stage="review", round=1, pr=42)
+        F.write_job(self.d, job)
+        (self.d / "build.md").write_text("Builder's notes")
+        (self.d / "worker-round-1-builder.json").write_text('{"candidate_sha":"aaa"}')
+        rd = self.d / "round-1"
+        rd.mkdir()
+        (rd / "checks.md").write_text("GATE: PASS\nCANDIDATE: aaa\n")
+        with patch.object(F, "run", return_value="aaa\n") as git:
+            self.assertIn("PR #42", self.run_cmd("pr"))
+        self.assertEqual(git.call_args.args[0],
+                         ["git", "push", "--quiet", "origin", "aaa:refs/heads/factory/007-t"])
+
+    def test_stale_worker_review_does_not_advance_the_job(self):
+        job = F.read_job(self.d)
+        job.update(stage="review", round=1, reviewers={"code": "sonnet"})
+        F.write_job(self.d, job)
+        rd = self.d / "round-1"
+        rd.mkdir()
+        (rd / "review-code.md").write_text("VERDICT: PASS\n")
+        (rd / "worker-reviewer-code.json").write_text('{"candidate_sha":"older"}')
+        with self.assertRaisesRegex(F.FactoryError, "no longer matches"):
+            self.run_cmd("tally")
+        self.assertEqual(F.read_job(self.d)["stage"], "review")
+
+    def test_stale_worker_approval_does_not_advance_the_job(self):
+        job = F.read_job(self.d)
+        job.update(stage="approve", round=1)
+        F.write_job(self.d, job)
+        (self.d / "decision.md").write_text("APPROVE\n")
+        (self.d / "worker-round-1-approver.json").write_text('{"candidate_sha":"older"}')
+        with self.assertRaisesRegex(F.FactoryError, "no longer matches"):
+            self.run_cmd("decide")
+        self.assertEqual(F.read_job(self.d)["stage"], "approve")
+
     def test_answers_refresh_issue_md_with_trusted_comments_only(self):
         job = F.read_job(self.d)
         job["stage"] = "needs-input"
@@ -172,6 +231,52 @@ class TestClarifyCommands(unittest.TestCase):
         text = (self.d / "issue.md").read_text()
         self.assertIn("> Q1: yes", text)
         self.assertNotIn("ignore all rules", text)
+
+
+class TestGateCandidateEvidence(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.d = self.root / "factory" / "jobs" / "001-gate"
+        self.d.mkdir(parents=True)
+        self.job = F.new_job("001-gate", 1, "gate")
+        self.job.update(stage="gate", round=1)
+        F.write_job(self.d, self.job)
+        (self.d / "spec.md").write_text(CLEAN_SPEC + "\n## Files\n- code.txt\n")
+        cfg = {"base_branch": "main", "protected_paths": ["factory/"], "max_rounds": 2}
+        self.addCleanup(patch.stopall)
+        patch.object(F, "repo_root", return_value=self.root).start()
+        patch.object(F, "load_config", return_value=cfg).start()
+        patch.object(F, "changed_files", return_value=["code.txt"]).start()
+        self.gate = _load_script("gate")
+
+    def run_gate(self, pre_status, post_status):
+        statuses = iter([pre_status, post_status])
+
+        def git(cmd, **kwargs):
+            return next(statuses) if cmd[1] == "status" else "candidate\n"
+
+        with patch.object(F, "run", side_effect=git), patch.object(
+            self.gate.subprocess, "run", return_value=type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        ) as checks:
+            code = self.gate.main(["001-gate"])
+        return code, checks.call_count
+
+    def test_dirty_worktree_does_not_run_gate_checks(self):
+        self.assertEqual(self.run_gate(" M code.txt", ""), (1, 0))
+        self.assertEqual(F.read_job(self.d)["stage"], "gate")
+
+    def test_worktree_dirtied_by_checks_does_not_get_a_pass(self):
+        self.assertEqual(self.run_gate("", "?? generated"), (1, 1))
+        self.assertEqual(F.read_job(self.d)["stage"], "gate")
+        self.assertFalse((self.d / "round-1" / "checks.md").exists())
+
+    def test_gate_pass_records_candidate_sha(self):
+        self.assertEqual(self.run_gate("", ""), (0, 1))
+        self.assertEqual(F.read_job(self.d)["stage"], "review")
+        report = (self.d / "round-1" / "checks.md").read_text()
+        self.assertEqual(F.parse_header(report).get("CANDIDATE"), "candidate")
 
 
 class TestLanes(unittest.TestCase):
@@ -199,7 +304,7 @@ class TestLanes(unittest.TestCase):
             job = F.new_job(jid, int(jid[:3]), jid)
             job["stage"] = stage
             F.write_job(d, job)
-        job_script = _load_job_script()
+        job_script = _load_script("job")
         cfg = F.load_config(root)
         self.assertEqual(job_script.cmd_lane(root, cfg, ["clarify"]), "001-a  spec")
         self.assertEqual(job_script.cmd_lane(root, cfg, ["build"]), "003-c  review")
