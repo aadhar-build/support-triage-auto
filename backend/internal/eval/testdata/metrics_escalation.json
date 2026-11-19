@@ -1,0 +1,1049 @@
+{
+  "action": {
+    "accuracy": {
+      "ci": [
+        0.8625032899347025,
+        0.965681175635936
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 93,
+      "value": 0.93
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          85,
+          0,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          5,
+          0,
+          0,
+          8
+        ]
+      ],
+      "labels": [
+        "answer",
+        "ask",
+        "route",
+        "escalate"
+      ]
+    },
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 100,
+      "value": 0.6568627450980394
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8527499894474695,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8280520756570867,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8077404625128886,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.8722222222222222,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.7961980548187445,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.7961980548187445,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "answer": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.9507829977628636
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.96045197740113
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 0.9703196347031964
+        },
+        "fn": 2,
+        "fp": 5,
+        "precision": {
+          "ci": [
+            0.8764610019095158,
+            0.9760393817156567
+          ],
+          "directional": false,
+          "n": 90,
+          "num": 85,
+          "value": 0.9444444444444444
+        },
+        "predicted": 90,
+        "support": 87,
+        "tn": 8,
+        "tnr": {
+          "ci": [
+            0.35522480972268555,
+            0.8229055341876319
+          ],
+          "directional": true,
+          "n": 13,
+          "num": 8,
+          "value": 0.6153846153846154
+        },
+        "tp": 85,
+        "tpr": {
+          "ci": [
+            0.9200052672522923,
+            0.9936730475286013
+          ],
+          "directional": false,
+          "n": 87,
+          "num": 85,
+          "value": 0.9770114942528736
+        }
+      },
+      "ask": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      },
+      "escalate": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.7547169811320755
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.6956521739130435
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": 0.6451612903225806
+        },
+        "fn": 5,
+        "fp": 2,
+        "precision": {
+          "ci": [
+            0.49015684672072335,
+            0.9433190520193067
+          ],
+          "directional": true,
+          "n": 10,
+          "num": 8,
+          "value": 0.8
+        },
+        "predicted": 10,
+        "support": 13,
+        "tn": 85,
+        "tnr": {
+          "ci": [
+            0.9200052672522923,
+            0.9936730475286013
+          ],
+          "directional": false,
+          "n": 87,
+          "num": 85,
+          "value": 0.9770114942528736
+        },
+        "tp": 8,
+        "tpr": {
+          "ci": [
+            0.35522480972268555,
+            0.8229055341876319
+          ],
+          "directional": true,
+          "n": 13,
+          "num": 8,
+          "value": 0.6153846153846154
+        }
+      },
+      "route": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.9252944156008611,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.9260280029476787,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.9280490499337164,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "answer",
+        "escalate"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.9256666666666667,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.6623961096374891,
+        "zero_filled": 0
+      },
+      "tpr": {
+        "ci": null,
+        "directional": true,
+        "n": 100,
+        "value": 0.93,
+        "zero_filled": 0
+      }
+    }
+  },
+  "averaging": "Macro and weighted averages run over the included classes: the union of gold and predicted classes (support > 0 or predicted > 0), listed in included_classes. A per-class value that is null counts as zero in the average (zero_filled counts them) and still shows as null in per_class. Macro is the unweighted mean; weighted is sum(support * value) / sum(support).",
+  "cohort": {
+    "brand_population": "all",
+    "gold_revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "gold_random",
+    "split": "dev"
+  },
+  "config": {
+    "prices": null,
+    "threshold": 0.5
+  },
+  "coverage": null,
+  "directional_below": 30,
+  "escalation": {
+    "accuracy": {
+      "ci": [
+        0.8625032899347025,
+        0.965681175635936
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 93,
+      "value": 0.93
+    },
+    "balanced_accuracy": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.7961980548187445
+    },
+    "counts": {
+      "fn": 5,
+      "fp": 2,
+      "positives": 13,
+      "predicted_positives": 10,
+      "tn": 85,
+      "tp": 8
+    },
+    "f0_5": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.7547169811320755
+    },
+    "f1": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6956521739130435
+    },
+    "f2": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6451612903225806
+    },
+    "fnr": {
+      "ci": [
+        0.17709446581236818,
+        0.6447751902773146
+      ],
+      "directional": true,
+      "n": 13,
+      "num": 5,
+      "value": 0.38461538461538464
+    },
+    "fpr": {
+      "ci": [
+        0.006326952471398799,
+        0.07999473274770788
+      ],
+      "directional": false,
+      "n": 87,
+      "num": 2,
+      "value": 0.022988505747126436
+    },
+    "mcc": {
+      "ci": null,
+      "directional": true,
+      "n": 100,
+      "value": 0.6640828206858921
+    },
+    "npv": {
+      "ci": [
+        0.8764610019095158,
+        0.9760393817156567
+      ],
+      "directional": false,
+      "n": 90,
+      "num": 85,
+      "value": 0.9444444444444444
+    },
+    "precision": {
+      "ci": [
+        0.49015684672072335,
+        0.9433190520193067
+      ],
+      "directional": true,
+      "n": 10,
+      "num": 8,
+      "value": 0.8
+    },
+    "prevalence": {
+      "ci": [
+        0.07757093858414264,
+        0.20980521894809878
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 13,
+      "value": 0.13
+    },
+    "tnr": {
+      "ci": [
+        0.9200052672522923,
+        0.9936730475286013
+      ],
+      "directional": false,
+      "n": 87,
+      "num": 85,
+      "value": 0.9770114942528736
+    },
+    "tpr": {
+      "ci": [
+        0.35522480972268555,
+        0.8229055341876319
+      ],
+      "directional": true,
+      "n": 13,
+      "num": 8,
+      "value": 0.6153846153846154
+    }
+  },
+  "intent": {
+    "accuracy": {
+      "ci": [
+        0.9630051925239981,
+        1.0
+      ],
+      "directional": false,
+      "n": 100,
+      "num": 100,
+      "value": 1.0
+    },
+    "confusion_matrix": {
+      "counts": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          100
+        ]
+      ],
+      "labels": [
+        "delivery",
+        "billing",
+        "account_access",
+        "outage_technical",
+        "complaint",
+        "praise",
+        "other"
+      ]
+    },
+    "kappa": {
+      "ci": null,
+      "directional": false,
+      "n": 100,
+      "value": null
+    },
+    "macro": {
+      "f0_5": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 0.0,
+        "zero_filled": 1
+      },
+      "tpr": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      }
+    },
+    "per_class": {
+      "account_access": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      },
+      "billing": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      },
+      "complaint": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      },
+      "delivery": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      },
+      "other": {
+        "f0_5": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 1.0
+        },
+        "f1": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 1.0
+        },
+        "f2": {
+          "ci": null,
+          "directional": false,
+          "n": 100,
+          "value": 1.0
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "predicted": 100,
+        "support": 100,
+        "tn": 0,
+        "tnr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "tp": 100,
+        "tpr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        }
+      },
+      "outage_technical": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      },
+      "praise": {
+        "f0_5": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f1": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "f2": {
+          "ci": null,
+          "directional": true,
+          "n": 100,
+          "value": null
+        },
+        "fn": 0,
+        "fp": 0,
+        "precision": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        },
+        "predicted": 0,
+        "support": 0,
+        "tn": 100,
+        "tnr": {
+          "ci": [
+            0.9630051925239981,
+            1.0
+          ],
+          "directional": false,
+          "n": 100,
+          "num": 100,
+          "value": 1.0
+        },
+        "tp": 0,
+        "tpr": {
+          "ci": null,
+          "directional": true,
+          "n": 0,
+          "num": 0,
+          "value": null
+        }
+      }
+    },
+    "weighted": {
+      "f0_5": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f1": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "f2": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "included_classes": [
+        "other"
+      ],
+      "precision": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      },
+      "tnr": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 0.0,
+        "zero_filled": 1
+      },
+      "tpr": {
+        "ci": null,
+        "directional": false,
+        "n": 100,
+        "value": 1.0,
+        "zero_filled": 0
+      }
+    }
+  },
+  "kind": "gold",
+  "n": 100,
+  "operations": null,
+  "run_at": "2026-11-18T10:00:00Z",
+  "sample": {
+    "seed": 0,
+    "size": 200
+  },
+  "schema_version": "metrics/1"
+}
