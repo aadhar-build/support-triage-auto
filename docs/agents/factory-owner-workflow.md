@@ -2,6 +2,8 @@
 
 Run these commands from the main checkout that holds the job. Use `factory/bin/job list` to get its ID and `factory/bin/job card <job-id>` to read the current candidate, evidence, open questions and next action. Ask the owner for only the decision or fact missing from the evidence.
 
+When a new issue response omits the repository ID, job creation makes one read-only GitHub repository lookup. If that lookup fails, admission continues and the job has no tracker link. Cards and weekly scorecards run offline by default. Add `--verify-github-links` to either command to check a new job's captured repository and issue IDs on GitHub. The card also checks the original pull request ID, repository IDs and exact current head SHA before linking the candidate, including after later pushes to the same pull request. Missing IDs, unavailable GitHub responses, a different origin or an unpushed candidate leave the corresponding link unavailable. These checks confirm the current GitHub targets. The original job association comes from local controller records under `.git/factory-link-receipts/`, which anyone with controller write access can alter.
+
 ## Capture owner effort and decisions
 
 Record one `owner_effort` observation for each distinct span of active work the owner reports. Enter the UTC time the activity occurred, even when recording it later. Mark `rework: true` when the owner was revisiting work or a decision because the prior result needed correction.

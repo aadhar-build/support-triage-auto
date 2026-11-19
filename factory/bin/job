@@ -23,7 +23,7 @@
   job record <id> <key> <v>   owner-reported numbers for the scorecard: owner_minutes,
                               cost_usd, escaped (true/false), owner_changes (true/false)
   job observe <id> <file|->   append one v1 JSON observation from a file or stdin
-  job card <id>               render the owner's decision card
+  job card <id> [--verify-github-links]   render the owner's decision card
   job recovery <id>           report recovery evidence as JSON
 """
 
@@ -111,6 +111,8 @@ def _write_issue_md(root: Path, d: Path, issue: int, data: dict) -> None:
 
 
 def cmd_create(root: Path, cfg: dict, args: list[str]) -> str:
+    from job_links import capture_source
+
     issue = int(args[0])
     data = F.gh_api(root, "GET", f"issues/{issue}")
     if data.get("pull_request"):
@@ -136,6 +138,7 @@ def cmd_create(root: Path, cfg: dict, args: list[str]) -> str:
         staged.mkdir(mode=0o700)
         _write_issue_md(root, staged, issue, data)
         job = F.new_job(job_id, issue, data["title"])
+        capture_source(root, staged, job, data)
         job["factory_version"] = cfg.get("version", F.BASE_VERSION)
         F.write_job(staged, job)
         with F.job_mutex(jobs):
@@ -258,6 +261,8 @@ def _pr_state(root: Path, number: int) -> dict:
 
 @_admitted("pr")
 def cmd_pr(root: Path, cfg: dict, args: list[str]) -> str:
+    from job_links import capture_candidate
+
     d, job = _load(root, args[0])
     audit = d / f"worker-round-{job['round']}-builder.json"
     if audit.with_suffix(".json.pending").exists() or audit.with_suffix(".json.lock").exists():
@@ -290,6 +295,7 @@ def cmd_pr(root: Path, cfg: dict, args: list[str]) -> str:
     pr = F.gh_api(root, "POST", "pulls", {"title": job["title"], "head": job["branch"],
                                           "base": pr_base, "body": body})
     job["pr"] = pr["number"]
+    capture_candidate(root, job, pr)
     F.write_job(d, job)
     _add_label(root, job["pr"], _label(cfg, "queue"))
     return f"opened PR #{job['pr']}"
@@ -919,9 +925,12 @@ def cmd_card(root: Path, cfg: dict, args: list[str]) -> str:
     from factory_recovery import report_recovery_summary
 
     d = F.reporting_job_dir(root, args[0])
-    record = reporting_record(root, cfg, d)
+    if args[1:] not in ([], ["--verify-github-links"]):
+        raise F.FactoryError("usage: job card <id> [--verify-github-links]")
+    record = reporting_record(root, cfg, d, verify_github_links=bool(args[1:]))
     return render_decision_card(record["job"], record["events"], record["guardrails"],
-                                report_recovery_summary(record), verified_source_url=record["url"]).rstrip("\n")
+                                report_recovery_summary(record), verified_source_url=record["url"],
+                                verified_candidate_url=record["candidate_url"]).rstrip("\n")
 
 
 def cmd_recovery(root: Path, cfg: dict, args: list[str]) -> str:

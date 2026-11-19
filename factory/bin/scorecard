@@ -65,7 +65,9 @@ def weekly(root: Path, cfg: dict, args: argparse.Namespace) -> None:
     from scorecard_report import render_weekly_report, weekly_report
 
     as_of = args.as_of or datetime.now(timezone.utc)
-    records, unreadable, invalid_ids = read_jobs(root, lambda folder: reporting_record(root, cfg, folder, as_of=as_of))
+    records, unreadable, invalid_ids = read_jobs(
+        root, lambda folder: reporting_record(root, cfg, folder, as_of=as_of, verify_github_links=args.verify_github_links)
+    )
     verifications = {}
     if args.verify_github_merges:
         from merge_evidence import verify_merge_delivery
@@ -115,12 +117,15 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--timezone", metavar="IANA", help="time zone for weekly cohort boundaries")
     parser.add_argument("--as-of", type=utc_cutoff, metavar="UTC", help="recording-time cutoff for observations")
     parser.add_argument("--defect-window-days", type=int, metavar="N", help="escaped-defect follow-up window")
+    parser.add_argument("--verify-github-links", action="store_true", help="check captured issue and candidate identities on GitHub")
     parser.add_argument("--verify-github-merges", action="store_true",
                         help="read existing GitHub deliveries referenced by merge observations")
     args = parser.parse_args(argv)
     if args.weekly is None and any(value is not None for value in
                                    (args.timezone, args.as_of, args.defect_window_days)):
         parser.error("--timezone, --as-of, and --defect-window-days require --weekly")
+    if args.verify_github_links and args.weekly is None:
+        parser.error("--verify-github-links requires --weekly")
     if args.verify_github_merges and args.weekly is None:
         parser.error("--verify-github-merges requires --weekly")
     if args.defect_window_days is not None and args.defect_window_days <= 0:
