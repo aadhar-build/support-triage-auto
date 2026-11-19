@@ -37,7 +37,7 @@ func savePublication(dir *os.File, path string, p publication) error {
 	return nil
 }
 
-func finishPublication(ctx context.Context, s snapshot, p publication, dir *os.File, pending, artifactPath, auditPath string) (err error) {
+func finishPublication(ctx context.Context, s snapshot, p publication, dir *os.File, pending, artifactPath, auditPath string, recovered *workerEvent) (err error) {
 	removed := false
 	defer func() {
 		if err != nil && !removed {
@@ -53,10 +53,10 @@ func finishPublication(ctx context.Context, s snapshot, p publication, dir *os.F
 	if err != nil {
 		return err
 	}
+	if head != p.Candidate && head != p.Input {
+		return errors.New("worktree is at neither the recorded input nor candidate")
+	}
 	if head != p.Candidate {
-		if head != p.Input {
-			return errors.New("worktree is at neither the recorded input nor candidate")
-		}
 		parent, err := git(ctx, s.source, "rev-list", "--parents", "-n", "1", p.Candidate)
 		if err != nil || strings.TrimSpace(parent) != p.Candidate+" "+p.Input {
 			return errors.New("recorded candidate is not a direct child of the recorded input")
@@ -78,6 +78,13 @@ func finishPublication(ctx context.Context, s snapshot, p publication, dir *os.F
 	// after a crash between removing the intent and removing the journal.
 	if err := os.Remove(auditPath + replacementSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("finish builder evidence replacement: %w", err)
+	}
+	if recovered != nil {
+		// Flush recovered outputs and their record before retiring the journal.
+		// If retirement is interrupted, the same event can be replayed.
+		if err := saveWorkerEvent(dir, *recovered); err != nil {
+			return err
+		}
 	}
 	if err := os.Remove(pending); err != nil {
 		return err
@@ -144,10 +151,42 @@ func recoverPublication(ctx context.Context, root string, cfg config, state jobS
 	if err != nil {
 		return err
 	}
-	if err := s.checkPaths(ctx, root, p.Candidate, spec); err != nil {
+	var audit struct {
+		Role      string `json:"role"`
+		Candidate string `json:"candidate_sha"`
+		Base      string `json:"base_sha"`
+		Input     string `json:"input_sha"`
+	}
+	if json.Unmarshal(p.Audit, &audit) != nil || audit.Role != "builder" || audit.Candidate != p.Candidate || audit.Base != p.Base || audit.Input != p.Input {
+		return errors.New("pending builder audit does not match the candidate, base and input")
+	}
+	if err := s.cleanWorktree(ctx); err != nil {
 		return err
 	}
-	if err := finishPublication(ctx, s, p, dir, pending, artifactPath, auditPath); err != nil {
+	head, err := gitCommit(ctx, worktree, "HEAD")
+	if err != nil || (head != p.Input && head != p.Candidate) {
+		return errors.New("worktree is at neither the recorded input nor candidate")
+	}
+	parent, err := git(ctx, worktree, "rev-list", "--parents", "-n", "1", p.Candidate)
+	if err != nil || strings.TrimSpace(parent) != p.Candidate+" "+p.Input {
+		return errors.New("recorded candidate is not a direct child of the recorded input")
+	}
+	policy, err := s.checkPaths(ctx, root, p.Candidate, spec)
+	if err != nil {
+		var refusal *pathRefusal
+		if errors.As(err, &refusal) {
+			event := newWorkerEvent(state, "recovery_"+refusal.kind, p.Input, p.Candidate, p.Base, p.SpecSHA256, refusal.policyDigest)
+			event.Position = "input"
+			if head == p.Candidate {
+				event.Position = "candidate"
+			}
+			return errors.Join(err, saveWorkerEvent(dir, event))
+		}
+		return err
+	}
+	event := newWorkerEvent(state, "builder_publication_recovered", p.Input, p.Candidate, p.Base, p.SpecSHA256, policy)
+	event.ArtifactDigest, event.AuditDigest = contentDigest(p.Artifact), contentDigest(p.Audit)
+	if err := finishPublication(ctx, s, p, dir, pending, artifactPath, auditPath, &event); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "%s builder | recovered %s | build.md\n", state.ID, p.Candidate)

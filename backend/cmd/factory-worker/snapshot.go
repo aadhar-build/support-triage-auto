@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -521,8 +522,8 @@ func (s snapshot) prepareCandidate(ctx context.Context, root, jobDir string, spe
 	if err != nil {
 		return "", err
 	}
-	if err := s.checkPaths(ctx, root, newHead, spec); err != nil {
-		return "", err
+	if _, err := s.checkPaths(ctx, root, newHead, spec); err != nil {
+		return newHead, err
 	}
 	if _, err := git(ctx, s.source, "fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--", s.checkout, newHead); err != nil {
 		return "", err
@@ -533,13 +534,15 @@ func (s snapshot) prepareCandidate(ctx context.Context, root, jobDir string, spe
 	return newHead, nil
 }
 
-func (s snapshot) checkPaths(ctx context.Context, root, candidate string, spec []byte) error {
+func (s snapshot) checkPaths(ctx context.Context, root, candidate string, spec []byte) (string, error) {
 	paths, err := git(ctx, s.checkout, "diff", "--name-only", "--no-renames", "-z", s.base+"..."+candidate)
 	if err != nil {
-		return err
+		return "", err
 	}
 	// Reuse the same rules as gate; worker dispatch never substitutes for gate.
 	const check = `
+import hashlib
+import json
 import sys
 from pathlib import Path
 root = Path(sys.argv[1])
@@ -549,13 +552,36 @@ cfg = F.load_config(root)
 spec, _, paths = sys.stdin.read().partition("\0")
 changed = [p for p in paths.split("\0") if p]
 allowed = F.allowed_files(spec)
-if (not changed or not allowed or F.open_product_questions(spec)
-        or F.protected_violations(changed, cfg["protected_paths"])
-        or F.scope_violations(changed, allowed + cfg.get("always_in_scope", []))):
-    raise SystemExit(1)
+protected = cfg["protected_paths"]
+extra = cfg.get("always_in_scope", [])
+rules = json.dumps([protected, extra], ensure_ascii=True, separators=(",", ":")).encode()
+digest = hashlib.sha256(b"worker-path-policy-v1\0" + Path(F.__file__).read_bytes() + b"\0" + rules).hexdigest()
+if not changed or not allowed or F.open_product_questions(spec):
+    decision = "unmet_prerequisite"
+elif F.protected_violations(changed, protected):
+    decision = "protected_path_refused"
+elif F.scope_violations(changed, allowed + extra):
+    decision = "scope_refused"
+else:
+    decision = "allowed"
+print(json.dumps({"decision": decision, "policy_digest": digest}))
 `
-	if _, _, err := runNative(ctx, "python3", root, workerEnv(""), []string{"-B", "-X", "utf8", "-c", check, root}, string(spec)+"\x00"+paths); err != nil {
-		return errors.New("candidate refused by the existing protected paths, spec scope or product-question rules")
+	out, _, err := runNative(ctx, "python3", root, workerEnv(""), []string{"-B", "-X", "utf8", "-c", check, root}, string(spec)+"\x00"+paths)
+	var result struct {
+		Decision     string `json:"decision"`
+		PolicyDigest string `json:"policy_digest"`
 	}
-	return nil
+	if err != nil || json.Unmarshal(out, &result) != nil || !digestPattern.MatchString(result.PolicyDigest) {
+		return "", errors.New("candidate path policy evaluation failed")
+	}
+	switch result.Decision {
+	case "allowed":
+		return result.PolicyDigest, nil
+	case "protected_path_refused", "scope_refused":
+		return "", &pathRefusal{result.Decision, result.PolicyDigest}
+	case "unmet_prerequisite":
+		return "", errors.New("candidate refused by the existing protected paths, spec scope or product-question rules")
+	default:
+		return "", errors.New("invalid path policy decision")
+	}
 }

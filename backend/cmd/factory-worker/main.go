@@ -33,6 +33,7 @@ type config struct {
 }
 
 type jobState struct {
+	Origin          string            `json:"origin,omitempty"`
 	ID              string            `json:"id"`
 	Stage           string            `json:"stage"`
 	Branch          string            `json:"branch"`
@@ -369,6 +370,17 @@ func run(root string, args []string, stdout io.Writer) error {
 			return fmt.Errorf("%w (%s). %s. See %s", err, chosen.Harness, hint, filepath.Base(failurePath))
 		}
 		if err != nil {
+			var refusal *pathRefusal
+			if errors.As(err, &refusal) {
+				event := newWorkerEvent(state, refusal.kind, s.head, candidate, s.base, specDigest, refusal.policyDigest)
+				saveErr := admitPublication(func() error {
+					if err := s.verifySource(ctx); err != nil {
+						return err
+					}
+					return saveWorkerEvent(jobDirectory, event)
+				})
+				return errors.Join(err, saveErr)
+			}
 			return err
 		}
 	}
@@ -405,7 +417,7 @@ func run(root string, args []string, stdout io.Writer) error {
 		}); err != nil {
 			return err
 		}
-		if err := finishPublication(ctx, s, transaction, jobDirectory, pending, artifactPath, auditPath); err != nil {
+		if err := finishPublication(ctx, s, transaction, jobDirectory, pending, artifactPath, auditPath, nil); err != nil {
 			return err
 		}
 	} else {
