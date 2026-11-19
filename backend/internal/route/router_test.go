@@ -579,7 +579,7 @@ var noTopics = []policy.Topic{}
 
 func TestNilTopicsRefused(t *testing.T) {
 	c, l, a := fakes()
-	msg := "'NoneType' object is not iterable"
+	msg := errNilTopics
 	if _, err := RouteThread(thread(1, "x"), c, l, a, 0.5, nil, nil); err == nil || err.Error() != msg {
 		t.Errorf("RouteThread(nil topics) = %v, want %q", err, msg)
 	}

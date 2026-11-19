@@ -93,9 +93,12 @@ func checkRepeat(r *RepeatInput) error {
 	return nil
 }
 
-// errNilTopics is Python's TypeError text from tuple(None). The exact wording
-// is pending a Fable tiebreak (job 068 round 2); change it only here.
-const errNilTopics = "'NoneType' object is not iterable"
+// errNilTopics is a Go-only guard against programmer misuse: a nil topics
+// would otherwise silently turn escalate_always off. It is outside #67 Q1
+// (Python only raises CPython's own TypeError here), so the wording is ours
+// (Fable tiebreak, job 068 round 2). The check keeps Python's order:
+// threshold, model ids, repeat, then topics.
+const errNilTopics = "topics is required: pass an empty slice to turn the always-escalate rule off"
 
 // check runs Python's argument checks in its order: threshold, model ids,
 // repeat, then topics (tuple(topics)). A nil topics is refused so a caller
