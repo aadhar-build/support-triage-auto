@@ -238,3 +238,77 @@ func TestTwoBrandsDiffer(t *testing.T) {
 		t.Errorf("beta violations = %v, want none", v)
 	}
 }
+
+func strp(s string) *string { return &s }
+
+func TestLoadRulesSource(t *testing.T) {
+	root := atRepoRoot(t)
+	const brands = "tests/fixtures/brands"
+	_, _, err := LoadRulesSource(RulesFlags{Brand: strp("beta"), Rules: strp("x.json"), BrandsDir: strp(brands)})
+	if err == nil || err.Error() != "use either --brand or --rules, not both" {
+		t.Errorf("both: %v", err)
+	}
+	f := RulesFlags{Brand: strp("beta"), BrandsDir: strp(brands), Default: "tests/fixtures/brand_rules/rules.json"}
+	label, eff, err := LoadRulesSource(f)
+	if err != nil || label != "beta" || !slices.Equal(ruleIDs(eff.Rules), []string{"b-banned", "b-pii"}) {
+		t.Errorf("beta: %q %v %v", label, ruleIDs(eff.Rules), err)
+	}
+	if p, err := RulesPathOf(f); err != nil || p != mustReal(t, root)+"/tests/fixtures/brands/beta/guidelines.md" {
+		t.Errorf("RulesPathOf(beta) = %q, %v", p, err)
+	}
+	f = RulesFlags{Default: "tests/fixtures/brand_rules/rules.json"}
+	label, eff, err = LoadRulesSource(f)
+	if err != nil || label != "none" || *eff.Version != "fixture-s" {
+		t.Errorf("default: %q %v", label, err)
+	}
+	if p, err := RulesPathOf(f); err != nil || p != root+"/tests/fixtures/brand_rules/rules.json" {
+		t.Errorf("RulesPathOf(default) = %q, %v", p, err)
+	}
+	f.Rules = strp("tests/fixtures/brand_rules/rules_other_version.json")
+	if p, err := RulesPathOf(f); err != nil || p != "tests/fixtures/brand_rules/rules_other_version.json" {
+		t.Errorf("RulesPathOf(--rules) = %q, %v", p, err)
+	}
+}
+
+func TestLoadedFields(t *testing.T) {
+	atRepoRoot(t)
+	beta := mustLoadBrand(t, "tests/fixtures/brands/beta/guidelines.md")
+	if got, want := LoadedFields("beta", beta), "brand=beta rules_loaded=2 topics_loaded=1 repeat_contact=on"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	alpha := mustLoadBrand(t, "tests/fixtures/brands/alpha/guidelines.md")
+	if got := LoadedFields("alpha", alpha); !strings.HasPrefix(got, "brand=alpha ") || !strings.HasSuffix(got, " repeat_contact=off") {
+		t.Errorf("got %q", got)
+	}
+	if got := RepeatContactToken(alpha); got != "repeat_contact=off" {
+		t.Errorf("token %q", got)
+	}
+}
+
+func TestDefaultsWithoutCheckout(t *testing.T) {
+	t.Chdir(t.TempDir())
+	_, _, err := LoadRulesSource(RulesFlags{Default: "policies/rules.json"})
+	if err == nil || err.Error() != "policies/rules.json: cannot read rules file (no repository checkout found)" {
+		t.Errorf("rules default: %v", err)
+	}
+	_, _, err = LoadRulesSource(RulesFlags{Brand: strp("beta"), Default: "policies/rules.json"})
+	if err == nil || err.Error() != "brand 'beta' not found under brands" {
+		t.Errorf("brands default: %v", err)
+	}
+	_, _, err = LoadRulesSource(RulesFlags{Brand: strp("Bad"), Default: "policies/rules.json"})
+	if err == nil || !strings.HasPrefix(err.Error(), "bad brand name 'Bad'") {
+		t.Errorf("bad name: %v", err)
+	}
+	// A fake checkout: a backend/go.mod with this module's line.
+	fake := realTemp(t)
+	mkfile(t, fake+"/backend/go.mod")
+	os.WriteFile(fake+"/backend/go.mod", []byte(moduleLine+"\n\ngo 1.24\n"), 0o644)
+	mkfile(t, fake+"/sub/dir/x")
+	t.Chdir(fake + "/sub/dir")
+	if p, err := RulesPathOf(RulesFlags{Default: "policies/rules.json"}); err != nil || p != fake+"/policies/rules.json" {
+		t.Errorf("fake checkout default = %q, %v", p, err)
+	}
+	if _, err := RulesPathOf(RulesFlags{Brand: strp("beta")}); err == nil || err.Error() != "brand 'beta' not found under "+fake+"/brands" {
+		t.Errorf("fake checkout brands: %v", err)
+	}
+}

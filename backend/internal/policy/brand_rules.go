@@ -3,8 +3,10 @@ package policy
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"unicode/utf8"
@@ -208,4 +210,126 @@ func blockLine(block string, err error) int {
 		off = int(se.Offset)
 	}
 	return 1 + strings.Count(block[:off], "\n")
+}
+
+var errNoCheckout = errors.New("no repository checkout found")
+
+const moduleLine = "module github.com/aadhar-build/support-triage-auto/backend"
+
+// repoRoot is the nearest directory, walking up from the working directory,
+// holding backend/go.mod with this module's module line.
+func repoRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", errNoCheckout
+	}
+	for {
+		b, err := os.ReadFile(dir + "/backend/go.mod")
+		if err == nil && slices.Contains(strings.Split(string(b), "\n"), moduleLine) {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errNoCheckout
+		}
+		dir = parent
+	}
+}
+
+// brandPathFor is BrandPath under the given --brands-dir, else <root>/brands.
+// With no checkout it refuses after the name check and never guesses a path.
+func brandPathFor(name string, brandsDir *string) (string, error) {
+	if brandsDir == nil {
+		root, err := repoRoot()
+		if err != nil {
+			if !brandName.MatchString(name) {
+				return BrandPath(name, "")
+			}
+			return "", &BrandError{fmt.Sprintf("brand '%s' not found under brands", name)}
+		}
+		dir := root + "/brands"
+		brandsDir = &dir
+	}
+	return BrandPath(name, *brandsDir)
+}
+
+// RulesFlags is a runner's --rules, --brand and --brands-dir; a nil field
+// was not given. Default is the runner's repo-relative default rules path.
+type RulesFlags struct {
+	Rules, Brand, BrandsDir *string
+	Default                 string
+}
+
+type optFlag struct{ p **string }
+
+func (o optFlag) String() string {
+	if o.p == nil || *o.p == nil {
+		return ""
+	}
+	return **o.p
+}
+
+func (o optFlag) Set(s string) error { *o.p = &s; return nil }
+
+// Register adds --rules, --brand and --brands-dir to fs.
+func (f *RulesFlags) Register(fs *flag.FlagSet) {
+	fs.Var(optFlag{&f.Rules}, "rules", "JSON policy rules file (default: "+f.Default+")")
+	fs.Var(optFlag{&f.Brand}, "brand", "brand whose brands/<brand>/guidelines.md rules block to use")
+	fs.Var(optFlag{&f.BrandsDir}, "brands-dir", "test seam: the brands directory (default: the repo's brands/)")
+}
+
+// LoadRulesSource is load_rules_source: the label and effective rules from
+// --brand or --rules.
+func LoadRulesSource(f RulesFlags) (string, EffectiveRules, error) {
+	if f.Brand != nil && f.Rules != nil {
+		return "", EffectiveRules{}, &BrandError{"use either --brand or --rules, not both"}
+	}
+	if f.Brand != nil {
+		p, err := brandPathFor(*f.Brand, f.BrandsDir)
+		if err != nil {
+			return "", EffectiveRules{}, err
+		}
+		eff, err := LoadBrandFile(p)
+		return *f.Brand, eff, err
+	}
+	p, err := defaultRulesPath(f.Rules, f.Default)
+	if err != nil {
+		return "", EffectiveRules{}, err
+	}
+	eff, err := LoadEffective(p)
+	return "none", eff, err
+}
+
+// RulesPathOf is rules_path_of: the file the rules came from.
+func RulesPathOf(f RulesFlags) (string, error) {
+	if f.Brand != nil {
+		return brandPathFor(*f.Brand, f.BrandsDir)
+	}
+	return defaultRulesPath(f.Rules, f.Default)
+}
+
+// LoadedFields is the shared stdout fragment.
+func LoadedFields(label string, eff EffectiveRules) string {
+	return fmt.Sprintf("brand=%s rules_loaded=%d topics_loaded=%d %s", label, len(eff.Rules), len(eff.Topics), RepeatContactToken(eff))
+}
+
+// RepeatContactToken is repeat_contact=on|off.
+func RepeatContactToken(eff EffectiveRules) string {
+	if eff.RepeatContact != nil {
+		return "repeat_contact=on"
+	}
+	return "repeat_contact=off"
+}
+
+// defaultRulesPath is the given --rules, else <root>/<rel>, refusing with
+// #67's message when there is no checkout.
+func defaultRulesPath(given *string, rel string) (string, error) {
+	if given != nil {
+		return *given, nil
+	}
+	root, err := repoRoot()
+	if err != nil {
+		return "", &RulesError{rel, "cannot read rules file (no repository checkout found)"}
+	}
+	return root + "/" + rel, nil
 }

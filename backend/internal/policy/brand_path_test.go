@@ -137,4 +137,9 @@ func TestBrandPathSymlinkLoop(t *testing.T) {
 			t.Errorf("%s under %s: %q, want %q", c.name, c.dir, got, want)
 		}
 	}
+	var out, errb strings.Builder
+	code := BrandRulesMain([]string{"--conformance", "--brand", "a", "--rules", tmp + "/none.json", "--brands-dir", brands}, &out, &errb)
+	if want := "error: brand 'a' resolves through a symlink loop under " + brands + "\n"; out.String() != "" || errb.String() != want || code != 2 {
+		t.Errorf("CLI: got (%q, %q, %d), want stderr %q and 2", out.String(), errb.String(), code, want)
+	}
 }

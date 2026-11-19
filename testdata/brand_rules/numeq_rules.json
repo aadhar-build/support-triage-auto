@@ -1,0 +1,1 @@
+{"big": 2e400, "nest": {"z": null, "x": [1.0, {"y": 2}]}, "d": 0, "c": 1e20, "b": 1, "a": 1.0, "public_reply_rules": [{"id": "n-banned", "type": "banned_phrase", "phrases": ["blorptastic"]}], "escalate_always": [{"id": "n-topic", "phrases": ["made-up numeric topic"]}]}
