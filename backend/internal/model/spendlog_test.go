@@ -1,12 +1,16 @@
 package model
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -513,5 +517,187 @@ func TestRefusesNonStandard(t *testing.T) {
 	e.write(openLine + reserveLine("a", "2026-11-02T00:00:00+00:00", "9223372036854775807"))
 	if mtd, err := e.log(1e30, nov).MonthToDate(); err != nil || mtd != 9.223372036854776e+18 {
 		t.Errorf("int64 max: %v %v", mtd, err)
+	}
+}
+
+// lockFile takes flock(2) LOCK_EX on its own fd, the lock Python's fcntl.flock takes.
+func lockFile(t *testing.T, path string) (unlock func()) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	done := false
+	unlock = func() {
+		if !done {
+			done = true
+			syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			f.Close()
+		}
+	}
+	t.Cleanup(unlock)
+	return unlock
+}
+
+// startChild starts cmd with a stdout scanner; Cleanup kills and reaps it if
+// the test ends while it is still running. exited is closed when it exits.
+func startChild(t *testing.T, cmd *exec.Cmd) (lines *bufio.Scanner, exited chan error) {
+	t.Helper()
+	// An os.Pipe we own, not StdoutPipe: Wait would close StdoutPipe's read end
+	// on exit, losing lines the child printed just before exiting.
+	out, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { out.Close() })
+	cmd.Stdout = w
+	cmd.Stderr = os.Stderr
+	err = cmd.Start()
+	w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exited = make(chan error, 1)
+	lines = bufio.NewScanner(out)
+	waited := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-waited:
+		default:
+			cmd.Process.Kill()
+			<-waited
+		}
+	})
+	go func() {
+		exited <- cmd.Wait()
+		close(waited)
+	}()
+	return lines, exited
+}
+
+func expectLine(t *testing.T, lines *bufio.Scanner, want string) {
+	t.Helper()
+	got := make(chan string, 1)
+	go func() {
+		if lines.Scan() {
+			got <- lines.Text()
+		} else {
+			got <- "<EOF>"
+		}
+	}()
+	select {
+	case s := <-got:
+		if s != want {
+			t.Fatalf("child said %q, want %q", s, want)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatalf("child did not say %q within 10s", want)
+	}
+}
+
+func stillRunning(t *testing.T, exited chan error) {
+	t.Helper()
+	time.Sleep(500 * time.Millisecond)
+	select {
+	case err := <-exited:
+		t.Fatalf("child exited while the lock was held: %v", err)
+	default:
+	}
+}
+
+const childEnv = "MODEL_SPENDLOG_LOCK_CHILD"
+
+// TestReserveIsLocked: a re-exec'd child's Reserve waits on the parent's flock.
+func TestReserveIsLocked(t *testing.T) {
+	if path := os.Getenv(childEnv); path != "" {
+		l, err := OpenSpendLog(parity.RepoRoot(t), path, 1.0, SpendLogOptions{Clock: func() time.Time { return nov }})
+		if err != nil {
+			fmt.Println("error:", err)
+			os.Exit(3)
+		}
+		fmt.Println("ready")
+		_, err = l.Reserve("child", "m", "dev", 0.6)
+		var ce *MonthlyCapError
+		switch {
+		case err == nil:
+			fmt.Println("ok")
+		case errors.As(err, &ce):
+			fmt.Println("cap")
+		default:
+			fmt.Println("error:", err)
+		}
+		os.Exit(0)
+	}
+	e := newEnv(t)
+	e.create(nov)
+	unlock := lockFile(t, e.path)
+	cmd := exec.Command(os.Args[0], "-test.run=^TestReserveIsLocked$", "-test.count=1")
+	cmd.Env = append(os.Environ(), childEnv+"="+e.path)
+	lines, exited := startChild(t, cmd)
+	expectLine(t, lines, "ready")
+	stillRunning(t, exited)
+	unlock()
+	_, perr := e.log(1.0, nov).Reserve("parent", "m", "dev", 0.6)
+	parent := "ok"
+	var ce *MonthlyCapError
+	if errors.As(perr, &ce) {
+		parent = "cap"
+	} else if perr != nil {
+		t.Fatal(perr)
+	}
+	want := map[string]string{"ok": "cap", "cap": "ok"}[parent]
+	expectLine(t, lines, want)
+	select {
+	case err := <-exited:
+		if err != nil {
+			t.Fatalf("child: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("child did not exit within 10s")
+	}
+	if mtd, err := e.log(1.0, nov).MonthToDate(); err != nil || mtd != 0.6 {
+		t.Errorf("mtd %v %v", mtd, err)
+	}
+}
+
+// TestConcurrentReserve: 8 goroutines, each with its own fd, against cap 1.0.
+func TestConcurrentReserve(t *testing.T) {
+	e := newEnv(t)
+	e.create(nov)
+	var wg sync.WaitGroup
+	results := make(chan error, 8)
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l, err := OpenSpendLog(e.repo, e.path, 1.0, SpendLogOptions{Clock: func() time.Time { return nov }})
+			if err != nil {
+				results <- err
+				return
+			}
+			_, err = l.Reserve("r", "m", "dev", 0.3)
+			results <- err
+		}()
+	}
+	wg.Wait()
+	close(results)
+	ok := 0
+	for err := range results {
+		var ce *MonthlyCapError
+		switch {
+		case err == nil:
+			ok++
+		case !errors.As(err, &ce):
+			t.Errorf("unexpected error: %v", err)
+		}
+	}
+	if ok != 3 {
+		t.Errorf("%d reservations succeeded, want 3", ok)
+	}
+	if mtd, err := e.log(1.0, nov).MonthToDate(); err != nil || mtd != 0.8999999999999999 {
+		t.Errorf("mtd %v %v", mtd, err)
 	}
 }
