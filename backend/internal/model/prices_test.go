@@ -140,8 +140,9 @@ func TestMalformedPrices(t *testing.T) {
 	}
 }
 
-// TestRefusesNonStandardPrices: price-file parts of criterion 12.
-func TestRefusesNonStandardPrices(t *testing.T) {
+// refusesNonStandardPrices is the price-file part of criterion 12; it runs as
+// TestRefusesNonStandard/prices.
+func refusesNonStandardPrices(t *testing.T) {
 	limit := func(v string) string {
 		return `{"version": "v", "models": {"m": {"bands": [{"max_input_tokens": ` + v + `, "input_usd_per_mtok": 1, "output_usd_per_mtok": 1}, ` + band1 + `]}}}`
 	}

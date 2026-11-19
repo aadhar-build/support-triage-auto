@@ -476,7 +476,42 @@ func TestLoadMonthlyCap(t *testing.T) {
 
 // TestRefusesNonStandard: log parts of criterion 12 (Owner decisions Q1-Q3
 // and #67 Q2). Python's results differ, so none of these is in the goldens.
+// TestRefusesNonStandard holds criterion 12: the log, price-file and
+// thresholds-file parts each run as a subtest.
 func TestRefusesNonStandard(t *testing.T) {
+	t.Run("log", refusesNonStandardLog)
+	t.Run("prices", refusesNonStandardPrices)
+	t.Run("thresholds", refusesNonStandardThresholds)
+}
+
+func refusesNonStandardThresholds(t *testing.T) {
+	dir := t.TempDir()
+	cap := func(v string) string { return `{"guardrails": {"api_spend_usd_per_month": {"max": ` + v + `}}}` }
+	cases := []struct{ name, content, suffix string }{
+		{"nan", cap("NaN"), " is not valid JSON"},
+		{"inf", cap("Infinity"), " is not valid JSON"},
+		{"neginf", cap("-Infinity"), " is not valid JSON"},
+		{"surrogate", `{"x": "\ud800"}`, " is not valid JSON"},
+		{"int_1e30", cap("1000000000000000000000000000000"), ": api_spend_usd_per_month.max must be a finite number > 0"},
+		{"int_2_63", cap("9223372036854775808"), ": api_spend_usd_per_month.max must be a finite number > 0"},
+	}
+	for _, c := range cases {
+		path := filepath.Join(dir, c.name+".json")
+		writeFile(t, path, c.content)
+		_, err := LoadMonthlyCap(path)
+		var se *SpendLogError
+		if want := "thresholds file " + path + c.suffix; !errors.As(err, &se) || err.Error() != want {
+			t.Errorf("%s: %v; want %s", c.name, err, want)
+		}
+	}
+	path := filepath.Join(dir, "max.json")
+	writeFile(t, path, cap("9223372036854775807"))
+	if got, err := LoadMonthlyCap(path); err != nil || got != 9.223372036854776e+18 {
+		t.Errorf("int64 max: %v %v", got, err)
+	}
+}
+
+func refusesNonStandardLog(t *testing.T) {
 	type tc struct{ name, content, problem string }
 	var cases []tc
 	for _, v := range []string{"NaN", "Infinity", "-Infinity"} {
