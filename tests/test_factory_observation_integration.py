@@ -1,6 +1,8 @@
 """Exercise the installed command-line interfaces in disposable repositories."""
 
+import fcntl
 import json
+import os
 import runpy
 import shutil
 import subprocess
@@ -64,6 +66,183 @@ class FactoryCLI:
             "source": {"kind": "owner", "record_id": "effort-01"},
             "data": {"activity": "review", "minutes": 0, "rework": False}, **extra,
         }
+
+
+class FactoryRecoveryTransition(FactoryCLI, unittest.TestCase):
+    def make_gate(self, round_number=2):
+        origin = self.root / "origin.git"
+        self.git("init", "-q", "--bare", "-b", "main", str(origin))
+        self.git("remote", "set-url", "origin", str(origin))
+        self.git("symbolic-ref", "HEAD", "refs/heads/main")
+        self.git("config", "user.name", "Fixture")
+        self.git("config", "user.email", "fixture@example.invalid")
+        (self.root / "code.txt").write_text("original\n")
+        self.git("add", "code.txt")
+        self.git("commit", "-qm", "base")
+        self.git("push", "-q", "origin", "main")
+        self.worktree = self.root / ".worktrees" / JOB_ID
+        self.git("worktree", "add", "-qb", f"factory/{JOB_ID}", str(self.worktree))
+        (self.worktree / "code.txt").write_text("candidate\n")
+        self.git("-C", str(self.worktree), "commit", "-qam", "candidate")
+        self.candidate = self.git("-C", str(self.worktree), "rev-parse", "HEAD").stdout.strip()
+        stages = ["intake", *["build", "gate"] * round_number]
+        history = [{"at": f"2020-01-01T00:{i:02d}:00Z", "stage": stage, "note": ""}
+                   for i, stage in enumerate(stages)]
+        self.write_job(stage="gate", round_number=round_number, history=history)
+        (self.job_dir / "spec.md").write_text("## Files\n- code.txt\n")
+        (self.factory / "checks.sh").write_text("printf '%s\\n' private-check-output\nexit 1\n")
+
+    def observe_gate_event(self, kind, data, *, event_id="a3f83e7e-92cb-4e68-a985-1bb5ff447e4f", evidence=(),
+                           **bindings):
+        event = {
+            "schema_version": 1, "event_id": event_id, "job_id": JOB_ID, "kind": kind,
+            "occurred_at": "2026-11-19T08:00:00Z", "origin": "real",
+            "source": {"kind": "controller", "record_id": "gate-fixture"},
+            "candidate_sha": self.candidate, "round": 2, "data": data, "evidence": list(evidence), **bindings,
+        }
+        self.cli("job", "observe", JOB_ID, "-", input=json.dumps(event))
+        return event_id
+
+    def run_failing_gate(self):
+        # A stub catches any GitHub CLI call even when the command handles its failure.
+        gh = self.root / "stub" / "gh"
+        gh.parent.mkdir()
+        gh.write_text("#!/bin/sh\ntouch gh-called\nexit 1\n")
+        gh.chmod(0o755)
+        env = dict(os.environ, PATH=f"{gh.parent}{os.pathsep}{os.environ['PATH']}")
+        before = json.loads(self.state.read_bytes())
+        old_files = self.job_files()
+        command = self.cli("gate", JOB_ID, env=env)
+        self.assertEqual(command.stderr, "")
+        self.assertFalse((self.root / "gh-called").exists())
+        self.assertFalse((self.factory / "lib" / "__pycache__").exists())
+        current = json.loads(self.state.read_bytes())
+        self.assertEqual((current["stage"], current["round"]), ("recovery", before["round"]))
+        self.assertEqual(current["history"][:-1], before["history"])
+        self.assertEqual(current["history"][-1]["note"], "gate failed; 2 rounds used")
+        self.assertEqual({key: value for key, value in current.items()
+                          if key not in {"stage", "history", "revision"}},
+                         {key: value for key, value in before.items()
+                          if key not in {"stage", "history", "revision"}})
+        receipt = f"round-{before['round']}/checks.md"
+        new_files = self.job_files()
+        self.assertIn(b"private-check-output", new_files.pop(receipt))
+        self.assertEqual(new_files, old_files)
+        lines = command.stdout.splitlines()
+        self.assertEqual(len(lines), 2, command.stdout)
+        status, question = lines
+        self.assertEqual(status, f"{JOB_ID} -> recovery: gate FAIL")
+        self.assertTrue(question.endswith("?"))
+        self.assertEqual(question.count("?"), 1)
+        self.assertIn(JOB_ID, question)
+        self.assertNotIn("private-check-output", question)
+        return question
+
+    def job_files(self):
+        return {str(file.relative_to(self.job_dir)): file.read_bytes()
+                for file in self.job_dir.rglob("*") if file.is_file() and file != self.state}
+
+    def test_gate_exhaustion_above_cap_asks_about_follow_up_debt(self):
+        self.make_gate(round_number=3)
+        legacy = self.job_dir / "round-2" / "checks.md"
+        legacy.parent.mkdir()
+        legacy.write_text("GATE: FAIL\nprivate-legacy-failure\n")
+        question = self.run_failing_gate()
+        self.assertIn("follow-up debt", question)
+        self.assertNotIn("private-legacy-failure", question)
+        self.assertFalse((self.job_dir / "round-1").exists())
+        self.assertFalse((self.job_dir / "round-4").exists())
+
+    def test_gate_reports_linked_proposal_without_disclosing_evidence(self):
+        self.make_gate()
+        evidence = [{"path": "round-2/private-artifact.json", "sha256": "c" * 64}]
+        check_id = self.observe_gate_event("check_evidence", {"check_id": "regression", "verdict": "fail"},
+                                           event_id="bc6a4bb7-841e-4848-8f6d-ca58f59cd923", evidence=evidence)
+        proposal_id = self.observe_gate_event(
+            "recovery_decision",
+            {"failure_id": "private-failure-id", "proposed_recovery": "split_scope",
+             "regression_check_event_id": check_id, "cause": "private-claimed-cause"},
+            evidence=evidence,
+        )
+        question = self.run_failing_gate()
+        self.assertIn("reported scope split", question)
+        for private in ("private-artifact", "private-failure-id", "private-claimed-cause", check_id, proposal_id):
+            self.assertNotIn(private, question)
+        recovery = json.loads(self.cli("job", "recovery", JOB_ID).stdout)
+        self.assertEqual(recovery["recommendations"][0]["reported_proposal_event_ids"], [proposal_id])
+        self.assertEqual(recovery["decisions"][0]["regression_check"]["event_id"], check_id)
+        self.assertIsNone(recovery["decisions"][0]["cause"])
+
+    def test_gate_asks_about_debt_when_recovery_is_reported_unsafe(self):
+        self.make_gate()
+        self.observe_gate_event("recovery_decision", {"failure_id": "unsafe",
+                                "outcome": "no_safe_recovery", "proposed_recovery": "permitted_alternative"})
+        question = self.run_failing_gate()
+        self.assertIn("follow-up debt", question)
+        self.assertNotIn("alternative approach", question)
+
+    def test_gate_ignores_partial_evidence_from_a_corrupt_observation_ledger(self):
+        self.make_gate()
+        self.observe_gate_event("recovery_decision", {"failure_id": "split", "proposed_recovery": "split_scope"})
+        invalid = self.job_dir / "observations" / "96de3bfe-a8b5-421b-8ff1-7c40d15fb3b4.json"
+        invalid.write_text("private-corrupt-data")
+        question = self.run_failing_gate()
+        self.assertIn("until its recovery observations can be checked", question)
+        self.assertNotIn("scope split", question)
+        self.assertNotIn("private-corrupt-data", question)
+        self.assertNotIn(invalid.name, question)
+
+    def test_gate_finishes_while_an_observer_holds_the_ledger_lock(self):
+        self.make_gate()
+        self.observe_gate_event("recovery_decision", {"failure_id": "locked", "proposed_recovery": "split_scope"})
+        fd = os.open(self.job_dir / "observations", os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            question = self.run_failing_gate()
+            self.assertIn("until its recovery observations can be checked", question)
+            self.assertNotIn("scope split", question)
+        finally:
+            os.close(fd)
+
+    def test_large_ledger_falls_back_only_for_the_transition(self):
+        self.make_gate()
+        self.observe_gate_event("recovery_decision", {"failure_id": "large", "proposed_recovery": "split_scope"},
+                                candidate_sha=None)
+        for number in range(70):
+            (self.job_dir / "observations" / f"note-{number}").touch()
+        self.assertIn("until its recovery observations can be checked", self.run_failing_gate())
+        recovery = json.loads(self.cli("job", "recovery", JOB_ID).stdout)
+        self.assertIn("scope split", recovery["owner_question"])
+        self.assertFalse(recovery["diagnostics"])
+
+    def test_gate_ignores_proposal_for_another_head_in_the_same_round(self):
+        self.make_gate()
+        other = self.git("rev-parse", "HEAD").stdout.strip()
+        self.assertNotEqual(other, self.candidate)
+        self.observe_gate_event("recovery_decision", {"failure_id": "stale", "proposed_recovery": "split_scope"},
+                                candidate_sha=other)
+        self.assertIn("follow-up debt", self.run_failing_gate())
+        recovery = json.loads(self.cli("job", "recovery", JOB_ID).stdout)
+        self.assertIn("follow-up debt", recovery["owner_question"])
+        self.assertEqual(recovery["decisions"][0]["proposed_recovery"], "split_scope")
+        card = self.cli("job", "card", JOB_ID).stdout
+        self.assertNotIn("scope split", card.partition("## Next step")[2])
+
+    def test_gate_asks_to_check_an_unreadable_observation_ledger(self):
+        self.make_gate()
+        (self.job_dir / "observations").write_text("private-invalid-ledger")
+        question = self.run_failing_gate()
+        self.assertIn("until its recovery observations can be checked", question)
+        self.assertNotIn("private-invalid-ledger", question)
+
+    def test_gate_before_exhaustion_and_final_gate_keep_their_status_outputs(self):
+        self.make_gate(round_number=1)
+        output = self.cli("gate", JOB_ID).stdout
+        self.assertEqual(output, f"{JOB_ID} -> build: gate FAIL\n")
+        before = self.state.read_bytes()
+        self.assertEqual((json.loads(before)["stage"], json.loads(before)["round"]), ("build", 2))
+        self.assertEqual(self.cli("gate", JOB_ID, "--final").stdout, f"{JOB_ID} final gate FAIL\n")
+        self.assertEqual(self.state.read_bytes(), before)
 
 
 class FactoryObservationIntegration(FactoryCLI, unittest.TestCase):

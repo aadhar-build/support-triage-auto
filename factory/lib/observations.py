@@ -15,12 +15,15 @@ import re
 import stat
 from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
+from itertools import islice
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 MAX_EVENT_BYTES = 64 * 1024
-_DIRECTORY = "observations"
+# Bound optional advice to 4 MiB of ledger records while a controller operation is active.
+_TRANSITION_ENTRY_LIMIT = 64
+OBSERVATION_DIRECTORY = "observations"
 _DIRECTORY_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _READ_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}")
@@ -436,9 +439,16 @@ def _read_record(directory_fd: int, filename: str, job_id: str) -> dict:
     return record
 
 
-def _read_records(directory_fd: int, job_id: str) -> tuple[list[dict], list[str]]:
+def _read_records(directory_fd: int, job_id: str, *, for_transition: bool = False) -> tuple[list[dict], list[str]]:
+    if for_transition:
+        with os.scandir(directory_fd) as entries:
+            names = [entry.name for entry in islice(entries, _TRANSITION_ENTRY_LIMIT + 1)]
+        if len(names) > _TRANSITION_ENTRY_LIMIT:
+            return [], ["observation directory exceeds the transition read limit"]
+    else:
+        names = os.listdir(directory_fd)
     records, diagnostics = [], []
-    for filename in sorted(os.listdir(directory_fd)):
+    for filename in sorted(names):
         if not filename.endswith(".json"):
             continue
         try:
@@ -509,7 +519,7 @@ def _project(
 
 
 def _check_directory_entry(job_fd: int, directory_fd: int) -> None:
-    entry = os.stat(_DIRECTORY, dir_fd=job_fd, follow_symlinks=False)
+    entry = os.stat(OBSERVATION_DIRECTORY, dir_fd=job_fd, follow_symlinks=False)
     opened = os.fstat(directory_fd)
     if (entry.st_dev, entry.st_ino) != (opened.st_dev, opened.st_ino):
         raise ObservationError("observation directory changed during access")
@@ -547,10 +557,10 @@ def append_event(job_dir: Path, event: dict) -> dict:
     try:
         with _open_job(job_dir) as job_fd:
             try:
-                os.mkdir(_DIRECTORY, mode=0o700, dir_fd=job_fd)
+                os.mkdir(OBSERVATION_DIRECTORY, mode=0o700, dir_fd=job_fd)
             except FileExistsError:
                 pass
-            with _open_directory(_DIRECTORY, job_fd) as directory_fd:
+            with _open_directory(OBSERVATION_DIRECTORY, job_fd) as directory_fd:
                 fcntl.flock(directory_fd, fcntl.LOCK_EX)
                 _check_directory_entry(job_fd, directory_fd)
                 try:
@@ -597,8 +607,9 @@ def append_event(job_dir: Path, event: dict) -> dict:
 
 def load_events(
     job_dir: Path, *, as_of: datetime | None = None, include_ancestry: bool = False,
+    for_transition: bool = False,
 ) -> tuple[list[dict], list[str]]:
-    """Read current observations at a cutoff, optionally with validated prior IDs."""
+    """Read current observations. Transition advice skips busy or oversized ledgers."""
     if as_of is not None and (
         not isinstance(as_of, datetime) or as_of.utcoffset() is None
     ):
@@ -607,12 +618,13 @@ def load_events(
         with _open_job(job_dir) as job_fd:
             with ExitStack() as stack:
                 try:
-                    directory_fd = stack.enter_context(_open_directory(_DIRECTORY, job_fd))
+                    directory_fd = stack.enter_context(_open_directory(OBSERVATION_DIRECTORY, job_fd))
                 except FileNotFoundError:
                     return [], []
-                fcntl.flock(directory_fd, fcntl.LOCK_SH)
+                lock_mode = fcntl.LOCK_SH | fcntl.LOCK_NB if for_transition else fcntl.LOCK_SH
+                fcntl.flock(directory_fd, lock_mode)
                 _check_directory_entry(job_fd, directory_fd)
-                records, diagnostics = _read_records(directory_fd, job_dir.name)
+                records, diagnostics = _read_records(directory_fd, job_dir.name, for_transition=for_transition)
                 _check_directory_entry(job_fd, directory_fd)
     except (OSError, ObservationError):
         return [], ["cannot read observation directory"]

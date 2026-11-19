@@ -83,7 +83,7 @@ class TestRecoverySummary(unittest.TestCase):
         events = [failed_check, proposal, outcome]
         before = deepcopy((job, events))
 
-        summary = recovery_summary(job, events)
+        summary = recovery_summary(job, events, candidate_sha=CANDIDATE)
 
         self.assertIs(summary["retry_exhausted"], True)
         self.assertEqual(summary["retry_exhaustion"]["round"], 2)
@@ -94,6 +94,15 @@ class TestRecoverySummary(unittest.TestCase):
         self.assertEqual(summary["recommendations"][0]["action"], "ask_owner")
         self.assertIn("reported scope split", summary["owner_question"])
         self.assertEqual((job, events), before)
+
+    def test_proposal_for_another_or_unknown_head_remains_historical(self):
+        job = exhausted_job()
+        proposal = decision(1, proposed_recovery="split_scope", evidence=[EVIDENCE])
+        for candidate in (None, "b" * 40):
+            with self.subTest(candidate=candidate):
+                summary = recovery_summary(job, [proposal], candidate_sha=candidate)
+                self.assertIn("follow-up debt", summary["owner_question"])
+                self.assertEqual(summary["decisions"][0]["proposed_recovery"], "split_scope")
 
     def test_controller_exhaustion_recognizes_an_owner_retry_above_cap(self):
         job = exhausted_job()
@@ -113,7 +122,7 @@ class TestRecoverySummary(unittest.TestCase):
                            evidence=[EVIDENCE]),
                   decision(2, outcome="no_safe_recovery")]
 
-        summary = recovery_summary(exhausted_job(), events)
+        summary = recovery_summary(exhausted_job(), events, candidate_sha=CANDIDATE)
 
         self.assertEqual([item["action"] for item in summary["recommendations"]], ["ask_owner"])
         self.assertIn(JOB_ID, summary["owner_question"])
@@ -122,7 +131,7 @@ class TestRecoverySummary(unittest.TestCase):
     def test_recorded_owner_choice_remains_visible_without_new_question(self):
         events = [decision(1, source="owner", decision="follow_up_debt", outcome="stopped")]
 
-        summary = recovery_summary(exhausted_job(), events)
+        summary = recovery_summary(exhausted_job(), events, candidate_sha=CANDIDATE)
 
         self.assertEqual(summary["decisions"][0]["decision"], "follow_up_debt")
         self.assertEqual(summary["decisions"][0]["outcome"], "stopped")
@@ -133,7 +142,7 @@ class TestRecoverySummary(unittest.TestCase):
         events = [decision(1, source="owner", decision="follow_up_debt", outcome="stopped"),
                   decision(2, failure_id="failure-2", outcome="unresolved")]
 
-        summary = recovery_summary(exhausted_job(), events)
+        summary = recovery_summary(exhausted_job(), events, candidate_sha=CANDIDATE)
 
         self.assertEqual([item["action"] for item in summary["recommendations"]], ["ask_owner"])
         self.assertIn("failure-2", summary["owner_question"])
@@ -142,7 +151,7 @@ class TestRecoverySummary(unittest.TestCase):
         events = [decision(1, source="owner", decision="follow_up_debt"),
                   decision(2, source="owner", decision="retry")]
 
-        summary = recovery_summary(exhausted_job(), events)
+        summary = recovery_summary(exhausted_job(), events, candidate_sha=CANDIDATE)
 
         self.assertIn("decision", summary["decisions"][0]["conflicts"])
         self.assertEqual([item["action"] for item in summary["recommendations"]], ["ask_owner"])

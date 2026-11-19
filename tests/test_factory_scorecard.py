@@ -145,8 +145,8 @@ class WeeklyScorecard(unittest.TestCase):
                         outcome="unresolved") for i in (1, 2)]
         for e in events:
             e["evidence"] = [dict(path="sanitized.txt", sha256="0" * 64)]
-        r = report(record("undated", history=[]), record("other", events=events))
-        self.assertEqual(r["undated_statuses"]["undated"], "build")
+        r = report(record("001-undated", history=[]), record("002-other", events=events))
+        self.assertEqual(r["undated_statuses"]["001-undated"], "build")
         self.assertEqual(r["recovery"]["recurring"], [])
         self.assertIsNone(r["recovery"]["records"][0]["cause"])
         repeated = r["recovery"]["reported_recurring"]
@@ -366,13 +366,27 @@ class WeeklyScorecard(unittest.TestCase):
         item["events"][-1]["round"] = 1
         self.assertIsNone(report(item)["acceptance"]["rate"]["percent"])
 
-    def test_unverified_historical_guardrail_path_is_linked(self):
-        item = record()
+    def test_historical_guardrail_path_is_labeled_local(self):
+        item = record("001-one")
         item["guardrails"] = dict(requirements=[dict(id="gate", required=True, status="unverified",
                                                     evidence=[], legacy_paths=["gate-r1.md"])])
         markdown = render_weekly_report(report(item))
-        self.assertIn("factory/jobs/one/gate-r1.md", markdown)
+        self.assertIn("Local historical evidence reference `factory/jobs/001-one/gate-r1.md`", markdown)
+        self.assertNotIn("](factory/jobs/", markdown)
         self.assertIn("unverified", markdown)
+
+    def test_only_tracker_links_and_safe_local_references_are_rendered(self):
+        item = record("001-one")
+        item["url"] = "https://github.com/example/factory/pull/2"
+        item["guardrails"] = dict(requirements=[dict(id="gate", required=True, status="unverified", evidence=[
+            {"url": "https://example.test/demo", "verified": True},
+            {"path": "../secret"},
+        ])])
+        markdown = render_weekly_report(report(item))
+        self.assertIn("[001-one](https://github.com/example/factory/pull/2)", markdown)
+        self.assertIn("Evidence link unavailable", markdown)
+        self.assertNotIn("https://example.test/demo", markdown)
+        self.assertNotIn("secret", markdown)
 
     def test_authenticated_merge_date_precedes_local_stage_update(self):
         item = record(history=[(1, "intake"), (4, "approve"), (4, "needs-human")])
@@ -393,8 +407,8 @@ class WeeklyScorecard(unittest.TestCase):
 
     def test_renderer_handles_unreadable_jobs_supplied_by_cli(self):
         result = report()
-        result["diagnostics"]["broken"] = ["unreadable job.json"]
-        self.assertIn("broken", render_weekly_report(result))
+        result["diagnostics"]["001-broken"] = ["unreadable job.json"]
+        self.assertIn("001-broken", render_weekly_report(result))
 
     def test_as_of_only_uses_verified_first_attempt(self):
         item = record(history=[(1, "intake"), (4, "gate"), (5, "review"), (6, "merged")])
@@ -405,13 +419,13 @@ class WeeklyScorecard(unittest.TestCase):
         self.assertEqual(report(item)["delivered"]["first_gate"]["percent"], 100)
 
     def test_escalations_guardrail_gaps_and_bottlenecks(self):
-        item = record(events=[event("escalation", 1, request_id="a", rating="necessary"),
+        item = record("001-one", events=[event("escalation", 1, request_id="a", rating="necessary"),
                               event("escalation", 2, request_id="b", rating="missed"),
                               event("escalation", 3, request_id="c", rating=None)])
         item["guardrails"] = dict(coverage=dict(eligible=2,covered=1,proven=0),
                                  requirements=[dict(id="test",required=True,status="fail"),
                                                dict(id="review",required=True,status="missing")])
-        other = record("two")
+        other = record("002-two")
         other["guardrails"] = item["guardrails"]
         result = report(item, other)
         self.assertEqual(result["escalations"]["rated_requests"], 1)
@@ -419,7 +433,8 @@ class WeeklyScorecard(unittest.TestCase):
         self.assertEqual(result["escalations"]["missed"], 1)
         self.assertEqual(result["guardrails"]["covered_requirements"], 2)
         self.assertIn("review", render_weekly_report(result))
-        self.assertIn("factory/jobs/two/job.json", render_weekly_report(result))
+        self.assertIn("`002-two` (local job)", render_weekly_report(result))
+        self.assertNotIn("job.json", render_weekly_report(result))
 
 
 if __name__ == "__main__":

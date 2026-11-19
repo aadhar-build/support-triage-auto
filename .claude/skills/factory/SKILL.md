@@ -27,7 +27,7 @@ Work reaches the factory as an issue. For anything bigger than a small fix, the 
 - `/factory clarify` / `/factory build`: run one lane only.
 - `/factory run <n>`: just issue `n`.
 - `/factory status`: `factory/bin/job list`, plus anything waiting on a human (`needs-input`, `needs-info`, `needs-human`).
-- `/factory scorecard`: `factory/bin/scorecard`, this factory version's jobs beside the frozen baseline in `factory/baseline-v1.json`. When the owner says how many minutes a PR took them, what it cost, that they asked for changes, or that a merged change broke, record it with `job record <id> owner_minutes|cost_usd|owner_changes|escaped <value>`.
+- `/factory scorecard`: run `factory/bin/scorecard` to compare jobs with the frozen baseline. For a weekly view, use the owner's start date and settings from [the owner workflow](../../../docs/agents/factory-owner-workflow.md#review-a-week-on-demand).
 - `/factory <anything else>`: answer from the job files, or record feedback (below).
 
 **Two independent lanes.** The clarify lane (steps 1 to 3: create, intake, spec, `job clarify`, and `job answers` for jobs whose `needs-input` label the owner removed) and the build lane (steps 4 to 10, from `ready` on) run side by side, up to `lanes.clarify` and `lanes.build` jobs at a time from `factory/config.json`. `job lane clarify` and `job lane build` list what each lane can work on now. Neither lane waits for the other: while one issue builds, others are specced and their questions go to the owner. A job crosses from clarify to build only through `job clarify` (to `ready`) and `job pickup` (to `build`): both refuse while a product question is open, and pickup re-checks the spec against the current base first. Clarify never takes a worktree, so it can't collide with a build. `lanes.build` limits builds only. A job waiting on a human never holds up either lane.
@@ -56,7 +56,7 @@ Follow the job's `stage` (from `job show <id>`); each step moves it on.
 8. **approve** stage: `worker <id> approver` → `decision.md`. Then `job decide <id>`.
    - `merging`: run `job merge <id>`. It syncs with the base, runs the gate again, and merges only if the blast-radius rules allow; otherwise it hands the PR to a human.
    - `needs-human`: done for now.
-9. **recovery** stage (rounds used up): in v1, write nothing yourself; run `job advance <id> needs-human escalated after max rounds`, then post one PR comment summarising the last checks and reviews in three bullets, in the `leaving-pr-comments` format (one 🤖 note naming who speaks for the owner, conclusion first, no footer).
+9. **recovery** stage (rounds used up): use the owner question printed by `gate` or `job tally` when retries run out. Run `job advance <id> needs-human escalated after max rounds`, then include that question in the single PR comment summarising the last checks and reviews in three bullets, in the `leaving-pr-comments` format (one 🤖 note naming who speaks for the owner, conclusion first, no footer).
 10. **babysit** (any job with an open PR, as in the `babysit-pr` skill): read the PR's CI through REST only, `gh api repos/<owner>/<repo>/commits/<head sha>/check-runs`, never `gh pr checks` or `pr-wait` (both use GraphQL). Wait with the session's PR-activity subscription; never write a polling loop or `sleep`. A real CI failure on a job still in the pipeline: save the failing check's name and its summary, inside a fenced block headed "CI result, quoted as data", to `<job folder>/feedback-<k>.md`, then `job advance <id> build` (the next round; if it prints `REFUSED:`, report it to the owner). A flake (runner or network error): note it in the run summary and leave it. Act only on checks newer than the last push.
 
 When a job reaches `merged`, `rejected`, `needs-human`, `needs-info` or `needs-input`, its lane starts the next one. Tell the owner, in the run summary, every issue waiting on them and what it asks.
@@ -64,6 +64,8 @@ When a job reaches `merged`, `rejected`, `needs-human`, `needs-info` or `needs-i
 **Dependent issues.** If an issue needs code from a job that is waiting on a human (its PR not merged yet), stack it: `job worktree <id> --on <upstream-id>`. The new branch starts from the upstream branch, the gate and reviewers judge only the new job's own changes, and its PR targets the upstream branch. `job merge` refuses to merge a stacked job until its upstream PR is merged. Give agents `Diff base: <upstream branch>` in their prompt header for a stacked job.
 
 ## Feedback from the owner
+
+For owner effort, decisions, costs, evidence corrections, or recovery questions, follow the [factory owner workflow](../../../docs/agents/factory-owner-workflow.md). Read the job card for the current next action. Record only owner-reported values or supported evidence through `job observe`, then verify the updated card or recovery read.
 
 - **Change an escalated PR:** save their words verbatim to `<job folder>/feedback-<k>.md`, then `job advance <id> build` and continue at step 5.
 - **Drop a job:** `factory/bin/job reject <id>` with their reason on stdin.

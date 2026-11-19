@@ -4,57 +4,26 @@ import math
 import re
 from datetime import datetime
 from functools import partial
-from urllib.parse import quote, urlsplit
 
-from observations import ObservationError, _url
+from evidence_adapter import evidence_reference, has_evidence_reference, local_reference, tracker_url
+from factory import markdown_code, markdown_text
+from observations import OBSERVATION_DIRECTORY
 
 
 _STATUSES = {"pass", "fail", "pending", "missing", "stale", "unverified", "not_required"}
 _OBJECT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z", re.IGNORECASE)
-_PATH_COMPONENT = re.compile(r"[A-Za-z0-9._-]+")
 
 
-def _text(value):
-    value = " ".join(str(value).split())
-    return re.sub(r"([\\`*_[\]<>~|])", r"\\\1", value)
-
-
-def _code(value):
-    return "`" + " ".join(str(value).replace("`", "'").split()) + "`"
-
-
-def _https_url(value):
-    try:
-        return _url(value, "decision card link")
-    except ObservationError:
-        return None
-
-
-def _safe_path(path):
-    return isinstance(path, str) and all(
-        part not in {".", ".."} and _PATH_COMPONENT.fullmatch(part) for part in path.split("/")
-    )
-
-
-def _references(evidence, artifact_root):
-    links = []
-    for ref in evidence:
-        url = _https_url(ref.get("url"))
-        path = ref.get("path")
-        if url:
-            link = f"[{_text(ref['url'])}]({url})"
-        elif _safe_path(path):
-            link = f"[{_text(path)}]({quote(artifact_root + path, safe='/')})"
-        else:
-            continue
-        if link not in links:
-            links.append(link)
-    return " · ".join(links)
+def _references(evidence, job_id, trusted_urls):
+    references = (evidence_reference(ref, job_id, trusted_urls=trusted_urls) for ref in evidence)
+    return " · ".join(dict.fromkeys(ref for ref in references if ref))
 
 
 def _with_links(line, evidence, links):
     references = links(evidence)
-    return f"{line} · {references}" if references else line
+    if references:
+        return f"{line} · {references}"
+    return f"{line} · Evidence link unavailable" if evidence else line
 
 
 def _candidate(guardrails):
@@ -72,7 +41,7 @@ def _candidate_status(event, candidate, current_round):
     return None
 
 
-def _row_evidence(row, candidate, links):
+def _row_evidence(row, candidate):
     status = row.get("status")
     if status not in _STATUSES:
         status = "unverified"
@@ -85,7 +54,7 @@ def _row_evidence(row, candidate, links):
             if status == "pass" and not (event.get("verified") is True and event.get("candidate_sha") == candidate):
                 continue
             evidence.extend(event.get("evidence", []))
-    if status == "pass" and (not candidate or not links(evidence)):
+    if status == "pass" and (not candidate or not any(map(has_evidence_reference, evidence))):
         status = "unverified"
     return status, evidence
 
@@ -95,11 +64,11 @@ def _requirement_notes(row, candidate, links):
     for event in row.get("observations", []):
         status = event.get("status")
         if status == "stale":
-            explanation = f"Stale evidence · candidate {_code(event.get('candidate_sha') or 'unknown')}"
+            explanation = f"Stale evidence · candidate {markdown_code(event.get('candidate_sha') or 'unknown')}"
             if event.get("verified") and event.get("verdict") in {"pass", "fail"}:
                 explanation += f" · historical {event['verdict']}"
         elif row.get("required") is False:
-            status, _ = _row_evidence({"status": status, "observations": [event]}, candidate, links)
+            status, _ = _row_evidence({"status": status, "observations": [event]}, candidate)
             explanation = f"Optional evidence — {status.replace('_', ' ')}"
         else:
             continue
@@ -122,10 +91,10 @@ def _criterion_rows(rows, events, candidate, current_round, links):
     blockers = []
     for row in rows:
         identifier = row["id"]
-        criterion_id = _code(identifier.removeprefix("criterion:"))
+        criterion_id = markdown_code(identifier.removeprefix("criterion:"))
         label = row.get("label")
-        name = f"{_text(label)} ({criterion_id})" if label else criterion_id
-        status, evidence = _row_evidence(row, candidate, links)
+        name = f"{markdown_text(label)} ({criterion_id})" if label else criterion_id
+        status, evidence = _row_evidence(row, candidate)
         observation = reported.pop(identifier, None)
         if status == "missing" and observation:
             status = _candidate_status(observation, candidate, current_round) or "unverified"
@@ -142,7 +111,7 @@ def _criterion_rows(rows, events, candidate, current_round, links):
     for identifier, event in reported.items():
         status = _candidate_status(event, candidate, current_round) or "unverified"
         rendered.append(_render_row(
-            _code(identifier.removeprefix("criterion:")), status, None, event.get("evidence", []), links,
+            markdown_code(identifier.removeprefix("criterion:")), status, None, event.get("evidence", []), links,
         ))
     return rendered, blockers
 
@@ -156,8 +125,8 @@ def _check_rows(rows, candidate, links):
     rendered = []
     blockers = []
     for row in rows:
-        status, evidence = _row_evidence(row, candidate, links)
-        rendered.append(_render_row(_code(row["id"]), status, row.get("required"), evidence, links))
+        status, evidence = _row_evidence(row, candidate)
+        rendered.append(_render_row(markdown_code(row["id"]), status, row.get("required"), evidence, links))
         rendered.extend(_requirement_notes(row, candidate, links))
         if row.get("required") and status != "pass":
             blockers.append((row["id"], status))
@@ -174,18 +143,18 @@ def _demo_rows(events, candidate, current_round, links, incomplete):
         evidence = event.get("evidence", [])
         status = _candidate_status(event, candidate, current_round)
         if status == "stale":
-            status = f"stale · candidate {_code(event.get('candidate_sha') or 'unknown')}"
-        elif status is None and data.get("verdict") == "pass" and links(evidence):
-            available = True
+            status = f"stale · candidate {markdown_code(event.get('candidate_sha') or 'unknown')}"
+        elif status is None and data.get("verdict") == "pass" and evidence:
+            available = bool(links(evidence)) or available
             source = "owner-" if event.get("source", {}).get("kind") == "owner" else ""
             status = f"{source}reported demonstration"
         elif status is None and data.get("verdict") in {"fail", "pending", "missing"}:
             status = data["verdict"]
         else:
             status = "unverified"
-        line = f"- {_code(data.get('demo_id') or 'demo')} — {status}"
+        line = f"- {markdown_code(data.get('demo_id') or 'demo')} — {status}"
         if data.get("criterion_id"):
-            line += f" · Criterion {_code(data['criterion_id'])}"
+            line += f" · Criterion {markdown_code(data['criterion_id'])}"
         rendered.append(_with_links(line, evidence, links))
     if incomplete:
         status = "Current demonstration status is unknown because evidence collection is incomplete."
@@ -201,7 +170,7 @@ def _limit_rows(events, candidate, current_round, links, incomplete):
     for event in events:
         if event["kind"] != "limitation":
             continue
-        line = f"- {_code(event['data'].get('code') or 'limitation')}"
+        line = f"- {markdown_code(event['data'].get('code') or 'limitation')}"
         if event.get("candidate_sha"):
             status = _candidate_status(event, candidate, current_round)
             if status:
@@ -305,7 +274,7 @@ def _decisions(job, events, candidate, current_round, links, incomplete):
         event = owner_events[-1]
         owner = _with_links(
             owner + f" for the current candidate · older decision {event['data']['disposition']}"
-            f" for {_code(event['candidate_sha'])}", event.get("evidence", []), links,
+            f" for {markdown_code(event['candidate_sha'])}", event.get("evidence", []), links,
         )
 
     stage = job.get("stage")
@@ -324,10 +293,10 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
     if stage in {"merged", "rejected"} or disposition in {"rejected", "abandoned"}:
         return "Review the recorded outcome before starting follow-up work."
     if recovery.get("owner_question"):
-        return _text(recovery["owner_question"])
+        return markdown_text(recovery["owner_question"])
     for recommendation in recovery.get("recommendations", []):
         if recommendation.get("advice"):
-            return _text(recommendation["advice"])
+            return markdown_text(recommendation["advice"])
     if stage in {"needs-info", "needs-input"}:
         return "Answer the outstanding intake or product question."
     if not candidate:
@@ -335,8 +304,8 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
     if blockers:
         identifier, status = next((row for row in blockers if row[1] == "fail"), blockers[0])
         if status == "fail":
-            return f"Resolve failed evidence for {_code(identifier)}."
-        return f"Obtain verified current-candidate evidence for {_code(identifier)}."
+            return f"Resolve failed evidence for {markdown_code(identifier)}."
+        return f"Obtain verified current-candidate evidence for {markdown_code(identifier)}."
     if not (has_criteria and has_checks):
         return "Record the agreed criteria and applicable checks for this job."
     if not has_demo:
@@ -346,35 +315,38 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
     return "Review the recorded decisions and evidence in the normal approval workflow."
 
 
-def render_decision_card(job: dict, events: list[dict], guardrails: dict, recovery: dict) -> str:
+def render_decision_card(job: dict, events: list[dict], guardrails: dict, recovery: dict, *,
+                         verified_source_url: str | None = None) -> str:
     """Return a Markdown card using current observations and read-only guardrail results."""
     events = sorted(
         (event for event in events if event.get("origin") == "real"),
         key=lambda event: event.get("recorded_at") or "",
     )
-    identifier = _text(job.get("id") or "unknown job")
+    job_id = job.get("id")
+    identifier = markdown_text(job_id or "unknown job")
     title = job.get("title")
     stage = job.get("stage") or "unknown"
-    root = job.get("artifact_root")
-    artifact_root = f"{root}/" if _safe_path(root) else ""
-    links = partial(_references, artifact_root=artifact_root)
     candidate = _candidate(guardrails)
     current_round = (guardrails.get("candidate") or {}).get("round")
-    commit_url = _https_url(job.get("candidate_url"))
-    candidate_display = _code(candidate) if candidate else "unknown"
-    if candidate and commit_url and urlsplit(commit_url).path.endswith(f"/{candidate}"):
-        candidate_display = f"[{candidate_display}]({commit_url})"
+    source = tracker_url(verified_source_url)
+    links = partial(_references, job_id=job_id, trusted_urls=(source,))
+    candidate_display = markdown_code(candidate) if candidate else "unknown"
     heading = f"# Decision card · {identifier}"
     if title:
-        heading += f" · {_text(title)}"
-    details = [heading, "", f"- **Stage** — {_code(stage)}", f"- **Candidate** — {candidate_display}"]
+        heading += f" · {markdown_text(title)}"
+    details = [heading, "", f"- **Stage** — {markdown_code(stage)}", f"- **Candidate** — {candidate_display}"]
+    if source:
+        label = "GitHub pull request" if source.rsplit("/", 2)[1] == "pull" else "GitHub issue"
+        details.append(f"- **Source** — [{label}]({source})")
+    else:
+        details.append("- **Source** — Local job. Tracker link unavailable.")
     if current_round is not None:
         details.append(f"- **Round** — {current_round}")
     diagnostics = guardrails.get("diagnostics", [])
     incomplete = bool(diagnostics)
     if incomplete:
         details.append("- **Evidence collection incomplete** — The latest observations and evidence may be unavailable.")
-        details.extend(f"  - {_text(diagnostic)}" for diagnostic in diagnostics)
+        details.extend(f"  - {markdown_text(diagnostic)}" for diagnostic in diagnostics)
 
     requirements = guardrails.get("requirements", [])
     criteria = [row for row in requirements if row["id"].startswith("criterion:")]
@@ -383,11 +355,15 @@ def render_decision_card(job: dict, events: list[dict], guardrails: dict, recove
     check_rows, checks_blocked = _check_rows(checks, candidate, links)
     demo_rows, has_demo = _demo_rows(events, candidate, current_round, links, incomplete)
     decision_rows, disposition = _decisions(job, events, candidate, current_round, links, incomplete)
-    metrics_url = _https_url(job.get("metrics_url")) or quote(artifact_root + "job.json", safe="/")
+    ledger_path = local_reference(job_id, OBSERVATION_DIRECTORY)
+    metrics = "observation ledger unavailable"
+    if ledger_path and events:
+        metrics = (f"Local observation ledger `{ledger_path}/` · On the Factory host, "
+                   f"run `ls -1 -- {ledger_path}` from the repository root.")
     time_rows = [
         f"- **Owner active time** — {_owner_minutes(job, events, incomplete)}",
         f"- **Elapsed time** — {_elapsed(job, [] if incomplete else events)}",
-        f"- [Job metrics]({metrics_url})",
+        f"- **Job metrics** — {metrics}",
     ]
     if incomplete:
         next_step = "Resolve the evidence collection diagnostics and regenerate this card before acting on the decision."

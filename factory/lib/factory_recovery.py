@@ -6,6 +6,7 @@ import re
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 
 
 _CAP_NOTE = re.compile(
@@ -156,12 +157,18 @@ def _trace(events: list[dict]) -> dict:
     }
 
 
-def _suggest(job: dict, decisions: list[dict]) -> tuple[list[dict], str | None]:
+def _suggest(job: dict, events: list[dict], candidate_sha: str | None, *,
+             include_failure_id: bool = True) -> tuple[list[dict], str | None]:
     current = defaultdict(list)
-    for row in decisions:
-        for record in row["observations"]:
-            if record.get("round") == job.get("round"):
-                current[row["failure_id"], record.get("candidate_sha")].append(record)
+    for failure_id, records in _group(events, "recovery_decision", "failure_id").items():
+        for record in records:
+            if record.get("round") != job.get("round"):
+                continue
+            bindings = [record, *record.get("evidence", ())]
+            if any(ref.get("candidate_sha") not in (None, candidate_sha)
+                   or ref.get("round") not in (None, job.get("round")) for ref in bindings):
+                continue
+            current[failure_id, record.get("candidate_sha")].append(record)
 
     pending = []
     selected = set()
@@ -181,8 +188,11 @@ def _suggest(job: dict, decisions: list[dict]) -> tuple[list[dict], str | None]:
         return [], None
 
     relevant = pending or [record for records in current.values() for record in records]
-    failures = {record["data"]["failure_id"] for record in relevant}
-    scope = f" for {next(iter(failures))}" if len(failures) == 1 else ""
+    scope = ""
+    if include_failure_id:
+        failures = {record["data"]["failure_id"] for record in relevant}
+        if len(failures) == 1:
+            scope = f" for {next(iter(failures))}"
     proposal_ids = []
     proposals = [record for record in relevant if record["data"].get("proposed_recovery")]
     proposed = {record["data"]["proposed_recovery"] for record in proposals}
@@ -201,7 +211,7 @@ def _suggest(job: dict, decisions: list[dict]) -> tuple[list[dict], str | None]:
     return [recommendation], question
 
 
-def recovery_summary(job: dict, events: list[dict]) -> dict:
+def recovery_summary(job: dict, events: list[dict], *, candidate_sha: str | None = None) -> dict:
     """Summarize a job and its current v1 observations.
 
     Use ``load_events(..., include_ancestry=True)`` to resolve older links through
@@ -211,9 +221,10 @@ def recovery_summary(job: dict, events: list[dict]) -> dict:
     scoped = {event["event_id"]: event for event in events
               if event.get("job_id") == job_id and event.get("schema_version") == 1}
     attempts, exhaustion = _failure_history(job)
-    result = _trace([event for event in scoped.values() if event.get("origin") == "real"])
+    real_events = [event for event in scoped.values() if event.get("origin") == "real"]
+    result = _trace(real_events)
     in_recovery = job.get("stage") == "recovery"
-    recommendations, question = _suggest(job, result["decisions"]) if in_recovery and exhaustion else ([], None)
+    recommendations, question = _suggest(job, real_events, candidate_sha) if in_recovery and exhaustion else ([], None)
     return deepcopy({
         "job_id": job_id,
         "stage": job.get("stage"),
@@ -225,3 +236,30 @@ def recovery_summary(job: dict, events: list[dict]) -> dict:
         **result,
         "controlled": _trace([event for event in scoped.values() if event.get("origin") == "controlled"]),
     })
+
+
+def report_recovery_summary(record: dict) -> dict:
+    guardrails = record["guardrails"]
+    checked = any(row["id"] == "checks" and row["status"] in {"pass", "fail"}
+                  for row in guardrails["requirements"])
+    candidate = guardrails["candidate"]["candidate_sha"] if checked and not guardrails["diagnostics"] else None
+    return recovery_summary(record["job"], record["events"], candidate_sha=candidate)
+
+
+def recovery_transition_output(status: str, job_dir: Path, job: dict, *, candidate_sha: str | None = None) -> str:
+    """Add one owner question after a gate or tally exhausts the retry cap."""
+    if job["stage"] != "recovery":
+        return status
+
+    from observations import load_events
+
+    events, diagnostics = load_events(job_dir, for_transition=True)
+    job_id = job["id"]
+    if diagnostics:
+        question = f"Should job {job_id} stay paused until its recovery observations can be checked?"
+    else:
+        current = [event for event in events if event["origin"] == "real" and event["job_id"] == job_id]
+        _, question = _suggest(job, current, candidate_sha, include_failure_id=False)
+        if question is None:
+            question = f"Should job {job_id} stay paused while its recorded recovery decision is reviewed?"
+    return f"{status}\nRecovery: {question}"

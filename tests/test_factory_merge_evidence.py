@@ -106,6 +106,18 @@ print(response.read_text())
         self.github(candidate_sha=candidate)
         report = self.weekly()
         self.assertEqual(report["merge_verification"][JOB_ID]["round"], 1)
+        self.assertEqual(report["links"][JOB_ID], "https://github.com/fixture/software-factory/pull/2")
+        self.assertIsNone(self.weekly(verify=False)["links"][JOB_ID])
+
+    def test_repointed_origin_cannot_reuse_a_job_bound_merge_reference(self):
+        candidate = self.local_candidate()
+        self.delivery(sha=candidate)
+        self.github(candidate_sha=candidate)
+        self.git("remote", "set-url", "origin", "https://github.com/fixture/replacement.git")
+        report = self.weekly()
+        self.assertEqual(report["merge_verification"][JOB_ID]["status"], "reference_unverified")
+        self.assertIsNone(report["links"][JOB_ID])
+        self.assertFalse(self.calls.exists())
 
     def test_different_head_sha_stays_unknown(self):
         self.delivery()
