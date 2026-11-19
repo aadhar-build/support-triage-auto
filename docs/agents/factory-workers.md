@@ -33,6 +33,14 @@ Existing job files are preserved by default. Use `--replace` only after inspecti
 
 Worker tools have no configured network access. A builder that needs dependencies for local checks will need them available on the worker host, or should report which checks it could not run. The worker never pushes, opens a PR, merges a PR or changes the job stage.
 
+## Keeping tracked holdouts out of worker snapshots
+
+The optional top-level `eval_holdout_paths` array in `factory/config.json` lists repository-relative file or directory names reserved for evaluation. For example, an owner using a private directory named `private/evaluation` can set `"eval_holdout_paths": ["private/evaluation/"]`. Paths are literal and case-insensitive. Use ASCII letters, digits, slashes, dots, underscores and hyphens. A trailing slash is optional. Configure up to 32 distinct paths, eight components and 256 bytes per path, and 2,048 bytes total.
+
+Before handing a snapshot to any role, the launcher checks every configured path against the fetched candidate and base histories, including merge parents. A match at any revision refuses dispatch, including after a holdout was deleted or renamed. Historical links or files in place of a configured ancestor also refuse dispatch. The launcher requires complete history and a snapshot object store accounted for by its pinned tips. A configured check refuses histories containing filenames outside printable ASCII because a host filesystem can normalize those names differently from Git. Use a worker repository whose history has never contained a declared holdout to keep the branch and evidence SHAs intact.
+
+A successful worker audit records `checked_eval_holdout_path_count`. For a nonempty policy it also records `eval_holdout_policy_sha256`, the SHA-256 of the compact JSON array of sorted, lowercase paths with trailing slashes removed. Zero paths means the owner configured no coverage. Older audits without that field provide no coverage information. The check covers tracked Git paths. Independently copied samples under undeclared names, input in job descriptions or feedback, and files on a verifier host require separate controls. Keep actual private scenarios in the verifier's own storage. The `protected_paths` setting controls which files a builder can change.
+
 ## Concurrent operation and interrupted work
 
 Run the Python commands and Go worker from the same checkout on a single host. Drain older dispatchers and finish their pending publications before upgrading or rolling back the pair. Older binaries do not participate in job admission. A builder journal produced before spec digests were recorded needs reconciliation with its original binary and original inputs.

@@ -23,9 +23,10 @@ type selection struct {
 }
 
 type config struct {
-	BaseBranch string            `json:"base_branch"`
-	Models     map[string]string `json:"models"`
-	Workers    struct {
+	EvalHoldoutPaths []string          `json:"eval_holdout_paths"`
+	BaseBranch       string            `json:"base_branch"`
+	Models           map[string]string `json:"models"`
+	Workers          struct {
 		Roles   map[string]selection `json:"roles"`
 		Timeout int                  `json:"timeout_s"`
 	} `json:"workers"`
@@ -374,6 +375,8 @@ func run(root string, args []string, stdout io.Writer) error {
 	content = append(bytes.TrimRight(content, "\r\n"), '\n')
 	record := struct {
 		selection
+		HoldoutDigest   string            `json:"eval_holdout_policy_sha256,omitempty"`
+		HoldoutsChecked int               `json:"checked_eval_holdout_path_count"`
 		CLIVersion      string            `json:"cli_version"`
 		AuthMode        string            `json:"auth_mode"`
 		Role            string            `json:"role"`
@@ -384,7 +387,7 @@ func run(root string, args []string, stdout io.Writer) error {
 		EvidenceVersion int               `json:"evidence_version,omitempty"`
 		Inputs          map[string]string `json:"inputs,omitempty"`
 		ArtifactSHA256  string            `json:"artifact_sha256,omitempty"`
-	}{chosen, identity.CLIVersion, identity.AuthMode, r.name, s.head, candidate, s.base, time.Now().UTC().Format(time.RFC3339), 0, inputs, ""}
+	}{chosen, s.holdoutPolicyDigest, len(cfg.EvalHoldoutPaths), identity.CLIVersion, identity.AuthMode, r.name, s.head, candidate, s.base, time.Now().UTC().Format(time.RFC3339), 0, inputs, ""}
 	if inputs != nil {
 		record.EvidenceVersion = reviewEvidenceVersion
 		record.ArtifactSHA256 = contentDigest(content)
