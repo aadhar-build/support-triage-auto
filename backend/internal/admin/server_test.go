@@ -356,6 +356,25 @@ func TestDeeplyNested(t *testing.T) {
 	}
 }
 
+// TestDeeplyNestedOtherwiseValid: a 600-deep value inside an otherwise good
+// thresholds file is still refused, so the depth cap itself is what refuses it.
+func TestDeeplyNestedOtherwiseValid(t *testing.T) {
+	cfg := runsCfg(t, t.TempDir())
+	makeRun(t, cfg.Runs, "r", goodManifest(), nil)
+	body := `{"x": ` + strings.Repeat("[", 600) + strings.Repeat("]", 600) + `, "guardrails": {"api_spend_usd_per_month": {"max": 5}}}`
+	cfg.Thresholds = writeFile(t, t.TempDir(), "th.json", body)
+	srv := testServer(t, cfg)
+	if r := get(t, srv, "/api/overview"); r.status != 200 || !strings.Contains(r.body, "\"monthly_cap_usd\": null") {
+		t.Errorf("overview: %d %s", r.status, r.body)
+	}
+	shallow := `{"x": [[1]], "guardrails": {"api_spend_usd_per_month": {"max": 5}}}`
+	cfg.Thresholds = writeFile(t, t.TempDir(), "th.json", shallow)
+	srv = testServer(t, cfg)
+	if r := get(t, srv, "/api/overview"); !strings.Contains(r.body, "\"monthly_cap_usd\": 5") {
+		t.Errorf("control: %s", r.body)
+	}
+}
+
 func TestNoGoldIds(t *testing.T) {
 	runs := t.TempDir()
 	makeRun(t, runs, "gold-ok", readFixture(t, "manifest_gold.json"), readFixture(t, "metrics_gold.json"))

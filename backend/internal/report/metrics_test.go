@@ -101,6 +101,19 @@ func TestCheckMetrics(t *testing.T) {
 		t.Errorf("ordered repr: got %v, want %q", err, want)
 	}
 
+	// Bytes that are not UTF-8 are refused, even in a free-text field.
+	notUTF8 := strings.Replace(string(b), `"run_at": "`, "\"run_at\": \"\xff", 1)
+	if notUTF8 == string(b) {
+		t.Fatal("fixture has no run_at")
+	}
+	p8 := filepath.Join(dir, "utf8.json")
+	if err := os.WriteFile(p8, []byte(notUTF8), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadMetrics(p8); err == nil {
+		t.Error("invalid UTF-8 accepted")
+	}
+
 	// Owner decision Q3: NaN, Infinity and unpaired surrogates are refused.
 	for _, bad := range []string{"NaN", "Infinity", `"\ud800"`} {
 		text := strings.Replace(string(b), `"schema_version": "metrics/1"`, `"schema_version": `+bad, 1)
