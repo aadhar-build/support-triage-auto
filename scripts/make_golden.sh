@@ -225,6 +225,19 @@ cli ingest_generated 0 -- python3 scripts/golden_ingest.py --data "$DATA" --spli
 cli ingest_odd_cases 0 -- python3 scripts/golden_ingest.py --data "$ODD" --split-config "$SPLIT" \
   --out-prefix "$G/ingest/odd_cases"
 # --- end ingest goldens ---
+# --- spend-log goldens (job 070) ---
+# scripts/golden_spend_log.py dumps triage.model_prices and triage.spend_log as
+# G/spend_log/{prices,caps,scenario_log,scenario_steps,read}.jsonl, for
+# backend/internal/model. Logs live in a temp dir outside the repo and are named
+# <log> in messages. Only exit 0 is accepted.
+refuse_raw "repo input" testdata/spend_log
+refuse_raw "repo input" policies/model_prices.json
+mkdir -p "$G/spend_log"
+cli spend_log 0 -- python3 scripts/golden_spend_log.py --inputs testdata/spend_log --out "$G/spend_log"
+mkdir -p "$OUT"
+rm -rf "${OUT:?}/spend_log"
+cp -R "$G/spend_log" "$OUT/spend_log"
+# --- end spend-log goldens (job 070) ---
 # --- brand_rules conformance goldens (job 088) ---
 # `python3 -m triage.brand_rules --conformance`, one run per case, from the repo
 # root with repo-relative paths, for backend/internal/policy's
