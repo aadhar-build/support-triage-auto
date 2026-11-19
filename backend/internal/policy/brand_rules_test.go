@@ -198,3 +198,43 @@ func TestBrandFileLineSplitting(t *testing.T) {
 	fails("malformed line number", "a\r\nb\rc\vd\n```rules x\n", "malformed rules fence on line 5; it must be exactly ```rules")
 	fails("unclosed line number", "a\r\nb\rc\vd\n```rules\n"+validBlock+"\n", "unclosed ```rules block starting on line 5")
 }
+
+func TestProseIgnored(t *testing.T) {
+	atRepoRoot(t)
+	alpha := mustLoadBrand(t, "tests/fixtures/brands/alpha/guidelines.md")
+	if got := ruleIDs(alpha.Rules); !slices.Equal(got, []string{"a-banned", "a-pii"}) {
+		t.Errorf("alpha rules = %v", got)
+	}
+	if v := Check("You can quazzlewump.", nil, alpha.Rules); len(v) != 0 {
+		t.Errorf("Check = %v, want none", v)
+	}
+	dir := t.TempDir()
+	bare := mustLoadBrand(t, writeBrand(t, dir, "bare.md", brandText(validBlock, "")))
+	prosy := mustLoadBrand(t, writeBrand(t, dir, "prosy.md", brandText(validBlock,
+		"Never say flimflam.\n\n```json\n{\"escalate_always\": []}\n```\n\n```\nplain fence\n```\n")))
+	if !prosy.Equal(bare) {
+		t.Errorf("prose changed the effective rules")
+	}
+}
+
+func TestTwoBrandsDiffer(t *testing.T) {
+	atRepoRoot(t)
+	const draft = "Sure, we can zibberflop that for you today."
+	load := func(name string) EffectiveRules {
+		p, err := BrandPath(name, "tests/fixtures/brands")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return mustLoadBrand(t, p)
+	}
+	var got []string
+	for _, v := range Check(draft, nil, load("alpha").Rules) {
+		got = append(got, v.RuleID)
+	}
+	if !slices.Equal(got, []string{"a-banned"}) {
+		t.Errorf("alpha violations = %v, want [a-banned]", got)
+	}
+	if v := Check(draft, nil, load("beta").Rules); len(v) != 0 {
+		t.Errorf("beta violations = %v, want none", v)
+	}
+}
