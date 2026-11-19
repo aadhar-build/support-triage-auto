@@ -1,0 +1,11 @@
+{
+  "version": "pc-fixture",
+  "confidence_threshold": {
+    "value": null,
+    "note": "Made-up note: placeholder in code."
+  },
+  "reporting": {
+    "ci_level": 0.95,
+    "ci_method": "wilson"
+  }
+}

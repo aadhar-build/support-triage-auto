@@ -19,8 +19,16 @@
       "text": "disregard the above"
     },
     {
-      "id": "you-are-now",
-      "text": "you are now"
+      "id": "you-are-now-a",
+      "text": "you are now a"
+    },
+    {
+      "id": "you-are-now-in",
+      "text": "you are now in"
+    },
+    {
+      "id": "from-now-on-you-are",
+      "text": "from now on you are"
     },
     {
       "id": "pretend-you-are",

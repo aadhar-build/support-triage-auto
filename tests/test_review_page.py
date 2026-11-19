@@ -345,5 +345,38 @@ class TestReviewPage(ReviewTestBase):
                 self.assertFalse(out.exists())
 
 
+class TestOptionalBrand(ReviewTestBase):
+    def test_load_run_brand_key(self):
+        from triage.review_page import ReportError, load_run
+        _, run_dir = self.make_run(standard_cases())
+        report = json.loads((run_dir / "synthetic_report.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(report), ["cases", "summary"])
+        for name, brand, ok in (("string", "made-up-brand", True), ("number", 7, False),
+                                ("null", None, False)):
+            with self.subTest(name):
+                d = self.dir / ("brand-" + name)
+                d.mkdir()
+                (d / "synthetic_report.json").write_text(json.dumps(dict(report, brand=brand)),
+                                                         encoding="utf-8")
+                if ok:
+                    self.assertEqual(len(load_run(d)[0]), len(report["cases"]))
+                else:
+                    with self.assertRaises(ReportError):
+                        load_run(d)
+
+    def test_brand_run_loads_in_review_page(self):
+        cases_path = self.write_cases(standard_cases(), name="b-cases.json")
+        run_dir = self.dir / "b-run"
+        proc = subprocess.run(
+            [sys.executable, "-m", "triage.run_synthetic", "--cases", str(cases_path),
+             "--out", str(run_dir), "--brand", "alpha", "--brands-dir",
+             str(REPO_ROOT / "tests" / "fixtures" / "brands")],
+            cwd=str(self.dir), env=self.env, capture_output=True, text=True, timeout=60)
+        self.assertIn(proc.returncode, (0, 1), proc.stderr)
+        out = self.dir / "pages" / "b.html"
+        page = self.run_page(cases_path, run_dir, out)
+        self.assertEqual(page.returncode, 0, page.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

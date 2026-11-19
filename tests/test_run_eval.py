@@ -62,8 +62,9 @@ class CliTestBase(unittest.TestCase):
                 "--data", str(data or self.data),
                 "--gold", str(gold or self.gold),
                 "--split-config", str(split or self.split),
-                "--out", str(out or self.out),
-                "--rules", str(rules or FIXTURE_RULES)]
+                "--out", str(out or self.out)]
+        if rules is not False:
+            args += ["--rules", str(rules or FIXTURE_RULES)]
         args.extend(extra)
         return subprocess.run(args, env=env, capture_output=True, text=True, timeout=60,
                               cwd=str(self.dir))
@@ -87,7 +88,7 @@ class TestRunEval(CliTestBase):
         # thread 7 is routed (account access), gold says escalate: one missed escalation
         self.assertEqual(data["missed_escalations"], 1)
         self.assertEqual(len(proc.stdout.strip().splitlines()), 1)
-        self.assertTrue(proc.stdout.endswith(" split=dev topics_loaded=2\n"), proc.stdout)
+        self.assertTrue(proc.stdout.endswith(" split=dev topics_loaded=2 brand=none rules_loaded=3 repeat_contact=off\n"), proc.stdout)
         for text in (self.out.read_text(encoding="utf-8"), proc.stdout, proc.stderr):
             self.assertNotIn("SENTINEL", text)
 
@@ -176,7 +177,7 @@ class TestRunEval(CliTestBase):
         alt = REPO_ROOT / "tests" / "fixtures" / "policy_rules_alt_topics.json"
         proc = self.run_cli(rules=alt)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertTrue(proc.stdout.endswith(" topics_loaded=1\n"), proc.stdout)
+        self.assertTrue(proc.stdout.endswith(" topics_loaded=1 brand=none rules_loaded=3 repeat_contact=off\n"), proc.stdout)
 
 
 class TestTrace(CliTestBase):
@@ -200,7 +201,7 @@ class TestTrace(CliTestBase):
             self.assertIsNone(rec["drift_config_version"])
             self.assertRegex(rec["code_version"], r"^[0-9a-f]{40}$")
         self.assertEqual(sorted(r["thread_id"] for r in records), [1, 3, 5, 7, 9])
-        self.assertTrue(proc.stdout.strip().endswith(" topics_loaded=2 trace_records=5"),
+        self.assertTrue(proc.stdout.strip().endswith(" topics_loaded=2 brand=none rules_loaded=3 repeat_contact=off trace_records=5"),
                         proc.stdout)
 
     def test_trace_records_rules_version_and_topic_id(self):
@@ -317,7 +318,7 @@ class TestTrace(CliTestBase):
         proc = self.run_cli("--trace", str(trace), "--metrics-out", str(m2), "--cohort",
                             "gold_random", out=out2)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertTrue(proc.stdout.strip().endswith(" topics_loaded=2 trace_records=5"),
+        self.assertTrue(proc.stdout.strip().endswith(" topics_loaded=2 brand=none rules_loaded=3 repeat_contact=off trace_records=5"),
                         proc.stdout)
         for path in (trace, out2, m2):
             self.assertTrue(path.is_file(), path)
@@ -636,6 +637,103 @@ class TestLarger(CliTestBase):
             self.assertFalse(BANNED_KEYS & set(_keys(m)), mode)
             shapes[mode] = (set(m), set(m["operations"]), set(m["config"]))
         self.assertEqual(shapes["real"], shapes["fake"])
+FIXTURE_BRANDS = REPO_ROOT / "tests" / "fixtures" / "brands"
+# Made-up brand traffic. Hand count for brand alphaco (known brands AlphaCo, BetaCo):
+#   thread 10: first tweet @mentions alphaco                      -> brand
+#   thread 20: AlphaCo replies, then the customer writes again    -> brand
+#   thread 30: first tweet @mentions BetaCo, BetaCo replies       -> other_brand
+#   thread 40: AlphaCo replies only after the last inbound turn   -> unattributed
+#   thread 50: no mention and no reply                            -> unattributed
+#   thread 60: @alphaco only in the customer's second tweet      -> unattributed
+# brand_threads=2 excluded_threads=4 excluded_other_brand=1 excluded_unattributed=3
+BRAND_ROWS = [
+    '10,cust_SENTINELF,True,Tue Oct 31 22:10:47 +0000 2017,"@alphaco where is my package",,',
+    '20,cust_SENTINELG,True,Tue Oct 31 22:11:47 +0000 2017,"my parcel is late",21,',
+    '21,AlphaCo,False,Tue Oct 31 22:12:47 +0000 2017,"made-up brand reply",22,20',
+    '22,cust_SENTINELG,True,Tue Oct 31 22:13:47 +0000 2017,"still late",,21',
+    '30,cust_SENTINELH,True,Tue Oct 31 22:14:47 +0000 2017,"@BetaCo charged twice",31,',
+    '31,BetaCo,False,Tue Oct 31 22:15:47 +0000 2017,"made-up brand reply",,30',
+    '40,cust_SENTINELI,True,Tue Oct 31 22:16:47 +0000 2017,"locked out",41,',
+    '41,AlphaCo,False,Tue Oct 31 22:17:47 +0000 2017,"made-up brand reply",,40',
+    '50,cust_SENTINELJ,True,Tue Oct 31 22:18:47 +0000 2017,"hello",,',
+    '60,cust_SENTINELK,True,Tue Oct 31 22:19:47 +0000 2017,"hello again",61,',
+    '61,cust_SENTINELK,True,Tue Oct 31 22:20:47 +0000 2017,"@alphaco anyone?",,60',
+]
+
+
+class TestBrand(CliTestBase):
+    def setUp(self):
+        super().setUp()
+        self.brand_data = self.write("brand.csv", TWCS_HEADER + "\n".join(BRAND_ROWS) + "\n")
+
+    def brand_cli(self, brand, *extra, rules=False, **kw):
+        kw.setdefault("data", self.brand_data)
+        return self.run_cli("--brand", brand, "--brands-dir", str(FIXTURE_BRANDS), *extra,
+                            rules=rules, **kw)
+
+    def test_brand_selects_traffic(self):
+        proc = self.brand_cli("alphaco", "--sample-size", "50")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        data = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertEqual(data["threads_routed"], 2)
+        self.assertEqual(data["brand"], {
+            "name": "alphaco", "brand_threads": 2, "excluded_threads": 4,
+            "excluded_other_brand": 1, "excluded_unattributed": 3,
+            "attribution": "first-tweet mention or brand reply known at the last inbound turn"})
+        self.assertTrue(proc.stdout.endswith(
+            " split=dev topics_loaded=1 brand=alphaco rules_loaded=2 repeat_contact=on"
+            " brand_threads=2 excluded_threads=4 excluded_other_brand=1"
+            " excluded_unattributed=3\n"), proc.stdout)
+        trace = self.dir / "trace.jsonl"
+        trace.unlink(missing_ok=True)
+        md = self.dir / "r.md"
+        proc = self.brand_cli("alphaco", "--format", "md", "--trace", str(trace), out=md)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertTrue(proc.stdout.endswith(" excluded_unattributed=3 trace_records=2\n"),
+                        proc.stdout)
+        text = md.read_text(encoding="utf-8")
+        self.assertIn("## Brand population", text)
+        self.assertIn("| excluded_other_brand | 1 |", text)
+        self.assertEqual(json.loads(trace.read_text("utf-8").splitlines()[0])["rules_version"],
+                         "fixture-ac")
+        for t in (text, proc.stdout, proc.stderr, self.out.read_text("utf-8")):
+            self.assertNotIn("SENTINEL", t)
+
+    def test_brand_no_threads(self):
+        proc = self.brand_cli("beta")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(proc.stderr.strip(),
+                         "error: no threads in split dev are attributed to brand beta")
+        self.assertEqual(proc.stdout, "")
+        self.assertFalse(self.out.exists())
+
+    def test_brand_refuses_metrics_out(self):
+        metrics = self.dir / "m.json"
+        proc = self.brand_cli("alphaco", "--metrics-out", str(metrics), "--cohort",
+                              "gold_random", data=self.dir / "missing.csv")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertEqual(proc.stderr.strip(), "error: --metrics-out is not supported with "
+                         "--brand (metrics cohorts cover brand_population \"all\" only)")
+        self.assertFalse(self.out.exists())
+        self.assertFalse(metrics.exists())
+
+    def test_brand_and_rules_refused(self):
+        proc = self.brand_cli("alphaco", rules=None)
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertIn("error: bad rules file: use either --brand or --rules, not both",
+                      proc.stderr)
+        self.assertFalse(self.out.exists())
+        proc = self.brand_cli("Alpha")
+        self.assertEqual(proc.returncode, 2, proc.stderr)
+        self.assertTrue(proc.stderr.startswith("error: bad rules file: "), proc.stderr)
+
+    def test_without_brand_no_brand_key(self):
+        proc = self.run_cli(data=self.brand_data)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        data = json.loads(self.out.read_text(encoding="utf-8"))
+        self.assertNotIn("brand", data)
+        self.assertEqual(data["threads_routed"], 6)
+        self.assertNotIn("brand_threads", proc.stdout)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,112 @@
+{
+  "version": "pc-fixture",
+  "cases": [
+    {
+      "id": "pc-near",
+      "title": "Made-up case pc-near",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "where is my parcel"
+        }
+      ],
+      "expected": {
+        "intent": "delivery",
+        "action": "ask",
+        "should_escalate": false
+      },
+      "must_pass": false
+    },
+    {
+      "id": "pc-draft",
+      "title": "Made-up case pc-draft",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "thanks, love the great service"
+        }
+      ],
+      "expected": {
+        "intent": "praise",
+        "action": "answer",
+        "should_escalate": false
+      },
+      "must_pass": false,
+      "draft_reply": "Happy to help, glimmerflux bonus coming",
+      "expected_violations": []
+    },
+    {
+      "id": "pc-topic",
+      "title": "Made-up case pc-topic",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "zindlewump"
+        }
+      ],
+      "expected": {
+        "intent": "other",
+        "action": "escalate",
+        "should_escalate": true
+      },
+      "must_pass": false
+    },
+    {
+      "id": "pc-repeat-1",
+      "title": "Made-up case pc-repeat-1",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "my bill is wrong and the invoice too"
+        }
+      ],
+      "expected": {
+        "intent": "billing",
+        "action": "ask",
+        "should_escalate": false
+      },
+      "must_pass": false,
+      "customer": "made_up_customer_a",
+      "brand": "made_up_brand",
+      "started_at": "2026-01-01T10:00:00Z"
+    },
+    {
+      "id": "pc-repeat-2",
+      "title": "Made-up case pc-repeat-2",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "my bill is wrong and the invoice too"
+        }
+      ],
+      "expected": {
+        "intent": "billing",
+        "action": "escalate",
+        "should_escalate": true
+      },
+      "must_pass": false,
+      "customer": "made_up_customer_a",
+      "brand": "made_up_brand",
+      "started_at": "2026-01-02T10:00:00Z"
+    },
+    {
+      "id": "pc-repeat-3",
+      "title": "Made-up case pc-repeat-3",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "my bill is wrong and the invoice too"
+        }
+      ],
+      "expected": {
+        "intent": "billing",
+        "action": "escalate",
+        "should_escalate": true
+      },
+      "must_pass": false,
+      "customer": "made_up_customer_a",
+      "brand": "made_up_brand",
+      "started_at": "2026-01-03T10:00:00Z"
+    }
+  ]
+}

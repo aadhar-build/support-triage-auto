@@ -82,9 +82,12 @@ def load_run(run_dir) -> tuple:
     except json.JSONDecodeError as e:
         raise ReportError("run report %s is not valid JSON (line %d, column %d)"
                           % (path, e.lineno, e.colno))
-    if not isinstance(data, dict) or set(data) != {"cases", "summary"}:
+    if not isinstance(data, dict) or set(data) not in ({"cases", "summary"},
+                                                       {"cases", "summary", "brand"}):
         raise ReportError("%s is not a synthetic run report: top level must have exactly "
-                          "the keys cases and summary" % path)
+                          "the keys cases and summary, and optionally brand" % path)
+    if not isinstance(data.get("brand", ""), str):
+        raise ReportError("%s is not a synthetic run report: brand is not a string" % path)
     if not isinstance(data["summary"], dict) or set(data["summary"]) != set(SUMMARY_KEYS):
         raise ReportError("%s is not a synthetic run report: summary must have exactly the "
                           "keys %s" % (path, ", ".join(SUMMARY_KEYS)))
