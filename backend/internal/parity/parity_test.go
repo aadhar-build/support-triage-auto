@@ -45,7 +45,7 @@ func fakeRepo(t *testing.T, goldens map[string]string) {
 	t.Helper()
 	root := t.TempDir()
 	files := map[string]string{
-		"backend/go.mod":                   "module x\n",
+		"backend/go.mod":                  "module x\n",
 		"testdata/golden/MANIFEST.sha256": "",
 	}
 	for name, body := range goldens {
