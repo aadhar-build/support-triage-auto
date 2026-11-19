@@ -3,6 +3,7 @@ package eval
 import (
 	"encoding/json"
 	"maps"
+	"os"
 	"strings"
 	"testing"
 )
@@ -160,5 +161,21 @@ func TestComparisonKey(t *testing.T) {
 		if got := errText(err); got != c.want {
 			t.Errorf("case %d: got %q, want %q", i, got, c.want)
 		}
+	}
+}
+
+// testdata/proportion.json is Python 3.12 to_json of proportion(7,9),
+// (0,0), (29,29) and (3,30).
+func TestProportionToJSON(t *testing.T) {
+	want, err := os.ReadFile("testdata/proportion.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ToJSON(map[string]any{"p": Proportion(7, 9), "z": Proportion(0, 0), "q": Proportion(29, 29), "r": Proportion(3, 30)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
 	}
 }

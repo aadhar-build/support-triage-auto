@@ -150,3 +150,28 @@ func notSubscriptable(v any) string {
 func isIntLiteral(s string) bool {
 	return !strings.ContainsAny(s, ".eE")
 }
+
+// DirectionalBelow is Python's DIRECTIONAL_BELOW: a rate over fewer cases is
+// marked directional.
+const DirectionalBelow = 30
+
+// Proportion is Python's metrics.proportion: {value, num, n, ci, directional}.
+func Proportion(num, den int) map[string]any {
+	var value, ci any
+	if den != 0 {
+		value = float64(num) / float64(den)
+	}
+	if lo, hi, ok := WilsonInterval(num, den); ok {
+		ci = []any{lo, hi}
+	}
+	return map[string]any{"value": value, "num": num, "n": den, "ci": ci, "directional": den < DirectionalBelow}
+}
+
+// ToJSON is Python's metrics.to_json: json.dumps(sort_keys=True, indent=2) + "\n".
+func ToJSON(m map[string]any) ([]byte, error) {
+	b, err := route.PyJSONIndent(m)
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
