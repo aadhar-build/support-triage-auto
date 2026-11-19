@@ -3,8 +3,11 @@ package eval
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/aadhar-build/support-triage-auto/backend/internal/parity"
@@ -85,4 +88,96 @@ func TestEvalReportGolden(t *testing.T) {
 	t.Run("MD", func(t *testing.T) {
 		parity.AssertGolden(t, "run_eval/eval.md", []byte(ReportToMarkdown(r)))
 	})
+}
+
+func fileRevision(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func TestSyntheticMetricsGolden(t *testing.T) {
+	_, _, casesJSON := parity.Inputs(t)
+	data, err := os.ReadFile(parity.GoldenPath(t, "run_synthetic/synthetic_report.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report struct {
+		Cases []SyntheticResult `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &report); err != nil {
+		t.Fatal(err)
+	}
+	cases, err := CasesFromSynthetic(report.Cases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Copied from run_synthetic._metrics_text.
+	m, err := Compute(cases, "synthetic", ComputeOptions{
+		RunAt:  "2000-01-01T00:00:00Z",
+		Cohort: map[string]any{"name": "synthetic", "split": nil, "gold_revision": fileRevision(t, casesJSON), "brand_population": "all"},
+		Sample: map[string]any{"size": nil, "seed": nil},
+		Config: map[string]any{"threshold": 0.5, "prices": nil},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	js, err := ToJSON(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parity.AssertGolden(t, "run_synthetic/metrics.json", js)
+}
+
+func TestEvalMetricsGolden(t *testing.T) {
+	routed, g, r, goldCSV := evalReport(t)
+	cases, err := CasesFromRouted(routed, g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// coverage and operations are built as in run_eval._metrics_text.
+	shares := map[string]any{}
+	for _, ts := range r.TierShares {
+		num := 0
+		for _, rt := range routed {
+			if slices.Contains(rt.Tiers, ts.Tier) {
+				num++
+			}
+		}
+		shares[ts.Tier] = Proportion(num, r.ThreadsRouted)
+	}
+	prices := map[string]any{}
+	for _, p := range placeholderPriceSlice() {
+		prices[p.Tier] = p.Price
+	}
+	m, err := Compute(cases, "gold", ComputeOptions{
+		RunAt:  "2000-01-01T00:00:00Z",
+		Cohort: map[string]any{"name": "gold_random", "split": "dev", "gold_revision": fileRevision(t, goldCSV), "brand_population": "all"},
+		Sample: map[string]any{"size": int64(200), "seed": int64(0)},
+		Config: map[string]any{"threshold": 0.5, "prices": prices},
+		Coverage: map[string]any{"threads_routed": r.ThreadsRouted, "threads_scored": r.ThreadsScored,
+			"threads_without_gold": r.ThreadsWithoutGold, "gold_rows_unmatched": r.GoldRowsUnmatched},
+		Operations: map[string]any{"tier_shares": shares, "cost_per_1000_usd": floatOrNil(r.CostPer1000Threads),
+			"prices_are_placeholders": r.PricesArePlaceholders},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Decoded cross-check, read from the golden at 1ebae68.
+	action := m["action"].(map[string]any)["accuracy"].(map[string]any)
+	counts := m["escalation"].(map[string]any)["counts"].(map[string]any)
+	cov := m["coverage"].(map[string]any)
+	if action["num"] != 191 || counts["fn"] != 2 || counts["fp"] != 3 || cov["gold_rows_unmatched"] != 1800 {
+		t.Errorf("action.accuracy.num=%v escalation fn=%v fp=%v gold_rows_unmatched=%v, want 191, 2, 3, 1800",
+			action["num"], counts["fn"], counts["fp"], cov["gold_rows_unmatched"])
+	}
+	js, err := ToJSON(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parity.AssertGolden(t, "run_eval/metrics.json", js)
 }
