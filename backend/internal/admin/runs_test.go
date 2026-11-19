@@ -78,8 +78,8 @@ func TestListRuns(t *testing.T) {
 			}
 			return s
 		}
-		makeRun(t, dir, "tie-b", manifest("synthetic", "2026-10-03T00:00:00.1Z", 0.1, true), nil)
-		makeRun(t, dir, "tie-a", manifest("hard_case", "2026-10-03T00:00:00.10Z", 0.1, true), nil)
+		makeRun(t, dir, "tie-b", manifest("synthetic", "2026-10-03T00:00:00.10Z", 0.1, true), nil)
+		makeRun(t, dir, "tie-a", manifest("hard_case", "2026-10-03T00:00:00.1Z", 0.1, true), nil)
 		makeRun(t, dir, "older", manifest("gold_random", "2026-10-03T00:00:00Z", nil, false), nil)
 		makeRun(t, dir, "newest", swap("2026-10-02", "2026-10-04"), nil)
 		if err := os.Symlink(filepath.Join(dir, "newest"), filepath.Join(dir, "zz-link")); err != nil {
