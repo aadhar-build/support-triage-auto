@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -88,4 +89,64 @@ func checkSample(s map[string]any) error {
 		}
 	}
 	return nil
+}
+
+// ComparisonKey is Python's comparison_key: the fields that must match for two
+// metrics files to be compared, looked up in Python's order (cohort first).
+func ComparisonKey(m map[string]any) ([6]any, error) {
+	var key [6]any
+	fail := func(detail string) ([6]any, error) {
+		return [6]any{}, errors.New("metrics lacks a comparison field: " + detail)
+	}
+	cohort, ok := m["cohort"]
+	if !ok {
+		return fail(route.PyRepr("cohort"))
+	}
+	for i, k := range []string{"schema_version", "kind"} {
+		v, ok := m[k]
+		if !ok {
+			return fail(route.PyRepr(k))
+		}
+		key[i] = v
+	}
+	c, isMap := cohort.(map[string]any)
+	if !isMap {
+		return fail(notSubscriptable(cohort))
+	}
+	for i, k := range CohortKeys {
+		v, ok := c[k]
+		if !ok {
+			return fail(route.PyRepr(k))
+		}
+		key[2+i] = v
+	}
+	return key, nil
+}
+
+// notSubscriptable is Python 3.12's TypeError text for v["name"] when v is
+// not a dict, by Go type.
+func notSubscriptable(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return "'NoneType' object is not subscriptable"
+	case []any:
+		return "list indices must be integers or slices, not str"
+	case string:
+		return "string indices must be integers, not 'str'"
+	case bool:
+		return "'bool' object is not subscriptable"
+	case int, int64, uint64:
+		return "'int' object is not subscriptable"
+	case json.Number:
+		if isIntLiteral(string(x)) {
+			return "'int' object is not subscriptable"
+		}
+	}
+	return "'float' object is not subscriptable"
+}
+
+// isIntLiteral reports whether a JSON number literal has no fraction or
+// exponent, as Python's json module would decode it to int (any size).
+func isIntLiteral(s string) bool {
+	return !strings.ContainsAny(s, ".eE")
 }

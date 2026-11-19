@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"encoding/json"
 	"maps"
 	"strings"
 	"testing"
@@ -102,4 +103,62 @@ func errText(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// Expected values are Python 3.12 comparison_key outputs.
+func TestComparisonKey(t *testing.T) {
+	rev := "sha256:" + strings.Repeat("a", 64)
+	cohort := func() map[string]any {
+		return map[string]any{"name": "gold_random", "split": "dev", "gold_revision": rev, "brand_population": "all"}
+	}
+	m := func(c any) map[string]any { return map[string]any{"schema_version": 1, "kind": "gold", "cohort": c} }
+	got, err := ComparisonKey(m(cohort()))
+	if err != nil || got != [6]any{1, "gold", "gold_random", "dev", rev, "all"} {
+		t.Fatalf("ComparisonKey = %v, %v", got, err)
+	}
+	other := cohort()
+	other["split"] = "test"
+	k2, _ := ComparisonKey(m(other))
+	if k2 == got {
+		t.Error("different splits gave equal keys")
+	}
+	k3, _ := ComparisonKey(m(cohort()))
+	if k3 != got {
+		t.Error("equal metrics gave different keys")
+	}
+	const p = "metrics lacks a comparison field: "
+	noCohort := m(nil)
+	delete(noCohort, "cohort")
+	noKind := m(cohort())
+	delete(noKind, "kind")
+	noSplit := cohort()
+	delete(noSplit, "split")
+	cases := []struct {
+		m    map[string]any
+		want string
+	}{
+		{noCohort, p + "'cohort'"},
+		{noKind, p + "'kind'"},
+		{m(noSplit), p + "'split'"},
+		{map[string]any{"cohort": nil}, p + "'schema_version'"},
+		{nil, p + "'cohort'"},
+		{m(nil), p + "'NoneType' object is not subscriptable"},
+		{m([]any{1}), p + "list indices must be integers or slices, not str"},
+		{m("x"), p + "string indices must be integers, not 'str'"},
+		{m(true), p + "'bool' object is not subscriptable"},
+		{m(3), p + "'int' object is not subscriptable"},
+		{m(int64(3)), p + "'int' object is not subscriptable"},
+		{m(uint64(3)), p + "'int' object is not subscriptable"},
+		{m(json.Number("3")), p + "'int' object is not subscriptable"},
+		{m(json.Number("123456789012345678901234567890")), p + "'int' object is not subscriptable"},
+		{m(2.5), p + "'float' object is not subscriptable"},
+		{m(json.Number("2.5")), p + "'float' object is not subscriptable"},
+		{m(json.Number("1e3")), p + "'float' object is not subscriptable"},
+	}
+	for i, c := range cases {
+		_, err := ComparisonKey(c.m)
+		if got := errText(err); got != c.want {
+			t.Errorf("case %d: got %q, want %q", i, got, c.want)
+		}
+	}
 }
