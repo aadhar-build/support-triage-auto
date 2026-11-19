@@ -12,23 +12,40 @@ import (
 	"strings"
 )
 
+const replacementSuffix = ".replacing"
+
 // The pending record is materialized before the branch moves. If either
 // artifact cannot be written, recovery reuses the same commit and bytes.
 type publication struct {
 	State, Artifact, Audit []byte
 	Input, Candidate       string
 	Base, BaseRef          string
+	SpecSHA256             string
 }
 
-func savePublication(path string, p publication) error {
+func savePublication(dir *os.File, path string, p publication) error {
 	data, err := json.Marshal(p)
 	if err != nil {
 		return err
 	}
-	return atomicWrite(path, data)
+	if err := writeAtomicFile(path, data, true); err != nil {
+		return err
+	}
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("sync pending builder publication; inspect it before retrying: %w", err)
+	}
+	return nil
 }
 
-func finishPublication(ctx context.Context, s snapshot, p publication, pending, artifactPath, auditPath string) error {
+func finishPublication(ctx context.Context, s snapshot, p publication, dir *os.File, pending, artifactPath, auditPath string) (err error) {
+	removed := false
+	defer func() {
+		if err != nil && !removed {
+			err = fmt.Errorf("candidate publication is pending; run worker --recover %s: %w", filepath.Base(dir.Name()), err)
+		}
+	}()
+	// The job mutex was released after the journal was synced. The journal
+	// excludes other operations until the fast-forward and both outputs finish.
 	if err := s.cleanWorktree(ctx); err != nil {
 		return err
 	}
@@ -48,33 +65,70 @@ func finishPublication(ctx context.Context, s snapshot, p publication, pending, 
 			return err
 		}
 	}
-	if err := atomicWrite(auditPath, p.Audit); err != nil {
+	if err := writeAtomicFile(auditPath, p.Audit, true); err != nil {
 		return err
 	}
-	if err := atomicWrite(artifactPath, p.Artifact); err != nil {
+	if err := writeAtomicFile(artifactPath, p.Artifact, true); err != nil {
 		return err
 	}
-	return os.Remove(pending)
+	if err := dir.Sync(); err != nil {
+		return err
+	}
+	// Recovery may reach this step after a non-replacement attempt or
+	// after a crash between removing the intent and removing the journal.
+	if err := os.Remove(auditPath + replacementSuffix); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("finish builder evidence replacement: %w", err)
+	}
+	if err := os.Remove(pending); err != nil {
+		return err
+	}
+	removed = true
+	if err := dir.Sync(); err != nil {
+		return fmt.Errorf("published builder evidence but could not sync journal removal: %w", err)
+	}
+	return nil
 }
 
-func recoverPublication(ctx context.Context, root string, state jobState, currentState []byte, pending, artifactPath, auditPath string, stdout io.Writer) error {
+func readBuilderSpec(jobDir, expectedDigest string) ([]byte, error) {
+	spec, err := readLiveEvidence(jobDir, "spec.md", maxJobInputBytes)
+	if err != nil || !reviewText(spec) {
+		return nil, errors.New("cannot read valid spec.md for builder publication")
+	}
+	if expectedDigest != "" && contentDigest(spec) != expectedDigest {
+		return nil, errors.New("spec.md changed since builder dispatch; inspect the job and retry")
+	}
+	return spec, nil
+}
+
+func readPendingPublication(jobDir, pending string, state jobState, currentState []byte) (publication, error) {
+	const maxPublicationBytes = 2*maxJobInputBytes + 4*maxArtifact
+	raw, err := readLiveEvidence(jobDir, filepath.Base(pending), maxPublicationBytes)
+	if err != nil {
+		return publication{}, fmt.Errorf("cannot read pending builder publication: %w", err)
+	}
 	var p publication
-	if err := readJSON(pending, &p); err != nil {
-		return fmt.Errorf("cannot read pending builder publication: %w", err)
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return publication{}, fmt.Errorf("cannot decode pending builder publication: %w", err)
 	}
 	if !bytes.Equal(p.State, currentState) || !gitSHA.MatchString(p.Input) || !gitSHA.MatchString(p.Candidate) ||
-		!gitSHA.MatchString(p.Base) || state.Branch != "factory/"+state.ID || state.Worktree != filepath.Join(".worktrees", state.ID) {
-		return errors.New("pending publication no longer matches the job")
+		!gitSHA.MatchString(p.Base) || state.Round < 1 || state.Branch != "factory/"+state.ID || state.Worktree != filepath.Join(".worktrees", state.ID) {
+		return publication{}, errors.New("pending publication no longer matches the job")
+	}
+	if p.SpecSHA256 == "" {
+		return publication{}, errors.New("legacy builder publication has no spec digest; inspect it before recovery")
+	}
+	if _, err := readBuilderSpec(jobDir, p.SpecSHA256); err != nil {
+		return publication{}, err
 	}
 	if err := validateArtifact(roles["builder"], p.Artifact); err != nil {
-		return err
+		return publication{}, err
 	}
+	return p, nil
+}
+
+func recoverPublication(ctx context.Context, root string, cfg config, state jobState, p publication, dir *os.File, pending, artifactPath, auditPath string, stdout io.Writer) error {
 	worktree, err := containedDir(root, state.Worktree)
 	if err != nil {
-		return err
-	}
-	var cfg config
-	if err := readJSON(filepath.Join(root, "factory", "config.json"), &cfg); err != nil {
 		return err
 	}
 	ref := "refs/remotes/origin/" + cfg.BaseBranch
@@ -86,10 +140,14 @@ func recoverPublication(ctx context.Context, root string, state jobState, curren
 		return errors.New("base changed since the candidate was prepared; inspect pending publication")
 	}
 	s := snapshot{source: worktree, checkout: worktree, base: base, branch: "refs/heads/" + state.Branch}
-	if err := s.checkPaths(ctx, root, filepath.Dir(pending), p.Candidate); err != nil {
+	spec, err := readBuilderSpec(filepath.Dir(pending), p.SpecSHA256)
+	if err != nil {
 		return err
 	}
-	if err := finishPublication(ctx, s, p, pending, artifactPath, auditPath); err != nil {
+	if err := s.checkPaths(ctx, root, p.Candidate, spec); err != nil {
+		return err
+	}
+	if err := finishPublication(ctx, s, p, dir, pending, artifactPath, auditPath); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "%s builder | recovered %s | build.md\n", state.ID, p.Candidate)

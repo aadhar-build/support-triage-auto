@@ -33,9 +33,12 @@ def main(argv: list[str]) -> int:
         root = F.repo_root()
         cfg = F.load_config(root)
         d = F.job_dir(root, argv[0])
-        job = F.read_job(d)
-        job["reviewers"] = reviewers_for(cfg, job["risk"], job["surfaces"])
-        F.write_job(d, job)
+        with F.job_mutex(d):
+            F.require_admission(d)
+            job = F.read_job(d)
+            F.require_prerequisites(d, job, "route")
+            job["reviewers"] = reviewers_for(cfg, job["risk"], job["surfaces"])
+            F.write_job(d, job)
         print(f"{job['id']} reviewers: " + ", ".join(f"{k}={v}" for k, v in job["reviewers"].items()))
         return 0
     except F.FactoryError as e:

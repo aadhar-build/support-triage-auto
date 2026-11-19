@@ -38,6 +38,9 @@ type jobState struct {
 	Worktree        string            `json:"worktree"`
 	Round           int               `json:"round"`
 	PR              int               `json:"pr"`
+	StackedOnPR     int               `json:"stacked_on_pr"`
+	Risk            string            `json:"risk"`
+	Surfaces        []string          `json:"surfaces"`
 	Reviewers       map[string]string `json:"reviewers"`
 	StackedOnBranch string            `json:"stacked_on_branch"`
 }
@@ -143,13 +146,17 @@ func run(root string, args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	jobDirectory, err := os.Open(jobDir)
+	if err != nil {
+		return err
+	}
+	defer jobDirectory.Close()
 	var cfg config
 	if err := readJSON(filepath.Join(root, "factory", "config.json"), &cfg); err != nil {
 		return fmt.Errorf("read factory configuration: %w", err)
 	}
 	var state jobState
-	statePath := filepath.Join(jobDir, "job.json")
-	stateBefore, err := os.ReadFile(statePath)
+	stateBefore, err := readLiveEvidence(jobDir, "job.json", maxJobInputBytes)
 	if err != nil {
 		return err
 	}
@@ -192,24 +199,78 @@ func run(root string, args []string, stdout io.Writer) error {
 		auditName = fmt.Sprintf("worker-round-%d-%s.json", state.Round, r.name)
 	}
 	artifactPath, auditPath := filepath.Join(artifactDir, r.artifact), filepath.Join(artifactDir, auditName)
-	unlock, err := lockRole(auditPath)
-	if err != nil {
-		return err
-	}
-	defer unlock()
 	pending := auditPath + ".pending"
+	reviewEvidenceStage := r.stage == "review" || r.stage == "approve"
+	replacement := auditPath + replacementSuffix
+	if reviewEvidenceStage {
+		replacement = pending
+	}
+	replacing := len(args) == 3
+	durableReplacement := replacing && !reviewEvidenceStage
+	var recoveryPending string
 	if recoverBuild {
-		return recoverPublication(ctx, root, state, stateBefore, pending, artifactPath, auditPath, stdout)
+		recoveryPending = pending
 	}
-	if _, err := os.Lstat(pending); !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("an earlier builder publication is pending; run worker --recover %s", state.ID)
-	}
-	if len(args) != 3 {
-		for _, p := range []string{artifactPath, auditPath} {
-			if _, err := os.Lstat(p); !errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("%s already exists or cannot be inspected; inspect it before using --replace", filepath.Base(p))
+	var unlockRole func()
+	defer func() {
+		if unlockRole != nil {
+			unlockRole()
+		}
+	}()
+	var recovery publication
+	if err := withJobAdmission(ctx, jobDirectory, stateBefore, recoveryPending, func() error {
+		if err := verifyArtifactDir(jobDir, artifactDir); err != nil {
+			return err
+		}
+		var err error
+		unlockRole, err = lockRole(auditPath)
+		if err != nil {
+			return err
+		}
+		if recoverBuild {
+			recovery, err = readPendingPublication(jobDir, pending, state, stateBefore)
+			return err
+		}
+		if !reviewEvidenceStage {
+			if _, err := os.Lstat(pending); !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("unexpected pending publication %s; inspect it before retrying", filepath.Base(pending))
 			}
 		}
+		if info, err := os.Lstat(replacement); !errors.Is(err, os.ErrNotExist) {
+			if err != nil || !info.Mode().IsRegular() || !replacing {
+				if reviewEvidenceStage {
+					return errors.New("review evidence replacement is pending. Retry with --replace or start a fresh review round")
+				}
+				return fmt.Errorf("worker evidence replacement is pending (%s); inspect it and retry with --replace", filepath.Base(replacement))
+			}
+		}
+		if !replacing {
+			for _, path := range []string{artifactPath, auditPath} {
+				if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+					return fmt.Errorf("%s already exists or cannot be inspected; inspect it before using --replace", filepath.Base(path))
+				}
+			}
+		}
+		if replacing {
+			intent := []byte("worker evidence replacement in progress\n")
+			if reviewEvidenceStage {
+				intent = []byte("review evidence replacement in progress\n")
+			}
+			if err := writeAtomicFile(replacement, intent, durableReplacement); err != nil {
+				return fmt.Errorf("record worker evidence replacement: %w", err)
+			}
+			if durableReplacement {
+				if err := jobDirectory.Sync(); err != nil {
+					return fmt.Errorf("sync worker evidence replacement intent: %w", err)
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if recoverBuild {
+		return recoverPublication(ctx, root, cfg, state, recovery, jobDirectory, pending, artifactPath, auditPath, stdout)
 	}
 	brief, err := rolePrompt(root, r.name)
 	if err != nil {
@@ -226,8 +287,36 @@ func run(root string, args []string, stdout io.Writer) error {
 		return err
 	}
 	defer os.RemoveAll(s.temp)
-	if err := validateStageEvidence(jobDir, state, s.head); err != nil {
+	if err := validateStageEvidence(ctx, jobDir, state, s.head, s.base); err != nil {
 		return err
+	}
+	var inputs map[string]string
+	if reviewEvidenceStage {
+		if err := validateStageEvidence(ctx, s.job, state, s.head, s.base); err != nil {
+			return err
+		}
+		inputs, err = evidenceInputs(ctx, s.job, state, r)
+		if err != nil {
+			return err
+		}
+		if err := verifyEvidenceInputs(ctx, jobDir, state, r, inputs); err != nil {
+			return err
+		}
+		if err := s.writeReviewInputs(ctx); err != nil {
+			return fmt.Errorf("prepare pinned review inputs: %w", err)
+		}
+		if err := s.prepareReviewReads(inputs); err != nil {
+			return fmt.Errorf("prepare bounded review reads: %w", err)
+		}
+	}
+	var spec []byte
+	var specDigest string
+	if r.stage == "build" {
+		spec, err = readBuilderSpec(s.job, "")
+		if err != nil {
+			return err
+		}
+		specDigest = contentDigest(spec)
 	}
 	prompt := s.prompt(state, cfg, r, brief)
 	content, err := execute(ctx, identity.binary, chosen, s, prompt, r)
@@ -237,58 +326,181 @@ func run(root string, args []string, stdout io.Writer) error {
 	if err := validateArtifact(r, content); err != nil {
 		return err
 	}
-	currentState, err := os.ReadFile(statePath)
-	if err != nil || !bytes.Equal(stateBefore, currentState) {
-		return errors.New("job state changed during dispatch; inspect and rerun")
-	}
 	if err := s.verifySource(ctx); err != nil {
 		return err
 	}
-	if err := validateStageEvidence(jobDir, state, s.head); err != nil {
-		return err
+	admitPublication := func(publish func() error) error {
+		return withJobAdmission(ctx, jobDirectory, stateBefore, "", func() error {
+			if err := verifyArtifactDir(jobDir, artifactDir); err != nil {
+				return err
+			}
+			if err := validateStageEvidence(ctx, jobDir, state, s.head, s.base); err != nil {
+				return err
+			}
+			if inputs != nil {
+				if err := verifyEvidenceInputs(ctx, jobDir, state, r, inputs); err != nil {
+					return err
+				}
+			}
+			if specDigest != "" {
+				if _, err := readBuilderSpec(jobDir, specDigest); err != nil {
+					return err
+				}
+			}
+			return publish()
+		})
 	}
 	candidate := s.head
 	if r.stage == "build" {
-		candidate, err = s.prepareCandidate(ctx, root, jobDir)
+		candidate, err = s.prepareCandidate(ctx, root, jobDir, spec)
+		if errors.Is(err, errNoCandidate) {
+			failurePath := auditPath + ".failure"
+			hint := noCandidateDiagnostic(content)
+			writeErr := admitPublication(func() error {
+				if writeNoChangeFailure(failurePath, chosen.Harness, s.head, content) != nil {
+					return fmt.Errorf("%w (%s). %s. The worker could not write %s", err, chosen.Harness, hint, filepath.Base(failurePath))
+				}
+				return nil
+			})
+			if writeErr != nil {
+				return writeErr
+			}
+			return fmt.Errorf("%w (%s). %s. See %s", err, chosen.Harness, hint, filepath.Base(failurePath))
+		}
 		if err != nil {
 			return err
 		}
 	}
+	content = append(bytes.TrimRight(content, "\r\n"), '\n')
 	record := struct {
 		selection
-		CLIVersion   string `json:"cli_version"`
-		AuthMode     string `json:"auth_mode"`
-		Role         string `json:"role"`
-		InputSHA     string `json:"input_sha"`
-		CandidateSHA string `json:"candidate_sha"`
-		BaseSHA      string `json:"base_sha,omitempty"`
-		At           string `json:"at"`
-	}{chosen, identity.CLIVersion, identity.AuthMode, r.name, s.head, candidate, s.base, time.Now().UTC().Format(time.RFC3339)}
+		CLIVersion      string            `json:"cli_version"`
+		AuthMode        string            `json:"auth_mode"`
+		Role            string            `json:"role"`
+		InputSHA        string            `json:"input_sha"`
+		CandidateSHA    string            `json:"candidate_sha"`
+		BaseSHA         string            `json:"base_sha,omitempty"`
+		At              string            `json:"at"`
+		EvidenceVersion int               `json:"evidence_version,omitempty"`
+		Inputs          map[string]string `json:"inputs,omitempty"`
+		ArtifactSHA256  string            `json:"artifact_sha256,omitempty"`
+	}{chosen, identity.CLIVersion, identity.AuthMode, r.name, s.head, candidate, s.base, time.Now().UTC().Format(time.RFC3339), 0, inputs, ""}
+	if inputs != nil {
+		record.EvidenceVersion = reviewEvidenceVersion
+		record.ArtifactSHA256 = contentDigest(content)
+	}
 	encoded, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return err
 	}
 	encoded = append(encoded, '\n')
-	content = append(bytes.TrimRight(content, "\r\n"), '\n')
 	if r.stage == "build" {
 		transaction := publication{State: stateBefore, Input: s.head, Candidate: candidate,
-			Base: s.base, BaseRef: s.baseRef, Artifact: content, Audit: encoded}
-		if err := savePublication(pending, transaction); err != nil {
+			Base: s.base, BaseRef: s.baseRef, SpecSHA256: specDigest, Artifact: content, Audit: encoded}
+		if err := admitPublication(func() error {
+			return savePublication(jobDirectory, pending, transaction)
+		}); err != nil {
 			return err
 		}
-		if err := finishPublication(ctx, s, transaction, pending, artifactPath, auditPath); err != nil {
-			return fmt.Errorf("candidate publication is pending; run worker --recover %s: %w", state.ID, err)
+		if err := finishPublication(ctx, s, transaction, jobDirectory, pending, artifactPath, auditPath); err != nil {
+			return err
 		}
 	} else {
-		if err := atomicWrite(auditPath, encoded); err != nil {
-			return fmt.Errorf("write worker audit (candidate %s): %w", candidate, err)
-		}
-		if err := atomicWrite(artifactPath, content); err != nil {
-			return fmt.Errorf("write worker artifact (candidate %s): %w", candidate, err)
+		if err := admitPublication(func() error {
+			if err := writeAtomicFile(auditPath, encoded, durableReplacement); err != nil {
+				return fmt.Errorf("write worker audit (candidate %s): %w", candidate, err)
+			}
+			if err := writeAtomicFile(artifactPath, content, durableReplacement); err != nil {
+				return fmt.Errorf("write worker artifact (candidate %s): %w", candidate, err)
+			}
+			if durableReplacement {
+				if err := jobDirectory.Sync(); err != nil {
+					return fmt.Errorf("sync replacement evidence: %w", err)
+				}
+			}
+			if replacing {
+				if err := os.Remove(replacement); err != nil {
+					return fmt.Errorf("finish worker evidence replacement: %w", err)
+				}
+			}
+			if durableReplacement {
+				if err := jobDirectory.Sync(); err != nil {
+					return fmt.Errorf("sync worker evidence replacement intent removal: %w", err)
+				}
+			}
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 	fmt.Fprintf(stdout, "%s %s | %s %s | %s | %s\n", state.ID, r.name, chosen.Harness, chosen.Model, candidate, r.artifact)
 	return nil
+}
+
+// The sidecar records the most recent no-change attempt for this round.
+// A later success publishes its own audit and leaves this attempt's record in place.
+func writeNoChangeFailure(path, harness, head string, report []byte) error {
+	// Persist only fixed values, the verified input SHA, and the report length.
+	record := struct {
+		Reason         string `json:"reason"`
+		Harness        string `json:"harness"`
+		InputSHA       string `json:"input_sha"`
+		ReportBytes    int    `json:"report_bytes"`
+		ReportedReason string `json:"reported_reason,omitempty"`
+		At             string `json:"at"`
+	}{"no_candidate_changes", harness, head, len(report), reportedNoChangeReason(report), time.Now().UTC().Format(time.RFC3339)}
+	data, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	return atomicWrite(path, append(data, '\n'))
+}
+
+const noChangeReasonPrefix = "NO-CHANGE REASON: "
+
+func reportedNoChangeReason(report []byte) string {
+	var reason string
+	for line := range strings.SplitSeq(string(report), "\n") {
+		code, ok := strings.CutPrefix(strings.TrimSuffix(line, "\r"), noChangeReasonPrefix)
+		if !ok {
+			continue
+		}
+		if reason != "" {
+			return ""
+		}
+		switch code {
+		case "already-satisfied", "write-denied", "blocked", "unknown":
+			reason = code
+		default:
+			return ""
+		}
+	}
+	return reason
+}
+
+// Model reports can repeat issue text, credentials and command output.
+// Emit only fixed categories, even when the report matches a known blocker.
+func noCandidateDiagnostic(report []byte) string {
+	summary := strings.ToLower(string(report))
+	switch {
+	case strings.Contains(summary, "permission denied"), strings.Contains(summary, "operation not permitted"),
+		strings.Contains(summary, "read-only file system"), strings.Contains(summary, "sandbox denied"):
+		return "The builder reported a permission or sandbox blocker. Inspect the worker's write and tool permissions"
+	case strings.Contains(summary, "command not found"), strings.Contains(summary, "module not found"):
+		return "The builder reported a missing command or module. Check the worker's local dependencies"
+	case strings.Contains(summary, ": not met"):
+		return "The builder reported unmet acceptance criteria. Review the spec and any previous round feedback"
+	default:
+		return "Check whether the spec requires a new edit and whether the worker can write the disposable checkout"
+	}
+}
+
+func verifyArtifactDir(jobDir, artifactDir string) error {
+	if artifactDir == jobDir {
+		return nil
+	}
+	_, err := containedDir(jobDir, filepath.Base(artifactDir))
+	return err
 }
 
 func lockRole(auditPath string) (func(), error) {
@@ -300,12 +512,19 @@ func lockRole(auditPath string) (func(), error) {
 }
 
 func atomicWrite(path string, content []byte) error {
+	return writeAtomicFile(path, content, false)
+}
+
+func writeAtomicFile(path string, content []byte, syncFile bool) error {
 	f, err := os.CreateTemp(filepath.Dir(path), ".worker-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
 	_, writeErr := f.Write(content)
+	if syncFile && writeErr == nil {
+		writeErr = f.Sync()
+	}
 	closeErr := f.Close()
 	if err := errors.Join(writeErr, closeErr); err != nil {
 		return err

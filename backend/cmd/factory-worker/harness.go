@@ -102,6 +102,7 @@ func chatGPTLogin(out, stderr []byte) bool {
 }
 
 func execute(ctx context.Context, bin string, chosen selection, s snapshot, prompt string, r role) ([]byte, error) {
+	reviewing := r.stage == "review" || r.stage == "approve"
 	tmp := filepath.Join(s.temp, "scratch")
 	if err := os.Mkdir(tmp, 0700); err != nil {
 		return nil, err
@@ -123,20 +124,32 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 			"--model", chosen.Model, "--color", "never",
 			"-c", `model_provider="openai"`, "-c", `web_search="disabled"`,
 			"-c", `default_permissions="factory_worker"`, "-c", fs + "}",
-			"-c", "permissions.factory_worker.network.enabled=false",
-			"--output-last-message", output}
+			"-c", "permissions.factory_worker.network.enabled=false"}
+		if reviewing {
+			args = append(args, "--json", "-c", "allow_login_shell=false", "-c", "features.shell_snapshot=false",
+				"-c", `shell_environment_policy.inherit="none"`)
+		} else {
+			args = append(args, "--output-last-message", output)
+		}
 		if chosen.Effort != "" {
 			args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(chosen.Effort))
 		}
 	} else {
-		settings, tools, err := claudeSettings(s.checkout, r.stage == "build")
+		settings, tools, err := claudeSettings(s.checkout, r.stage)
 		if err != nil {
 			return nil, err
+		}
+		format := "json"
+		if reviewing {
+			format = "stream-json"
 		}
 		args = []string{"--restricted", "--setting-sources", "", "--strict-mcp-config",
 			"--mcp-config", `{"mcpServers":{}}`, "--settings", settings, "--tools", tools,
 			"--disable-slash-commands", "--no-chrome", "--no-session-persistence", "--permission-mode", "dontAsk",
-			"--permission-prompts", "none", "--output-format", "json", "--model", chosen.Model}
+			"--permission-prompts", "none", "--output-format", format, "--model", chosen.Model}
+		if reviewing {
+			args = append(args, "--verbose")
+		}
 		if chosen.Effort != "" {
 			args = append(args, "--effort", chosen.Effort)
 		}
@@ -145,34 +158,68 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 	if chosen.Harness == "codex" {
 		args = append(args, "-")
 	}
+	if reviewing {
+		return executeReview(ctx, bin, chosen.Harness, s, args, prompt, tmp)
+	}
 	out, _, err := runNative(ctx, bin, s.checkout, workerEnv(tmp), args, prompt)
-	if err != nil {
-		return nil, fmt.Errorf("%s worker failed (%w); no alternate harness or credentials tried", chosen.Harness, err)
-	}
-	if chosen.Harness == "codex" {
-		return readRegular(output, maxArtifact)
-	}
 	var result struct {
 		Type    string `json:"type"`
 		Subtype string `json:"subtype"`
 		IsError *bool  `json:"is_error"`
 		Result  string `json:"result"`
 	}
-	if json.Unmarshal(bytes.TrimSpace(out), &result) != nil || result.Type != "result" ||
+	var decodeErr error
+	if chosen.Harness == "claude" {
+		decodeErr = json.Unmarshal(bytes.TrimSpace(out), &result)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s worker failed (%w); no alternate harness or credentials tried", chosen.Harness, err)
+	}
+	if chosen.Harness == "codex" {
+		content, err := readRegular(output, maxArtifact)
+		if err != nil {
+			return nil, err
+		}
+		return content, nil
+	}
+	if decodeErr != nil || result.Type != "result" ||
 		result.Subtype != "success" || result.IsError == nil || *result.IsError {
 		return nil, fmt.Errorf("Claude did not report a successful completed result")
 	}
 	return []byte(result.Result), nil
 }
 
-func claudeSettings(checkout string, builder bool) (string, string, error) {
+func executeReview(ctx context.Context, bin, harness string, s snapshot, args []string, prompt, tmp string) ([]byte, error) {
+	expected := make(map[string][]byte, len(s.reviewReads))
+	for _, read := range s.reviewReads {
+		expected[reviewReadKey(read.path, harness)] = read.data
+	}
+	events, err := runNativeReview(ctx, bin, s.checkout, workerEnv(tmp), args, prompt+reviewReadInstructions(s.reviewReads, harness))
+	if err != nil {
+		return nil, err
+	}
+	// A successful check establishes observable tool activity before the verdict.
+	// It cannot establish provider delivery or model understanding. The stream
+	// remains in bounded memory and is never included in an artifact or error.
+	supplemental := &supplementalReviewReads{ctx: ctx, checkout: s.checkout, head: s.head}
+	if harness == "codex" {
+		return validateCodexReadEvents(events, expected, supplemental)
+	}
+	return validateClaudeReadEvents(events, expected, supplemental)
+}
+
+func claudeSettings(checkout, stage string) (string, string, error) {
 	tools := "Read,Grep,Glob,Bash"
 	bash := []string{"Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git status *)", "Bash(git rev-parse *)"}
 	denyWrite := []string{checkout}
-	if builder {
+	switch stage {
+	case "build":
 		tools += ",Edit,Write"
 		bash = []string{"Bash(*)"}
 		denyWrite = []string{filepath.Join(checkout, ".git")}
+	case "review", "approve":
+		tools = "Read"
+		bash = []string{}
 	}
 	settings := map[string]any{
 		"disableAllHooks":           true,

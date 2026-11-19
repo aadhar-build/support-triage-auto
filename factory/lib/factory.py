@@ -8,8 +8,16 @@ allowlist). Standard library only, so it runs anywhere Python 3.10+ does.
 from __future__ import annotations
 
 import datetime as _dt
+import fcntl
 import fnmatch
 import json
+import os
+import secrets
+import socket
+import stat
+import tempfile
+from contextlib import contextmanager
+from contextvars import ContextVar
 import re
 import subprocess
 from pathlib import Path
@@ -50,6 +58,10 @@ class FactoryError(Exception):
     """A refused action. The message is shown to the orchestrator as is."""
 
 
+class FactoryBusy(FactoryError):
+    """A concurrent operation owns a required resource. Retry after it finishes."""
+
+
 # --------------------------------------------------------------------------
 # Paths and config
 # --------------------------------------------------------------------------
@@ -79,7 +91,11 @@ def jobs_dir(root: Path) -> Path:
 
 
 def job_dir(root: Path, job_id: str) -> Path:
+    if not re.fullmatch(r"[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*", job_id):
+        raise FactoryError(f"invalid job ID {job_id!r}")
     d = jobs_dir(root) / job_id
+    if any(p.is_symlink() for p in (d.parent.parent, d.parent, d)):
+        raise FactoryError("job directory must be a real directory")
     if not (d / "job.json").exists():
         raise FactoryError(f"no job {job_id}")
     return d
@@ -103,14 +119,205 @@ def now() -> str:
 # --------------------------------------------------------------------------
 
 
+_held_mutex = ContextVar("factory_job_mutex", default=None)
+_current_operation = ContextVar("factory_job_operation", default=None)
+OPERATION = ".factory-operation.json"
+GATE_PENDING = ".gate-publication.pending"
+
+
+@contextmanager
+def job_mutex(d: Path):
+    # flock the stable directory inode; unlinking a lock file could split ownership.
+    if _held_mutex.get() == (os.getpid(), d):
+        yield
+        return
+    if any(p.is_symlink() for p in (d.parent.parent, d.parent, d)):
+        raise FactoryError("job directory must be a real directory")
+    try:
+        fd = os.open(d, os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY)
+    except OSError as exc:
+        raise FactoryError(f"cannot open job directory {d.name}") from exc
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise FactoryBusy(f"job {d.name} is busy; retry") from exc
+        token = _held_mutex.set((os.getpid(), d))
+        try:
+            yield
+        finally:
+            _held_mutex.reset(token)
+    finally:
+        os.close(fd)
+
+
+def _sync_directory(folder: Path) -> None:
+    fd = os.open(folder, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def remove_marker(path: Path) -> None:
+    path.unlink()
+    _sync_directory(path.parent)
+
+
+def atomic_write(path: Path, content: bytes) -> None:
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".factory-tmp-", delete=False) as f:
+        tmp = Path(f.name)
+        try:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+            os.replace(tmp, path)
+            _sync_directory(path.parent)
+        finally:
+            tmp.unlink(missing_ok=True)
+
+
+def _small_json(path: Path, limit: int) -> dict:
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as f:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+                raise FactoryError(f"invalid {path.name}: expected a bounded regular file")
+            raw = f.read(limit + 1)
+        if len(raw) > limit:
+            raise FactoryError(f"oversized {path.name}")
+        value = json.loads(raw)
+        if not isinstance(value, dict):
+            raise ValueError()
+        return value
+    except (OSError, ValueError) as exc:
+        raise FactoryError(f"invalid or unreadable {path.name}") from exc
+
+
 def read_job(d: Path) -> dict:
-    return json.loads((d / "job.json").read_text())
+    return _small_json(d / "job.json", 4 * 1024 * 1024)
+
+
+def require_admission(d: Path, *, final: bool = False, token: str | None = None) -> None:
+    if os.path.lexists(d / GATE_PENDING):
+        raise FactoryError("gate publication interrupted; reconcile the receipt and job before retrying")
+    with os.scandir(d) as entries:
+        for index, entry in enumerate(entries):
+            if index >= 1024:
+                raise FactoryError("too many directory entries to check job admission")
+            if entry.name.startswith("worker-round-") and entry.name.endswith("-builder.json.pending"):
+                raise FactoryError(f"builder publication is active or pending; inspect it before changing {d.name}")
+    if os.path.lexists(d / OPERATION):
+        marker = _small_json(d / OPERATION, 4096)
+        local = _current_operation.get()
+        if local and local[0] == d and marker == local[1] and marker["pid"] == os.getpid():
+            return
+        if (final and token and re.fullmatch(r"[0-9a-f]{48}", token) and marker.get("command") == "merge"
+                and marker.get("pid") == os.getppid() and marker.get("host") == socket.gethostname()
+                and isinstance(marker.get("token"), str) and secrets.compare_digest(marker["token"], token)):
+            return
+        raise FactoryError(f"job {d.name} has an active or interrupted operation; inspect {OPERATION}")
+    if token is not None:
+        raise FactoryError("the merge that admitted this final gate is no longer active")
+
+
+def require_prerequisites(d: Path, job: dict, command: str, target: str | None = None) -> None:
+    # Intake, spec.md and build.md are shared names across attempts. While a
+    # replacement owns one of them its previous contents cannot be consumed.
+    # Call under job_mutex before reserving the command, so a refused consumer
+    # cannot interrupt the worker's own publication.
+    if command in {"intake", "route"}:
+        stage = "intake"
+    elif command in {"clarify", "pickup", "worktree"}:
+        stage = "spec"
+    elif command in {"gate", "publish-gate", "pr", "tally", "decide", "merge", "re-review"}:
+        stage = "build"
+    elif command == "advance":
+        stage = job["stage"]
+        if stage in {"ready", "needs-input"}:
+            stage = "spec"
+    else:
+        return
+
+    audits = ["worker-intake.json"]
+    if stage != "intake" or target == "build":
+        audits.append("worker-spec-writer.json")
+    round_number = job.get("round", 0)
+    if type(round_number) is not int or round_number < 0:
+        raise FactoryError("invalid job round")
+    if stage not in {"intake", "spec"}:
+        audits.append(f"worker-round-{round_number}-builder.json")
+    if command == "advance" and stage in {"review", "approve"}:
+        for reviewer in job.get("reviewers", {}):
+            if reviewer not in {"code", "eval", "security"}:
+                raise FactoryError(f"invalid reviewer name {reviewer!r}")
+            audits.append(f"round-{round_number}/worker-reviewer-{reviewer}.json")
+        if stage == "approve":
+            audits.append(f"worker-round-{round_number}-approver.json")
+    for audit in audits:
+        for suffix in (".lock", ".replacing", ".pending"):
+            marker = audit + suffix
+            if os.path.lexists(d / marker):
+                raise FactoryError(f"prerequisite worker evidence is active or interrupted ({marker}); "
+                                   "finish or recover the worker before consuming its output")
+
+
+@contextmanager
+def job_operation(d: Path, command: str, *, target: str | None = None):
+    # This durable admission survives process death. No flock is held through
+    # subprocesses, model calls, GitHub requests or the child final gate.
+    with job_mutex(d):
+        require_admission(d)
+        require_prerequisites(d, read_job(d), command, target)
+        marker = {"command": command, "token": secrets.token_hex(24), "pid": os.getpid(),
+                  "host": socket.gethostname(), "at": now(), "effect": None, "effects": []}
+        atomic_write(d / OPERATION, json.dumps(marker).encode())
+    context = _current_operation.set((d, marker))
+    try:
+        yield marker["token"]
+    except BaseException:
+        if marker["effect"] is None:
+            remove_marker(d / OPERATION)
+        raise
+    else:
+        remove_marker(d / OPERATION)
+    finally:
+        _current_operation.reset(context)
+
+
+def begin_effect(description: str) -> None:
+    local = _current_operation.get()
+    if local:
+        d, marker = local
+        if marker["effect"] != description:
+            # Make uncertainty visible before an externally observable mutation.
+            marker["effect"] = description
+            marker["effects"].append(description)
+            atomic_write(d / OPERATION, json.dumps(marker).encode())
+
+
+def merge_gate_token() -> str:
+    d, marker = _current_operation.get()
+    if marker["command"] != "merge":
+        raise FactoryError(f"job {d.name} has no active merge")
+    return marker["token"]
 
 
 def write_job(d: Path, job: dict) -> None:
-    tmp = d / "job.json.tmp"
-    tmp.write_text(json.dumps(job, indent=2) + "\n")
-    tmp.replace(d / "job.json")
+    already_locked = _held_mutex.get() == (os.getpid(), d)
+    with job_mutex(d):
+        # When the gate publishes its pair, its journal is already present.
+        # Admission was checked under this very same mutex by the caller.
+        if not already_locked:
+            require_admission(d)
+        path = d / "job.json"
+        previous = read_job(d).get("revision", 0) if path.exists() else 0
+        if type(previous) is not int or previous < 0:
+            raise FactoryError("invalid job revision")
+        begin_effect("commit job state")
+        job["revision"] = previous + 1
+        atomic_write(path, (json.dumps(job, indent=2) + "\n").encode())
 
 
 def new_job(job_id: str, issue: int, title: str) -> dict:
@@ -504,9 +711,17 @@ def automerge_ok(changed: list[str], allowlist: list[str], risk: str | None, sur
 
 
 def run(cmd: list[str], cwd: Path | None = None, check: bool = True, stdin: str | None = None) -> str:
+    if _current_operation.get() and cmd[:3] == ["git", "merge", "--no-edit"]:
+        ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", cmd[-1], "HEAD"],
+                                  cwd=cwd, capture_output=True)
+        if ancestor.returncode:
+            begin_effect("merge base into job worktree")
+    if cmd[:2] in (["git", "push"], ["git", "worktree"]):
+        begin_effect(" ".join(cmd[:2]))
     res = subprocess.run(cmd, cwd=str(cwd) if cwd else None, capture_output=True, text=True, input=stdin)
     if check and res.returncode != 0:
-        raise FactoryError(f"{' '.join(cmd[:3])} failed: {(res.stderr or res.stdout).strip()[:500]}")
+        error = FactoryBusy if res.returncode == os.EX_TEMPFAIL else FactoryError
+        raise error(f"{' '.join(cmd[:3])} failed: {(res.stderr or res.stdout).strip()[:500]}")
     return res.stdout
 
 
@@ -559,7 +774,22 @@ def gh_api(root: Path, method: str, path: str, fields: dict | None = None, check
             cmd += ["-F", f"{key}={'true' if value else 'false'}"]
         else:
             cmd += ["-f", f"{key}={value}"]
-    out = run(cmd, check=check)
+    if method not in {"GET", "HEAD"}:
+        begin_effect(f"GitHub {method} {path}")
+    if _current_operation.get() and method not in {"GET", "HEAD"}:
+        # Preserve the operation if the server may have performed a mutation
+        # before the connection failed. Removing an absent label is idempotent.
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        out = result.stdout
+        if result.returncode:
+            try:
+                status = json.loads(out).get("status")
+            except (ValueError, AttributeError):
+                status = None
+            if not (method == "DELETE" and "/labels/" in path and str(status) == "404"):
+                raise FactoryError(f"GitHub {method} {path} failed; reconcile the recorded operation")
+    else:
+        out = run(cmd, check=check)
     try:
         return json.loads(out) if out.strip() else None
     except json.JSONDecodeError:
