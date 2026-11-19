@@ -612,6 +612,17 @@ def weekly_report(job_records, start, as_of, timezone, defect_window_days):
                   datetime.combine(last, time.min, zone).astimezone(tz.utc), cutoff)
     period.update(start_utc=stamp(week.start), end_utc=stamp(week.end), partial=cutoff < week.end)
     active = [j for j in jobs if j.active(week)]
+    worker_rows, omitted = [], 0
+    for job in jobs:
+        for row in job.record.get("worker_receipts", []):
+            if week.contains(instant(row["occurred_at"])):
+                if len(worker_rows) < 64:
+                    worker_rows.append(row)
+                else:
+                    omitted += 1
+    result["worker_receipts"] = dict(records=worker_rows, omitted=omitted,
+                                     diagnostics={j.id: j.record["worker_receipt_diagnostics"] for j in jobs
+                                                  if j.record.get("worker_receipt_diagnostics")})
     merged = [j for j in jobs if week.contains(j.merged)]
     effort, full = effort_report(active, merged, week)
     acceptance, states = outcomes(active, week)
@@ -709,6 +720,16 @@ def render_weekly_report(report):
               f"suspected incidents observed {g['suspected_observed']}. Effective violations "
               f"{show(g['effective_total'])} ({g['confirmed_effective_observed']} confirmed, "
               f"{g['incident_coverage_jobs']}/{g['eligible_jobs']} jobs covered)."]
+    worker = report["worker_receipts"]
+    if worker["records"] or worker["diagnostics"]:
+        lines += ["", "**Unverified worker receipts**"]
+        for row in worker["records"][:8]:
+            lines.append(f"- {links([row['job_id']])} · round {row['round']} · {row['kind']} · "
+                         f"{row['occurred_at']} · {row['origin']}")
+        if len(worker["records"]) > 8 or worker["omitted"]:
+            lines.append(f"- {len(worker['records']) + worker['omitted'] - 8} additional local records.")
+        if worker["diagnostics"]:
+            lines.append("Worker receipt inventory is incomplete. See the JSON diagnostics.")
     for gap in g["gaps"][:8]:
         job_id = gap["job"]
         trusted_urls = (tracker_url(report["links"].get(job_id)),)

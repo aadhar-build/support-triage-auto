@@ -31,7 +31,7 @@ def _instant(value):
         return None
 
 
-def read_job_artifact(job_dir, path):
+def read_job_artifact(job_dir, path, *, max_bytes=_MAX_BYTES):
     """Bound reads and refuse symlinks/special files at every job-relative component."""
     if not isinstance(path, str) or any(part in ("", ".", "..") for part in path.split("/")):
         return None
@@ -46,8 +46,8 @@ def read_job_artifact(job_dir, path):
             fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
             with os.fdopen(fd, "rb") as stream:
                 info = os.fstat(fd)
-                if stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size <= _MAX_BYTES:
-                    content = stream.read(_MAX_BYTES + 1)
+                if stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_size <= max_bytes:
+                    content = stream.read(max_bytes + 1)
                     after = os.fstat(fd)
                     if (len(content) == info.st_size and after.st_nlink == 1
                             and info.st_ctime_ns == after.st_ctime_ns):

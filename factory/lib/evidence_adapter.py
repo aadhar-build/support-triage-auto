@@ -16,7 +16,7 @@ from pathlib import Path
 
 import factory as F
 from guardrails import evaluate_guardrails, read_job_artifact
-from observations import ObservationError, _artifact_path, _url, load_events
+from observations import ObservationError, _artifact_path, _open_job, _url, load_events
 
 
 _COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -276,6 +276,94 @@ def _worker_idle(folder: Path, audit: str) -> bool:
     return not any(os.path.lexists(folder / f"{audit}{suffix}") for suffix in (".pending", ".lock", ".replacing"))
 
 
+_WORKER_DIR = "worker-events-v1"
+_WORKER_TIME = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z")
+_WORKER_BASE = {"kind", "job_id", "origin", "round", "input_sha", "base_sha", "candidate_sha",
+                "spec_digest", "policy_digest", "occurred_at"}
+_WORKER_REFUSALS = {"protected_path_refused", "scope_refused"}
+_WORKER_RECOVERY_REFUSALS = {"recovery_" + name for name in _WORKER_REFUSALS}
+
+
+def _local_worker_event(event, name, job):
+    if not isinstance(event, dict) or not isinstance(event.get("kind"), str):
+        return None
+    kind = event["kind"]
+    recovered = kind == "builder_publication_recovered"
+    recovery_refused = kind in _WORKER_RECOVERY_REFUSALS
+    if not (recovered or recovery_refused or kind in _WORKER_REFUSALS):
+        return None
+    digests = {"audit_digest", "artifact_digest"} if recovered else set()
+    position = {"worktree_position"} if recovery_refused else set()
+    if set(event) != _WORKER_BASE | digests | position:
+        return None
+    if recovery_refused and event["worktree_position"] not in ("input", "candidate"):
+        return None
+    origin = job.get("origin") if job.get("origin") in ("controlled", "real") else "unknown"
+    number, stamp = event["round"], event["occurred_at"]
+    if (event["job_id"] != job["id"] or event["origin"] != origin
+            or type(number) is not int or not 0 < number <= (job.get("round") or 0)
+            or not isinstance(stamp, str) or not _WORKER_TIME.fullmatch(stamp) or _time(stamp) is None
+            or not all(isinstance(event[k], str) and _COMMIT.fullmatch(event[k])
+                       for k in ("input_sha", "base_sha", "candidate_sha"))
+            or event["input_sha"] == event["candidate_sha"]
+            or not all(isinstance(event[k], str) and re.fullmatch(r"[0-9a-f]{64}", event[k])
+                       for k in {"spec_digest", "policy_digest"} | digests)):
+        return None
+    identity = [_WORKER_DIR, kind, job["id"], origin, str(number), event["input_sha"],
+                event["candidate_sha"], event["base_sha"], event["spec_digest"]]
+    identity += ([event["audit_digest"], event["artifact_digest"]] if recovered
+                 else [event["policy_digest"], event.get("worktree_position", "")])
+    if name != _digest("\0".join(identity).encode()) + ".json":
+        return None
+    return {**event, "verification": "unverified"}
+
+
+def read_worker_receipts(folder: Path, job: dict, *, as_of: datetime | None = None) -> tuple[list, list]:
+    """Read a bounded selection. Same-UID worker files have no authenticated issuer."""
+    cutoff = as_of or datetime.now(timezone.utc)
+    diagnostics, rows = set(), []
+    invalid = "Some worker receipts are unreadable or invalid."
+    try:
+        with _open_job(folder) as job_fd:
+            try:
+                fd = os.open(_WORKER_DIR, os.O_DIRECTORY | os.O_NOFOLLOW | os.O_RDONLY, dir_fd=job_fd)
+            except FileNotFoundError:
+                return [], []
+            try:
+                with os.scandir(fd) as entries:
+                    count = 0
+                    for entry in entries:
+                        if entry.name == ".staging":
+                            continue
+                        if count >= 1024:
+                            diagnostics.add("The worker receipt inventory exceeds the 1024-file reporting limit.")
+                            break
+                        count += 1
+                        if not re.fullmatch(r"[0-9a-f]{64}\.json", entry.name):
+                            diagnostics.add(invalid)
+                            continue
+                        raw = read_job_artifact(folder, f"{_WORKER_DIR}/{entry.name}/receipt.json", max_bytes=4096)
+                        try:
+                            body = json.loads(raw, object_pairs_hook=_unique_fields) if raw else None
+                        except (ValueError, RecursionError):
+                            body = None
+                        event = _local_worker_event(body, entry.name, job)
+                        if event is None:
+                            diagnostics.add(invalid)
+                            continue
+                        if _time(event["occurred_at"]) > cutoff:
+                            continue
+                        if (event["kind"] == "builder_publication_recovered"
+                                and not _worker_idle(folder, f"worker-round-{event['round']}-builder.json")):
+                            continue
+                        rows.append(event)
+            finally:
+                os.close(fd)
+    except OSError:
+        diagnostics.add(invalid)
+    return sorted(rows, key=lambda row: (row["occurred_at"], row["candidate_sha"], row["kind"])), sorted(diagnostics)
+
+
 def _receipt_event(job: dict, bindings: dict, check: str, verdict: str, when: str, *references: tuple[str, str]) -> dict:
     identifier = uuid.uuid5(uuid.NAMESPACE_URL, json.dumps([job["id"], bindings, check, references], sort_keys=True))
     return {"schema_version": 1, "event_id": str(identifier), "job_id": job["id"], "kind": "check_evidence",
@@ -417,5 +505,7 @@ def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | N
     # Legacy jobs store tracker numbers without the repository identity. Origin and
     # its tracking refs can both refer to a different repository after a repoint.
     job = {**job, "source_url": None, "candidate_url": None}
-    return {"job": job, "events": events, "guardrails": guardrails, "diagnostics": guardrails["diagnostics"],
+    worker_receipts, worker_diagnostics = read_worker_receipts(folder, job, as_of=cutoff)
+    return {"job": job, "events": events, "worker_receipts": worker_receipts,
+            "worker_receipt_diagnostics": worker_diagnostics, "guardrails": guardrails, "diagnostics": guardrails["diagnostics"],
             "url": None, "first_gate": first_gate}

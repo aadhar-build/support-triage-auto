@@ -930,7 +930,8 @@ def cmd_recovery(root: Path, cfg: dict, args: list[str]) -> str:
 
     d = F.reporting_job_dir(root, args[0])
     record = reporting_record(root, cfg, d)
-    return json.dumps({**report_recovery_summary(record), "diagnostics": record["diagnostics"],
+    return json.dumps({**report_recovery_summary(record), "worker_receipts": record["worker_receipts"],
+                       "diagnostics": [*record["diagnostics"], *record["worker_receipt_diagnostics"]],
                        "incident_and_interruption_source_verification": "unavailable"}, indent=2)
 
 
