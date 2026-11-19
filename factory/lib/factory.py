@@ -423,7 +423,7 @@ def render_scorecard(cards: dict[str, dict], baseline: dict | None) -> str:
 # leaving-pr-comments skills: problem first, one attribution note)
 # --------------------------------------------------------------------------
 
-AGENT_NAME = "Claude Code (software factory)"
+AGENT_NAME = "Software factory"
 _CRITERION_RE = re.compile(r"^\s*\d+\.\s")
 
 
@@ -455,7 +455,7 @@ def pr_body(job: dict, spec_text: str, build_text: str, base_branch: str = "main
         parts.append(f"**Stacked on #{job['stacked_on_pr']}**, so this PR shows only its own changes. "
                      f"Merge #{job['stacked_on_pr']} first; GitHub then retargets this PR to `{base_branch}` "
                      "when that branch is deleted.")
-    parts.append(f"Created by the software factory in Claude Code, job `{job['id']}`. The spec, build notes, "
+    parts.append(f"Created by the software factory, job `{job['id']}`. The spec, build notes, "
                  "gate results and reviews are in the job folder.")
     return "\n\n".join(parts)
 

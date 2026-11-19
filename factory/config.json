@@ -20,6 +20,10 @@
     "builder": "opus",
     "approver": "opus"
   },
+  "workers": {
+    "timeout_s": 1800,
+    "roles": {}
+  },
   "routing": {
     "low": {
       "code": "haiku"

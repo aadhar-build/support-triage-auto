@@ -186,8 +186,21 @@ def _pr_state(root: Path, number: int) -> dict:
 
 def cmd_pr(root: Path, cfg: dict, args: list[str]) -> str:
     d, job = _load(root, args[0])
+    audit = d / f"worker-round-{job['round']}-builder.json"
+    if audit.with_suffix(".json.pending").exists() or audit.with_suffix(".json.lock").exists():
+        raise F.FactoryError(f"builder publication is active or pending; inspect it before pushing {job['id']}")
     wt = root / job["worktree"]
-    F.run(["git", "push", "--quiet", "-u", "origin", job["branch"]], cwd=wt)
+    if audit.exists():
+        head = _check_worker_candidate(root, job, audit)
+        if not (d / "build.md").is_file():
+            raise F.FactoryError("the recorded builder candidate has no build.md")
+        checks = d / f"round-{job['round']}" / "checks.md"
+        verdict = F.parse_header(checks.read_text()) if checks.is_file() else {}
+        if verdict.get("GATE") != "PASS" or verdict.get("CANDIDATE") != head:
+            raise F.FactoryError("the recorded builder candidate needs a matching passing gate before push")
+        _push_candidate(wt, job["branch"], head)
+    else:
+        F.run(["git", "push", "--quiet", "-u", "origin", job["branch"]], cwd=wt)
     if job["pr"]:
         return f"pushed {job['branch']} to PR #{job['pr']}"
     spec = d / "spec.md"
@@ -264,6 +277,21 @@ def cmd_answers(root: Path, cfg: dict, args: list[str]) -> str:
     return f"{job['id']} -> spec (issue.md refreshed with the owner's answers)"
 
 
+def _push_candidate(worktree: Path, branch: str, head: str) -> None:
+    F.run(["git", "push", "--quiet", "origin", f"{head}:refs/heads/{branch}"], cwd=worktree)
+
+
+def _check_worker_candidate(root: Path, job: dict, audit: Path) -> str:
+    head = F.run(["git", "rev-parse", "HEAD"], cwd=root / job["worktree"]).strip()
+    try:
+        candidate = json.loads(audit.read_text()).get("candidate_sha")
+    except (ValueError, AttributeError) as e:
+        raise F.FactoryError(f"invalid worker audit {audit.name}") from e
+    if candidate != head:
+        raise F.FactoryError(f"worktree HEAD no longer matches {audit.name}")
+    return head
+
+
 def cmd_tally(root: Path, cfg: dict, args: list[str]) -> str:
     d, job = _load(root, args[0])
     rd = d / f"round-{job['round']}"
@@ -272,6 +300,9 @@ def cmd_tally(root: Path, cfg: dict, args: list[str]) -> str:
         f = rd / f"review-{name}.md"
         if not f.exists():
             raise F.FactoryError(f"missing {f.name}; wait for every reviewer")
+        audit = rd / f"worker-reviewer-{name}.json"
+        if audit.exists():
+            _check_worker_candidate(root, job, audit)
         verdicts[name] = F.parse_header(f.read_text()).get("VERDICT", "").upper()
     bad = [n for n, v in verdicts.items() if v != "PASS"]
     if bad:
@@ -284,6 +315,9 @@ def cmd_tally(root: Path, cfg: dict, args: list[str]) -> str:
 
 def cmd_decide(root: Path, cfg: dict, args: list[str]) -> str:
     d, job = _load(root, args[0])
+    audit = d / f"worker-round-{job['round']}-approver.json"
+    if audit.exists():
+        _check_worker_candidate(root, job, audit)
     text = (d / "decision.md").read_text()
     verdict = F.first_line(text).upper()
     if verdict == "APPROVE":
@@ -309,6 +343,9 @@ def cmd_merge(root: Path, cfg: dict, args: list[str]) -> str:
     d, job = _load(root, args[0])
     if job["stage"] != "merging":
         raise F.FactoryError(f"job is in {job['stage']}, not merging")
+    audit = d / f"worker-round-{job['round']}-approver.json"
+    if audit.exists():
+        _check_worker_candidate(root, job, audit)
     wt = root / job["worktree"]
     base = cfg["base_branch"]
     if job.get("stacked_on_pr"):
@@ -329,7 +366,6 @@ def cmd_merge(root: Path, cfg: dict, args: list[str]) -> str:
         F.move(job, "needs-human", "merge conflict with base")
         F.write_job(d, job)
         return f"{job['id']} -> needs-human (conflict)"
-    F.run(["git", "push", "--quiet", "origin", job["branch"]], cwd=wt)
     gate = Path(__file__).resolve().parent / "gate"
     final = F.run([sys.executable, str(gate), job["id"], "--final"], cwd=root, check=False).strip()
     if not final.endswith("PASS"):
@@ -344,7 +380,17 @@ def cmd_merge(root: Path, cfg: dict, args: list[str]) -> str:
         F.move(job, "needs-human", f"auto-merge refused: {why}")
         F.write_job(d, job)
         return f"{job['id']} -> needs-human ({why})"
-    F.gh_api(root, "PUT", f"pulls/{job['pr']}/merge", {"merge_method": cfg["merge_method"]})
+    final_checks = F.parse_header((d / "final-checks.md").read_text())
+    head = F.run(["git", "rev-parse", "HEAD"], cwd=wt).strip()
+    if final_checks.get("GATE") != "PASS" or final_checks.get("CANDIDATE") != head:
+        raise F.FactoryError("current HEAD does not match the final gate")
+    _push_candidate(wt, job["branch"], head)
+    pr = _pr_state(root, job["pr"])
+    if (pr.get("head") or {}).get("sha") != head:
+        raise F.FactoryError("GitHub PR head does not match the gated commit")
+    result = F.gh_api(root, "PUT", f"pulls/{job['pr']}/merge", {"merge_method": cfg["merge_method"], "sha": head})
+    if not (result or {}).get("merged"):
+        raise F.FactoryError("GitHub did not confirm the gated commit merged")
     F.move(job, "merged", why)
     F.write_job(d, job)
     return f"{job['id']} -> merged (PR #{job['pr']})"
