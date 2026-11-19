@@ -22,9 +22,14 @@ func TestCodexReadEventsRequiresExactCompleteReadsBeforeVerdict(t *testing.T) {
 		"/bin/cat -- /fixture/spec":  []byte("BEGIN spec\ncomplete spec\nEND spec\n"),
 		"/bin/cat -- /fixture/patch": []byte("BEGIN patch\ncomplete patch\nEND patch\n"),
 	}
+	nativeZshStream := strings.NewReplacer(
+		`/bin/cat -- /fixture/spec`, `/usr/bin/zsh -c '/bin/cat -- /fixture/spec'`,
+		`/bin/cat -- /fixture/patch`, `/usr/bin/zsh -c '/bin/cat -- /fixture/patch'`,
+	).Replace(codexReadTranscript)
 	for _, stream := range []string{
 		codexReadTranscript,
 		strings.ReplaceAll(codexReadTranscript, `/bin/cat -- /fixture/spec`, `/bin/sh -c '/bin/cat -- /fixture/spec'`),
+		nativeZshStream,
 	} {
 		result, err := validateCodexReadEvents([]byte(stream), expected, nil)
 		if err != nil {
@@ -47,6 +52,9 @@ func TestCodexReadEventsRequiresExactCompleteReadsBeforeVerdict(t *testing.T) {
 		{"changed command", strings.Replace(codexReadTranscript, `/bin/cat -- /fixture/spec`, `/bin/cat -- /fixture/other`, 1)},
 		{"login shell wrapper", strings.ReplaceAll(codexReadTranscript, `/bin/cat -- /fixture/spec`, `/bin/sh -lc '/bin/cat -- /fixture/spec'`)},
 		{"wrapper includes another command", strings.ReplaceAll(codexReadTranscript, `/bin/cat -- /fixture/spec`, `/bin/sh -c '/bin/cat -- /fixture/spec && true'`)},
+		{"native zsh login shell wrapper", strings.ReplaceAll(nativeZshStream, `/usr/bin/zsh -c`, `/usr/bin/zsh -lc`)},
+		{"native zsh wrapper includes another command", strings.ReplaceAll(nativeZshStream, `/fixture/spec'`, `/fixture/spec && true'`)},
+		{"native zsh read has wrong output", strings.Replace(nativeZshStream, `complete spec`, `changed spec`, 1)},
 		{"wrapper missing content and closing quote", strings.ReplaceAll(codexReadTranscript, `/bin/cat -- /fixture/spec`, `/bin/sh -c '`)},
 		{"mixed direct and wrapped command", strings.Replace(codexReadTranscript, `/bin/cat -- /fixture/spec`, `/bin/sh -c '/bin/cat -- /fixture/spec'`, 1)},
 		{"repeated command", strings.ReplaceAll(codexReadTranscript, `/bin/cat -- /fixture/patch`, `/bin/cat -- /fixture/spec`)},

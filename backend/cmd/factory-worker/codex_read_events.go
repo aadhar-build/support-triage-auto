@@ -186,7 +186,7 @@ func (r *codexEvidenceReads) record(item map[string]json.RawMessage, id string, 
 }
 
 func canonicalCodexReadCommand(command string) string {
-	for _, prefix := range []string{"/bin/sh -c '", "/bin/bash -c '", "/bin/zsh -c '", "/usr/bin/bash -c '"} {
+	for _, prefix := range []string{"/bin/sh -c '", "/bin/bash -c '", "/bin/zsh -c '", "/usr/bin/bash -c '", "/usr/bin/zsh -c '"} {
 		if len(command) > len(prefix) && strings.HasPrefix(command, prefix) && strings.HasSuffix(command, "'") {
 			return command[len(prefix) : len(command)-1]
 		}
