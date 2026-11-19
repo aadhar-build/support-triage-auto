@@ -1,0 +1,1 @@
+{"public_reply_rules": [{"id": "p1", "type": "banned_phrase", "phrases": ["x"]}], "escalate_always": [{"id": "t-ok", "phrases": ["x"]}], "weight": Infinity}

@@ -1,0 +1,31 @@
+{
+  "version": "fixture-a",
+  "status": "made-up",
+  "public_reply_rules": [
+    {
+      "id": "a-banned",
+      "type": "banned_phrase",
+      "description": "Made-up test rule.",
+      "phrases": [
+        "zibberflop"
+      ]
+    },
+    {
+      "id": "a-pii",
+      "type": "pii_echo",
+      "detect": [
+        "card_number"
+      ]
+    }
+  ],
+  "escalate_always": [
+    {
+      "id": "a-topic",
+      "description": "Made-up test topic.",
+      "phrases": [
+        "a sentinel topic"
+      ],
+      "note": "Made-up note."
+    }
+  ]
+}

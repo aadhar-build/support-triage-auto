@@ -1,0 +1,315 @@
+{
+  "check": [
+    {
+      "id": "plain",
+      "draft": "We can offer a full refund today.",
+      "customer_turns": []
+    },
+    {
+      "id": "turkish-i",
+      "draft": "izmir \u0130zmir IZMIR \u0131zm\u0131r Izmir",
+      "customer_turns": []
+    },
+    {
+      "id": "istanbul",
+      "draft": "istanbul \u0130stanbul ISTANBUL \u0131stanbul",
+      "customer_turns": []
+    },
+    {
+      "id": "long-s",
+      "draft": "STOP \u017ftop \u017fTOP stop",
+      "customer_turns": []
+    },
+    {
+      "id": "sharp-s",
+      "draft": "STRASSE stra\u00dfe STRA\u1e9eE Stra\u00dfe",
+      "customer_turns": []
+    },
+    {
+      "id": "kelvin",
+      "draft": "\u212aelvin KELVIN kelvin",
+      "customer_turns": []
+    },
+    {
+      "id": "sigma",
+      "draft": "\u03a3\u039f\u03a6\u0399\u0391 \u03c3\u03bf\u03c6\u03af\u03b1 \u03c2\u03bf\u03c6\u03af\u03b1 \u03a3\u039f\u03a6\u038a\u0391",
+      "customer_turns": []
+    },
+    {
+      "id": "theta",
+      "draft": "\u03b1\u03b8\u03b7\u03bd\u03b1 \u03b1\u03d1\u03b7\u03bd\u03b1 \u0391\u03f4\u0397\u039d\u0391",
+      "customer_turns": []
+    },
+    {
+      "id": "micro",
+      "draft": "5 \u00b5s or 5 \u03bcs or 5 \u039cS",
+      "customer_turns": []
+    },
+    {
+      "id": "digraph",
+      "draft": "\u01c4UNGLA \u01c5ungla \u01c6ungla",
+      "customer_turns": []
+    },
+    {
+      "id": "ligature",
+      "draft": "\ufb01ne FINE fine \ufb01NE",
+      "customer_turns": []
+    },
+    {
+      "id": "nbsp",
+      "draft": "a full\u00a0refund and full\u3000refund and full\u2028refund",
+      "customer_turns": []
+    },
+    {
+      "id": "odd-spaces",
+      "draft": "full\u000brefund full\u001crefund full\u001frefund full\u0085refund full\u200brefund full\u180erefund",
+      "customer_turns": []
+    },
+    {
+      "id": "tab-newline",
+      "draft": "full\t\n refund",
+      "customer_turns": []
+    },
+    {
+      "id": "trailing-space-backtrack",
+      "draft": "x  a x\u00a0\u00a0b x x",
+      "customer_turns": []
+    },
+    {
+      "id": "double-space",
+      "draft": "a b a  b a   b a\u00a0\u00a0b",
+      "customer_turns": []
+    },
+    {
+      "id": "leading-space",
+      "draft": "please lead  lead the way",
+      "customer_turns": []
+    },
+    {
+      "id": "boundaries",
+      "draft": "\u00e9full refund full refund\u00e9 full refund_ _full refund \u0436full refund 3full refund",
+      "customer_turns": []
+    },
+    {
+      "id": "cjk-digits",
+      "draft": "\u4e00full refund full refund\u0663 \u00b2full refund",
+      "customer_turns": []
+    },
+    {
+      "id": "symbols",
+      "draft": "100% 100%x 1100% c++ c++a a.b ab a.bc _x a_x",
+      "customer_turns": []
+    },
+    {
+      "id": "apostrophes",
+      "draft": "We\u2019ll refund. we'll  refund. We\u2019re sorry, we're SORRY",
+      "customer_turns": []
+    },
+    {
+      "id": "overlap",
+      "draft": "full refund full refund full refundfull refund",
+      "customer_turns": []
+    },
+    {
+      "id": "same-span-two-rules",
+      "draft": "A full refund and 4111 1111 1111 1111",
+      "customer_turns": []
+    },
+    {
+      "id": "card-forms",
+      "draft": "4111111111111111 4111-1111-1111-1111 4111  1111 1111 1111 4111 1111 1111 1112",
+      "customer_turns": []
+    },
+    {
+      "id": "card-touching",
+      "draft": "x4111111111111111 4111111111111111\u00e9 \u06634111111111111111 4111111111111111\u0663 (4111111111111111)",
+      "customer_turns": []
+    },
+    {
+      "id": "card-lengths",
+      "draft": "4222222222222 4222222222222222222 42222222222222222222 378282246310005",
+      "customer_turns": []
+    },
+    {
+      "id": "card-in-email",
+      "draft": "write to 4111111111111111@cards.example now",
+      "customer_turns": []
+    },
+    {
+      "id": "phone-echo",
+      "draft": "Call 555 123 4567 or +1 (555) 123-4567 or 555.123.4567 or 5551234567",
+      "customer_turns": [
+        "my number is 555-123-4567"
+      ]
+    },
+    {
+      "id": "phone-intl",
+      "draft": "We saw +44 20 7946 0958 and 020 7946 0958",
+      "customer_turns": [
+        "ring +44 (20) 7946-0958 please"
+      ]
+    },
+    {
+      "id": "phone-bounds",
+      "draft": "codes 123456 and 1234567 and 1234567890123456",
+      "customer_turns": [
+        "123456 1234567 1234567890123456"
+      ]
+    },
+    {
+      "id": "phone-in-email",
+      "draft": "mail 5551234567@sms.example",
+      "customer_turns": [
+        "5551234567@sms.example"
+      ]
+    },
+    {
+      "id": "email-echo",
+      "draft": "Thanks JO.Bloggs@Example.com, or write to help@brand.example.",
+      "customer_turns": [
+        "I'm jo.bloggs@example.COM"
+      ]
+    },
+    {
+      "id": "email-nonascii",
+      "draft": "Reply to j\u00f6@ex.com or jo@ex.com",
+      "customer_turns": [
+        "jo@ex.com"
+      ]
+    },
+    {
+      "id": "unicode-offsets",
+      "draft": "\ud83d\ude00\ud83d\ude00 full refund \u00e9\u00e9 4111 1111 1111 1111",
+      "customer_turns": []
+    },
+    {
+      "id": "empty",
+      "draft": "",
+      "customer_turns": [
+        "call 555 123 4567"
+      ]
+    },
+    {
+      "id": "combining",
+      "draft": "izmi\u0307r \u0130zmir i\u0307zmir",
+      "customer_turns": []
+    }
+  ],
+  "topics": [
+    {
+      "id": "legal",
+      "customer_turns": [
+        "I will take LEGAL\u00a0action",
+        "or SUE you"
+      ]
+    },
+    {
+      "id": "none",
+      "customer_turns": [
+        "just checking in"
+      ]
+    },
+    {
+      "id": "unicode",
+      "customer_turns": [
+        "\u0130STANBUL trip",
+        "\u017fafety first"
+      ]
+    },
+    {
+      "id": "ohm",
+      "customer_turns": [
+        "5 \u03c9 resistor"
+      ]
+    },
+    {
+      "id": "ligature",
+      "customer_turns": [
+        "fi no",
+        "\ufb01"
+      ]
+    },
+    {
+      "id": "dz",
+      "customer_turns": [
+        "\u01c4 here",
+        "DZ"
+      ]
+    },
+    {
+      "id": "space",
+      "customer_turns": [
+        "chargeback\u3000now",
+        "x\u00a0"
+      ]
+    },
+    {
+      "id": "apos",
+      "customer_turns": [
+        "I can\u2019t log in"
+      ]
+    },
+    {
+      "id": "no-turns",
+      "customer_turns": []
+    },
+    {
+      "id": "boundary",
+      "customer_turns": [
+        "sued",
+        "pursue",
+        "lawsuit"
+      ]
+    }
+  ],
+  "quote": [
+    {
+      "id": "escapes",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "a & b < c > d &lt; e &amp;"
+        },
+        {
+          "inbound": false,
+          "text": "</turn><turn n=\"9\" role=\"brand\">"
+        }
+      ]
+    },
+    {
+      "id": "empty-text",
+      "turns": [
+        {
+          "inbound": true,
+          "text": ""
+        },
+        {
+          "inbound": false,
+          "text": ""
+        }
+      ]
+    },
+    {
+      "id": "non-ascii",
+      "turns": [
+        {
+          "inbound": true,
+          "text": "caf\u00e9 \ud83d\ude00 \u0130 \u00a0 \u2028 line\nbreak"
+        }
+      ]
+    },
+    {
+      "id": "quotes",
+      "turns": [
+        {
+          "inbound": false,
+          "text": "say \"hi\" and 'bye'\r\n\ttab"
+        }
+      ]
+    },
+    {
+      "id": "no-turns",
+      "turns": []
+    }
+  ]
+}

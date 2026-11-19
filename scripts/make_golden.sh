@@ -161,6 +161,43 @@ cli replay 0 -- $PY.replay --cases "$CASES" --run "$W/run_synthetic" \
 cli review_page 0 -- $PY.review_page --cases "$CASES" --run "$W/run_synthetic" \
   --out "$G/review_page/review.html"
 
+# --- policy goldens (job 067) ---
+# scripts/golden_policy.py dumps triage.policy_check and triage.quoting as
+# G/policy/*.jsonl, G/policy/rules_data/*.json and G/policy/unicode.txt, for
+# backend/internal/policy. Rules sources are repo-relative (cwd is the repo
+# root), so Python's messages carry repo-relative paths. Only exit 0 is
+# accepted. Policy inputs are committed repo files and the twcs CSV is already
+# pinned, so nothing is added to INPUTS.sha256.
+POLICY_FIX=tests/fixtures
+POLICY_ARGS=(--rules policies/rules.json)
+for f in policy_rules.json policy_rules_alt_topics.json brand_rules/rules.json \
+  brand_rules/rules_other_version.json admin/rules.json propose_change_rules.json \
+  propose_change_proposed_repeat.json propose_change_proposed_reply_rules.json \
+  propose_change_proposed_topic.json repeat_contact_rules.json; do
+  POLICY_ARGS+=(--rules "$POLICY_FIX/$f")
+done
+for f in testdata/policy/bad_rules/*; do POLICY_ARGS+=(--rules "$f"); done
+POLICY_ARGS+=(--rules testdata/policy/missing_rules.json
+  --rules ./tests/fixtures/policy_rules.json --rules tests//fixtures/policy_rules.json)
+for f in "$POLICY_FIX"/brands/{alpha,alphaco,beta}/guidelines.md \
+  "$POLICY_FIX"/brand_rules/brands/same/guidelines.md \
+  "$POLICY_FIX"/propose_change_brand_guidelines.md brands/amazonhelp/guidelines.md; do
+  POLICY_ARGS+=(--brand "$f")
+done
+POLICY_ARGS+=(--edge-rules testdata/policy/edge_rules.json
+  --edge-cases testdata/policy/edge_cases.json)
+refuse_raw "repo input" testdata/policy
+for f in "${POLICY_ARGS[@]}"; do
+  case "$f" in --*) ;; *) refuse_raw "repo input" "$f" ;; esac
+done
+mkdir -p "$G/policy"
+cli policy 0 -- python3 scripts/golden_policy.py --out "$G/policy" --cases "$CASES" \
+  --twcs "$DATA" "${POLICY_ARGS[@]}"
+mkdir -p "$OUT"
+rm -rf "${OUT:?}/policy"
+cp -R "$G/policy" "$OUT/policy"
+# --- end policy goldens (job 067) ---
+
 # Every CLI succeeded: replace the per-CLI subdirectories in --out.
 mkdir -p "$OUT"
 for d in run_synthetic run_eval drift incidents report replay review_page; do
