@@ -93,20 +93,34 @@ func checkRepeat(r *RepeatInput) error {
 	return nil
 }
 
-func check(threshold float64, cheap, larger LabellingTier, agent AgentTier, repeat *RepeatInput) error {
+// errNilTopics is Python's TypeError text from tuple(None). The exact wording
+// is pending a Fable tiebreak (job 068 round 2); change it only here.
+const errNilTopics = "'NoneType' object is not iterable"
+
+// check runs Python's argument checks in its order: threshold, model ids,
+// repeat, then topics (tuple(topics)). A nil topics is refused so a caller
+// that forgot to load topics can't silently turn escalate_always off.
+func check(threshold float64, cheap, larger LabellingTier, agent AgentTier, topics []policy.Topic, repeat *RepeatInput) error {
 	if err := checkThreshold(threshold); err != nil {
 		return err
 	}
 	if err := checkModelIDs(cheap, larger, agent); err != nil {
 		return err
 	}
-	return checkRepeat(repeat)
+	if err := checkRepeat(repeat); err != nil {
+		return err
+	}
+	if topics == nil {
+		return errors.New(errNilTopics)
+	}
+	return nil
 }
 
-// RouteThread routes one thread. topics are the always-escalate topics; an
-// empty slice turns that rule off. repeat nil means no repeat-contact rule.
+// RouteThread routes one thread. topics are the always-escalate topics and are
+// required: an empty slice turns that rule off, nil is refused. repeat nil
+// means no repeat-contact rule.
 func RouteThread(th ingest.Thread, cheap, larger LabellingTier, agent AgentTier, threshold float64, topics []policy.Topic, repeat *RepeatInput) (RoutedThread, error) {
-	if err := check(threshold, cheap, larger, agent, repeat); err != nil {
+	if err := check(threshold, cheap, larger, agent, topics, repeat); err != nil {
 		return RoutedThread{}, err
 	}
 	return routeOne(th, cheap, larger, agent, threshold, topics, repeat)
@@ -114,7 +128,7 @@ func RouteThread(th ingest.Thread, cheap, larger LabellingTier, agent AgentTier,
 
 // RouteThreads routes threads in order, checking the arguments once first.
 func RouteThreads(threads []ingest.Thread, cheap, larger LabellingTier, agent AgentTier, threshold float64, topics []policy.Topic, repeat *RepeatInput) ([]RoutedThread, error) {
-	if err := check(threshold, cheap, larger, agent, repeat); err != nil {
+	if err := check(threshold, cheap, larger, agent, topics, repeat); err != nil {
 		return nil, err
 	}
 	out := make([]RoutedThread, 0, len(threads))

@@ -117,7 +117,7 @@ func runRoute(t *testing.T, cheapL Labels, largerL *Labels, threshold float64, a
 		l = *largerL
 	}
 	o := runOut{cheap: stubCheap(cheapL), larger: stubLarger(l), agent: newStubAgent(agentResult)}
-	o.r = mustRoute(t, thread(5, "SENTINEL_TEXT"), o.cheap, o.larger, o.agent, threshold, nil, nil)
+	o.r = mustRoute(t, thread(5, "SENTINEL_TEXT"), o.cheap, o.larger, o.agent, threshold, noTopics, nil)
 	return o
 }
 
@@ -135,7 +135,7 @@ func TestRoutePlain(t *testing.T) {
 
 func TestRouteActionable(t *testing.T) {
 	c, l, a := fakes()
-	r := mustRoute(t, thread(6, "thanks, love it SENTINEL_TEXT_6"), c, l, a, 0.5, nil, nil)
+	r := mustRoute(t, thread(6, "thanks, love it SENTINEL_TEXT_6"), c, l, a, 0.5, noTopics, nil)
 	if r.CheapLabels.Action != "answer" || r.CheapLabels.Confidence != 0.75 || tiersOf(r) != "cheap,agent" || a.Calls != 1 || r.Labels != r.CheapLabels {
 		t.Errorf("got %+v calls %d", r, a.Calls)
 	}
@@ -175,7 +175,7 @@ func TestRouteEachHighRiskCondition(t *testing.T) {
 func TestRouteOverrideToEscalateSkipsAgent(t *testing.T) {
 	esc := Labels{"complaint", "high", "escalate", 1.0}
 	agent := NewFakeAgentTier()
-	r := mustRoute(t, thread(9, "hello there SENTINEL_TEXT_9"), NewCheapTier(), NewFakeLargerTier(map[uint64]Labels{9: esc}), agent, 0.5, nil, nil)
+	r := mustRoute(t, thread(9, "hello there SENTINEL_TEXT_9"), NewCheapTier(), NewFakeLargerTier(map[uint64]Labels{9: esc}), agent, 0.5, noTopics, nil)
 	if r.CheapLabels.Action != "ask" || tiersOf(r) != "cheap,larger" || r.Labels != esc || agent.Calls != 0 {
 		t.Errorf("got %+v", r)
 	}
@@ -205,7 +205,7 @@ func TestRouteTierNamesComeFromTiers(t *testing.T) {
 	l.name = "l2"
 	a := newStubAgent(nil)
 	a.name = "a2"
-	if r := mustRoute(t, thread(1, "x"), c, l, a, 0.5, nil, nil); tiersOf(r) != "c2,l2,a2" {
+	if r := mustRoute(t, thread(1, "x"), c, l, a, 0.5, noTopics, nil); tiersOf(r) != "c2,l2,a2" {
 		t.Errorf("tiers %v", r.Tiers)
 	}
 }
@@ -216,11 +216,11 @@ func TestRouteThreadsOrderAndIDs(t *testing.T) {
 	for _, id := range []uint64{30, 10, 20} {
 		ths = append(ths, thread(id, "package SENTINEL_TEXT"))
 	}
-	out, err := RouteThreads(ths, c, l, a, 0.5, nil, nil)
+	out, err := RouteThreads(ths, c, l, a, 0.5, noTopics, nil)
 	if err != nil || len(out) != 3 || out[0].ThreadID != 30 || out[1].ThreadID != 10 || out[2].ThreadID != 20 {
 		t.Errorf("got %+v, %v", out, err)
 	}
-	out, err = RouteThreads(nil, c, l, a, 0.5, nil, nil)
+	out, err = RouteThreads(nil, c, l, a, 0.5, noTopics, nil)
 	if err != nil || len(out) != 0 {
 		t.Errorf("empty: %v %v", out, err)
 	}
@@ -236,15 +236,15 @@ func TestRouteBadThreshold(t *testing.T) {
 		math.Inf(-1): "threshold must be a number in [0, 1], got -inf",
 	}
 	for bad, msg := range cases {
-		if _, err := RouteThread(thread(1, "x"), c, l, a, bad, nil, nil); err == nil || err.Error() != msg {
+		if _, err := RouteThread(thread(1, "x"), c, l, a, bad, noTopics, nil); err == nil || err.Error() != msg {
 			t.Errorf("RouteThread(%v) = %v", bad, err)
 		}
-		if _, err := RouteThreads([]ingest.Thread{thread(1, "x")}, c, l, a, bad, nil, nil); err == nil || err.Error() != msg {
+		if _, err := RouteThreads([]ingest.Thread{thread(1, "x")}, c, l, a, bad, noTopics, nil); err == nil || err.Error() != msg {
 			t.Errorf("RouteThreads(%v) = %v", bad, err)
 		}
 	}
-	mustRoute(t, thread(1, "x"), c, l, a, 0, nil, nil)
-	mustRoute(t, thread(1, "x"), c, l, a, 1, nil, nil)
+	mustRoute(t, thread(1, "x"), c, l, a, 0, noTopics, nil)
+	mustRoute(t, thread(1, "x"), c, l, a, 1, noTopics, nil)
 }
 
 func route1(t *testing.T, text string, threshold float64, larger LabellingTier, rootID uint64) RoutedThread {
@@ -252,7 +252,7 @@ func route1(t *testing.T, text string, threshold float64, larger LabellingTier, 
 	if larger == nil {
 		larger = NewFakeLargerTier(nil)
 	}
-	return mustRoute(t, thread(rootID, text), NewCheapTier(), larger, NewFakeAgentTier(), threshold, nil, nil)
+	return mustRoute(t, thread(rootID, text), NewCheapTier(), larger, NewFakeAgentTier(), threshold, noTopics, nil)
 }
 
 func TestReasonCodeRegistry(t *testing.T) {
@@ -361,11 +361,11 @@ func TestMissingModelIDRefused(t *testing.T) {
 	}
 	for _, c := range cases {
 		msg := "tier '" + c.name + "' has no model_id: every tier must set a non-empty string"
-		if _, err := RouteThread(thread(1, "x"), c.c, c.l, c.a, 0.5, nil, nil); err == nil || err.Error() != msg {
+		if _, err := RouteThread(thread(1, "x"), c.c, c.l, c.a, 0.5, noTopics, nil); err == nil || err.Error() != msg {
 			t.Errorf("RouteThread: %v", err)
 		}
 		for _, ths := range [][]ingest.Thread{{thread(1, "x")}, nil} {
-			if _, err := RouteThreads(ths, c.c, c.l, c.a, 0.5, nil, nil); err == nil || err.Error() != msg {
+			if _, err := RouteThreads(ths, c.c, c.l, c.a, 0.5, noTopics, nil); err == nil || err.Error() != msg {
 				t.Errorf("RouteThreads: %v", err)
 			}
 		}
@@ -374,7 +374,7 @@ func TestMissingModelIDRefused(t *testing.T) {
 		t.Errorf("cheap called %d", okC.calls)
 	}
 	// Threshold is checked before model ids.
-	if _, err := RouteThread(thread(1, "x"), emptyC, okL, okA, 2, nil, nil); err == nil || !strings.HasPrefix(err.Error(), "threshold") {
+	if _, err := RouteThread(thread(1, "x"), emptyC, okL, okA, 2, noTopics, nil); err == nil || !strings.HasPrefix(err.Error(), "threshold") {
 		t.Errorf("order: %v", err)
 	}
 }
@@ -447,7 +447,7 @@ func TestEscalateAlwaysBrandTurnNeverForces(t *testing.T) {
 }
 
 func TestEscalateAlwaysNoMatchUnchanged(t *testing.T) {
-	for _, tp := range [][]policy.Topic{nil, topics} {
+	for _, tp := range [][]policy.Topic{noTopics, topics} {
 		c, l, a := fakes()
 		r := mustRoute(t, thread(5, "thanks, love it"), c, l, a, 0.5, tp, nil)
 		if !reflect.DeepEqual(r.ReasonCodes, []string{CheapConfident}) || len(r.TopicID) != 0 || r.Labels != (Labels{"praise", "low", "answer", 0.75}) {
@@ -478,7 +478,7 @@ var shopcoCounts = map[uint64]int{101: 1, 102: 2, 103: 3}
 
 func TestRepeatThirdEscalates(t *testing.T) {
 	c, l, a := fakes()
-	out, err := RouteThreads(shopco(), c, l, a, 0.5, nil, &RepeatInput{MinConversations: 3, Counts: shopcoCounts})
+	out, err := RouteThreads(shopco(), c, l, a, 0.5, noTopics, &RepeatInput{MinConversations: 3, Counts: shopcoCounts})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +492,7 @@ func TestRepeatThirdEscalates(t *testing.T) {
 		}
 	}
 	c, l, a = fakes()
-	four, _ := RouteThreads(shopco(), c, l, a, 0.5, nil, &RepeatInput{MinConversations: 4, Counts: shopcoCounts})
+	four, _ := RouteThreads(shopco(), c, l, a, 0.5, noTopics, &RepeatInput{MinConversations: 4, Counts: shopcoCounts})
 	for _, r := range four {
 		if r.Labels.Action != "ask" {
 			t.Errorf("min 4: %+v", r)
@@ -503,10 +503,10 @@ func TestRepeatThirdEscalates(t *testing.T) {
 func TestRepeatAgentNotCalledWhenForced(t *testing.T) {
 	c, l, a := fakes()
 	rep := &RepeatInput{MinConversations: 3, Counts: shopcoCounts}
-	if _, err := RouteThreads(shopco()[:2], c, l, a, 0.5, nil, rep); err != nil || a.Calls != 2 {
+	if _, err := RouteThreads(shopco()[:2], c, l, a, 0.5, noTopics, rep); err != nil || a.Calls != 2 {
 		t.Fatalf("calls %d %v", a.Calls, err)
 	}
-	mustRoute(t, shopco()[2], c, l, a, 0.5, nil, rep)
+	mustRoute(t, shopco()[2], c, l, a, 0.5, noTopics, rep)
 	if a.Calls != 2 {
 		t.Errorf("calls %d", a.Calls)
 	}
@@ -514,19 +514,19 @@ func TestRepeatAgentNotCalledWhenForced(t *testing.T) {
 
 func TestRepeatRaisesUrgency(t *testing.T) {
 	agent := newStubAgent(nil)
-	r := mustRoute(t, thread(5, "x"), stubCheap(Labels{"billing", "normal", "route", 0.3}), stubLarger(Labels{"billing", "normal", "escalate", 0.9}), agent, 0.5, nil, &RepeatInput{3, map[uint64]int{5: 3}})
+	r := mustRoute(t, thread(5, "x"), stubCheap(Labels{"billing", "normal", "route", 0.3}), stubLarger(Labels{"billing", "normal", "escalate", 0.9}), agent, 0.5, noTopics, &RepeatInput{3, map[uint64]int{5: 3}})
 	if r.Labels != (Labels{"billing", "high", "escalate", 0.9}) || !reflect.DeepEqual(r.ReasonCodes, []string{LowConfidenceToLarger, RepeatContact}) || tiersOf(r) != "cheap,larger" || r.CheapLabels != (Labels{"billing", "normal", "route", 0.3}) || agent.calls != 0 {
 		t.Errorf("got %+v", r)
 	}
 }
 
 func TestRepeatNoCodeWhenUnchanged(t *testing.T) {
-	r := mustRoute(t, thread(5, "x"), stubCheap(Labels{"billing", "normal", "route", 0.3}), stubLarger(Labels{"billing", "high", "escalate", 0.9}), newStubAgent(nil), 0.5, nil, &RepeatInput{3, map[uint64]int{5: 4}})
+	r := mustRoute(t, thread(5, "x"), stubCheap(Labels{"billing", "normal", "route", 0.3}), stubLarger(Labels{"billing", "high", "escalate", 0.9}), newStubAgent(nil), 0.5, noTopics, &RepeatInput{3, map[uint64]int{5: 4}})
 	if r.Labels != (Labels{"billing", "high", "escalate", 0.9}) || !reflect.DeepEqual(r.ReasonCodes, []string{LowConfidenceToLarger}) {
 		t.Errorf("got %+v", r)
 	}
 	c, l, a := fakes()
-	below := mustRoute(t, thread(6, "my parcel never arrived"), c, l, a, 0.5, nil, &RepeatInput{3, map[uint64]int{6: 2}})
+	below := mustRoute(t, thread(6, "my parcel never arrived"), c, l, a, 0.5, noTopics, &RepeatInput{3, map[uint64]int{6: 2}})
 	if !reflect.DeepEqual(below.ReasonCodes, []string{CheapConfident}) || below.Labels.Action != "ask" {
 		t.Errorf("below %+v", below)
 	}
@@ -544,17 +544,17 @@ func TestRepeatRuleAndCountsTogether(t *testing.T) {
 	c, l, a := fakes()
 	msg := "repeat_rule and repeat_counts must be given together"
 	rep := &RepeatInput{MinConversations: 3}
-	if _, err := RouteThread(thread(1, "x"), c, l, a, 0.5, nil, rep); err == nil || err.Error() != msg {
+	if _, err := RouteThread(thread(1, "x"), c, l, a, 0.5, noTopics, rep); err == nil || err.Error() != msg {
 		t.Errorf("RouteThread: %v", err)
 	}
-	if _, err := RouteThreads([]ingest.Thread{thread(1, "x")}, c, l, a, 0.5, nil, rep); err == nil || err.Error() != msg {
+	if _, err := RouteThreads([]ingest.Thread{thread(1, "x")}, c, l, a, 0.5, noTopics, rep); err == nil || err.Error() != msg {
 		t.Errorf("RouteThreads: %v", err)
 	}
 }
 
 func TestRepeatNoRuleUnchanged(t *testing.T) {
 	c, l, a := fakes()
-	plain, _ := RouteThreads(shopco(), c, l, a, 0.5, nil, nil)
+	plain, _ := RouteThreads(shopco(), c, l, a, 0.5, noTopics, nil)
 	for _, r := range plain {
 		if r.Labels.Action != "ask" || len(r.ReasonCodes) != 1 {
 			t.Errorf("%+v", r)
@@ -568,8 +568,46 @@ func (*errTier) Label(ingest.Thread) (Labels, error) { return Labels{}, errors.N
 
 func TestTierErrorIsWrapped(t *testing.T) {
 	_, l, a := fakes()
-	_, err := RouteThread(thread(77, "x"), &errTier{stubTier{name: "cheap", modelID: "e"}}, l, a, 0.5, nil, nil)
+	_, err := RouteThread(thread(77, "x"), &errTier{stubTier{name: "cheap", modelID: "e"}}, l, a, 0.5, noTopics, nil)
 	if err == nil || !strings.Contains(err.Error(), "77") || !strings.Contains(err.Error(), "boom") {
 		t.Errorf("err %v", err)
+	}
+}
+
+// noTopics turns the always-escalate rule off; nil is refused (review round 1).
+var noTopics = []policy.Topic{}
+
+func TestNilTopicsRefused(t *testing.T) {
+	c, l, a := fakes()
+	msg := "'NoneType' object is not iterable"
+	if _, err := RouteThread(thread(1, "x"), c, l, a, 0.5, nil, nil); err == nil || err.Error() != msg {
+		t.Errorf("RouteThread(nil topics) = %v, want %q", err, msg)
+	}
+	for _, ths := range [][]ingest.Thread{{thread(1, "x")}, nil} {
+		if _, err := RouteThreads(ths, c, l, a, 0.5, nil, nil); err == nil || err.Error() != msg {
+			t.Errorf("RouteThreads(nil topics) = %v, want %q", err, msg)
+		}
+	}
+	// Python checks threshold, model ids and repeat before tuple(topics).
+	if _, err := RouteThread(thread(1, "x"), c, l, a, 2, nil, nil); err == nil || !strings.HasPrefix(err.Error(), "threshold") {
+		t.Errorf("threshold before topics: %v", err)
+	}
+	empty := stubCheap(Labels{"billing", "normal", "route", 0.9})
+	empty.modelID = ""
+	if _, err := RouteThread(thread(1, "x"), empty, l, a, 0.5, nil, nil); err == nil || !strings.HasPrefix(err.Error(), "tier ") {
+		t.Errorf("model ids before topics: %v", err)
+	}
+	if _, err := RouteThreads(nil, c, l, a, 0.5, nil, &RepeatInput{MinConversations: 3}); err == nil || !strings.HasPrefix(err.Error(), "repeat_rule") {
+		t.Errorf("repeat before topics: %v", err)
+	}
+	sc := stubCheap(Labels{"billing", "normal", "route", 0.9})
+	_, _ = RouteThread(thread(1, "x"), sc, l, a, 0.5, nil, nil)
+	_, _ = RouteThreads([]ingest.Thread{thread(1, "x")}, sc, l, a, 0.5, nil, nil)
+	if sc.calls != 0 || a.Calls != 0 {
+		t.Errorf("tiers called on refusal: cheap %d, agent %d", sc.calls, a.Calls)
+	}
+	// An empty non-nil slice turns the rule off.
+	if _, err := RouteThread(thread(1, "x"), c, l, a, 0.5, noTopics, nil); err != nil {
+		t.Errorf("empty topics: %v", err)
 	}
 }

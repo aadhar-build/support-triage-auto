@@ -73,7 +73,7 @@ var testRun = RunInfo{CodeVersion: strings.Repeat("a", 40), Threshold: 0.5, Spli
 func routedRec(t *testing.T, rootID uint64) Record {
 	t.Helper()
 	c, l, a := fakes()
-	r := mustRoute(t, thread(rootID, "hello SENTINEL_TEXT"), c, l, a, 0.5, nil, nil)
+	r := mustRoute(t, thread(rootID, "hello SENTINEL_TEXT"), c, l, a, 0.5, noTopics, nil)
 	return BuildRecord(r, testRun)
 }
 
@@ -219,7 +219,7 @@ func TestValidateForcedAndTopicID(t *testing.T) {
 func TestValidateNullableVersions(t *testing.T) {
 	r1, d1 := "rules-1", "drift-1"
 	c, l, a := fakes()
-	r := mustRoute(t, thread(21, "hello"), c, l, a, 0.5, nil, nil)
+	r := mustRoute(t, thread(21, "hello"), c, l, a, 0.5, noTopics, nil)
 	rec := BuildRecord(r, RunInfo{strings.Repeat("b", 40), true, &r1, &d1, 0.7, "eval", 0})
 	if rec["rules_version"] != "rules-1" || rec["drift_config_version"] != "drift-1" || rec["code_dirty"] != true {
 		t.Errorf("rec %v", rec)
