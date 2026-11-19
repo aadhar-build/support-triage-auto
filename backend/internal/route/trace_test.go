@@ -484,3 +484,15 @@ func TestResolveSymlinkLoopRefused(t *testing.T) {
 		t.Error("WriteTrace accepted a looping path")
 	}
 }
+
+// Fable tiebreak (A): a map in an error message is rendered with sorted keys,
+// not Python's insertion order. Unreachable from BuildRecord; pinned here.
+func TestReprMapKeysSorted(t *testing.T) {
+	rec := routedRec(t, 21)
+	rec["reason_codes"] = []any{map[string]any{"b": 1, "a": 2}}
+	wantErr(t, rec, "trace record for thread 21: 'reason_codes' holds an unregistered code {'a': 2, 'b': 1}")
+	rec = routedRec(t, 21)
+	rec["thread_id"] = map[string]any{"b": 1, "a": 2}
+	rec["reason_codes"] = []any{"nope"}
+	wantErr(t, rec, "trace record for thread {'a': 2, 'b': 1}: 'reason_codes' holds an unregistered code 'nope'")
+}

@@ -101,6 +101,12 @@ func pyRepr(v any) string {
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
 	case map[string]any:
+		// Keys are sorted on purpose. Python's dict repr uses insertion order,
+		// which a Go map does not keep, so this is a documented exception
+		// (Fable tiebreak (A), job 068). The case can't be reached from
+		// BuildRecord: WriteTrace is the only caller of ValidateRecord and is
+		// fed by BuildRecord, which never puts a map in reason_codes or
+		// thread_id. TestReprMapKeysSorted pins the behaviour.
 		keys := sortedKeys(x)
 		parts := make([]string, len(keys))
 		for i, k := range keys {
