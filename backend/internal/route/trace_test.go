@@ -464,3 +464,23 @@ func TestResolveLikePython(t *testing.T) {
 		t.Errorf("root symlink: %v", err)
 	}
 }
+
+// A symlink loop is refused, as Python's resolve raises on one, rather than
+// left unresolved.
+func TestResolveSymlinkLoopRefused(t *testing.T) {
+	repo, out := realDir(t), realDir(t)
+	if err := os.Symlink(filepath.Join(out, "b"), filepath.Join(out, "a")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(out, "a"), filepath.Join(out, "b")); err != nil {
+		t.Fatal(err)
+	}
+	err := CheckTracePath(repo, out+"/a/t.jsonl")
+	var te *TraceError
+	if err == nil || !errors.As(err, &te) || !strings.Contains(err.Error(), "symlink loop") {
+		t.Errorf("loop: %v", err)
+	}
+	if _, err := WriteTrace(repo, out+"/a/t.jsonl", records(routedRec(t, 1))); err == nil {
+		t.Error("WriteTrace accepted a looping path")
+	}
+}

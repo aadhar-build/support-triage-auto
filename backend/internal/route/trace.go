@@ -257,7 +257,8 @@ func ValidateRecord(rec any) error {
 
 // resolvePython is Python's non-strict Path.resolve(): absolute against the
 // working directory, each existing symlink resolved before a following `..`,
-// missing parts appended unchanged.
+// missing parts appended unchanged. A symlink loop is an error, as Python's
+// resolve raises on one.
 func resolvePython(path string) (string, error) {
 	if !filepath.IsAbs(path) {
 		wd, err := os.Getwd()
@@ -266,11 +267,11 @@ func resolvePython(path string) (string, error) {
 		}
 		path = wd + "/" + path
 	}
-	links := 0
-	return joinReal("/", path, &links), nil
+	// seen maps a link path to its resolution; "" while it is being resolved.
+	return joinReal("/", path, map[string]string{})
 }
 
-func joinReal(base, rest string, links *int) string {
+func joinReal(base, rest string, seen map[string]string) (string, error) {
 	if strings.HasPrefix(rest, "/") {
 		base = "/"
 	}
@@ -284,8 +285,15 @@ func joinReal(base, rest string, links *int) string {
 		}
 		next := filepath.Join(base, name)
 		fi, err := os.Lstat(next)
-		if err != nil || fi.Mode()&os.ModeSymlink == 0 || *links > 255 {
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
 			base = next
+			continue
+		}
+		if done, ok := seen[next]; ok {
+			if done == "" {
+				return "", errors.New("symlink loop at " + next)
+			}
+			base = done
 			continue
 		}
 		target, err := os.Readlink(next)
@@ -293,20 +301,23 @@ func joinReal(base, rest string, links *int) string {
 			base = next
 			continue
 		}
-		*links++
-		base = joinReal(base, target, links)
+		seen[next] = ""
+		if base, err = joinReal(base, target, seen); err != nil {
+			return "", err
+		}
+		seen[next] = base
 	}
-	return base
+	return base, nil
 }
 
 func checkOutPath(repoRoot, path string) (string, error) {
 	resolved, err := resolvePython(path)
 	if err != nil {
-		return "", traceErr("cannot resolve trace path %s: %s", path, errDetail(err))
+		return "", traceErr("cannot resolve trace path %s: %s", path, err)
 	}
 	root, err := resolvePython(repoRoot)
 	if err != nil {
-		return "", traceErr("cannot resolve repository %s: %s", repoRoot, errDetail(err))
+		return "", traceErr("cannot resolve repository %s: %s", repoRoot, err)
 	}
 	if resolved == root || strings.HasPrefix(resolved, strings.TrimSuffix(root, "/")+"/") {
 		return "", traceErr("trace path %s is inside the repository %s; write it outside", resolved, root)
