@@ -1,0 +1,9 @@
+{"at": "2026-10-01T00:00:00+00:00", "event": "open", "id": "o"}
+{"at": "2026-11-02 00:00:00Z", "event": "reserve", "extra": [1, {"k": null}], "id": "a", "model": 7, "run_id": null, "split": "dev", "usd": 1}
+{"at": "2026-11-02T00:00:00.5+00:00", "event": "reserve", "id": "b", "model": "m", "run_id": "r", "split": "dev", "usd": 0.25}
+{"at": "2026-11-02T00:00:00.12+00:00", "event": "reserve", "id": "c", "model": "m", "run_id": "r", "split": "dev", "usd": 0.5}
+{"at": "2026-11-02T00:00:00.123+00:00", "event": "reserve", "id": "d", "model": "m", "run_id": "r", "split": "dev", "usd": 0.125}
+{"at": "2026-11-02T00:00:00.1234+00:00", "event": "reserve", "id": "e", "model": "m", "run_id": "r", "split": "dev", "usd": 0.0625}
+{"at": "2026-11-02T00:00:00.12345Z", "event": "reserve", "id": "f", "model": "m", "run_id": "r", "split": "dev", "usd": 2}
+{"at": "2026-11-02T00:00:00.123456-05:30", "event": "reserve", "id": "g", "model": "m", "run_id": "r", "split": "dev", "usd": 0.03125}
+{"at": "2026-11-03T00:00:00+00:00", "cache_read_tokens": 0.0, "cache_write_tokens": 0, "event": "settle", "id": "c", "input_tokens": 1.5, "output_tokens": 1, "usd": 0.125, "usd": 0.0625}

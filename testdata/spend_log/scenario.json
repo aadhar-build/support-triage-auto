@@ -1,0 +1,226 @@
+{
+ "cap": "1.0",
+ "steps": [
+  {
+   "op": "create",
+   "clock": "2026-10-31T23:59:00+00:00"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-10-31T23:59:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.1"
+  },
+  {
+   "op": "settle",
+   "clock": "2026-10-31T23:59:00+00:00",
+   "ref": 1,
+   "usd": "0.000125",
+   "tokens": {
+    "input_tokens": 1000,
+    "output_tokens": 50,
+    "cache_write_tokens": 0,
+    "cache_read_tokens": 0
+   }
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-10-31T23:59:30.5+00:00",
+   "run_id": "run-1",
+   "model": "m",
+   "split": "eval",
+   "usd": "0.2"
+  },
+  {
+   "op": "mark_unknown",
+   "clock": "2026-10-31T23:59:30.5+00:00",
+   "ref": 3
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-10-31T23:59:30.5+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.3"
+  },
+  {
+   "op": "month_to_date",
+   "clock": "2026-10-31T23:59:30.5+00:00"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-10-31T23:59:30.5+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.9"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.1"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.2"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.3"
+  },
+  {
+   "op": "month_to_date",
+   "clock": "2026-11-01T00:00:00+00:00"
+  },
+  {
+   "op": "month_to_date",
+   "clock": "2026-11-01T00:30:00+01:00"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T01:00:00.123456+02:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.05"
+  },
+  {
+   "op": "month_to_date",
+   "clock": "2026-11-01T01:00:00.123456+02:00"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "test",
+   "usd": "0.1"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "-0.1"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "nan"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "inf"
+  },
+  {
+   "op": "settle",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "ref": 8,
+   "usd": "0.05",
+   "tokens": {
+    "input_tokens": 3,
+    "output_tokens": -1
+   }
+  },
+  {
+   "op": "settle",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "ref": 8,
+   "usd": "-0.01",
+   "tokens": {
+    "input_tokens": 1,
+    "output_tokens": 1,
+    "cache_write_tokens": 0,
+    "cache_read_tokens": 0
+   }
+  },
+  {
+   "op": "settle",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "id": "nope",
+   "usd": "0.01",
+   "tokens": {
+    "input_tokens": 1,
+    "output_tokens": 1,
+    "cache_write_tokens": 0,
+    "cache_read_tokens": 0
+   }
+  },
+  {
+   "op": "mark_unknown",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "id": "nope"
+  },
+  {
+   "op": "settle",
+   "clock": "2026-11-15T12:00:00.000001+00:00",
+   "ref": 8,
+   "usd": "0.05",
+   "tokens": {
+    "input_tokens": 2000,
+    "output_tokens": 100,
+    "cache_write_tokens": 10,
+    "cache_read_tokens": 5
+   }
+  },
+  {
+   "op": "mark_unknown",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "ref": 8
+  },
+  {
+   "op": "settle",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "ref": 8,
+   "usd": "0.05",
+   "tokens": {
+    "input_tokens": 1,
+    "output_tokens": 1,
+    "cache_write_tokens": 0,
+    "cache_read_tokens": 0
+   }
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "eval",
+   "usd": "0.4"
+  },
+  {
+   "op": "reserve",
+   "clock": "2026-11-01T00:00:00+00:00",
+   "run_id": "run-1",
+   "model": "claude-haiku-5-5",
+   "split": "dev",
+   "usd": "0.0001"
+  },
+  {
+   "op": "create",
+   "clock": "2026-11-01T00:00:00+00:00"
+  }
+ ]
+}
