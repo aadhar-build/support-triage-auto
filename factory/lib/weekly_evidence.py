@@ -5,6 +5,7 @@ import html
 import json
 import re
 from collections import Counter
+from datetime import date, timedelta
 from statistics import median
 
 import factory as F
@@ -33,6 +34,97 @@ ARTIFACT_REQUIREMENTS = {
 }
 GAP_STATUSES = frozenset({"fail", "pending", "missing", "stale", "unverified"})
 PREVIEW_ROWS = 8
+OUTCOME_LABELS = (
+    ("accepted_as_built", "Accepted as built"), ("accepted_with_follow_up", "Accepted with follow-up"),
+    ("rejected", "Rejected"), ("abandoned", "Abandoned"), ("failed", "Failed"),
+    ("pending", "Pending"), ("unobserved", "Unobserved"),
+)
+_DASHBOARD_STYLE = """
+:root {
+  color-scheme: light;
+  --canvas: #f0eff8;
+  --paper: #fff;
+  --ink: #211b39;
+  --muted: #514a6a;
+  --rule: #d9d3e8;
+  --accent: #5b4092;
+  --attention: #8a4c19;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  color: var(--ink);
+  background: var(--canvas);
+  font: 1rem/1.5 "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+main { max-width: 75rem; margin: auto; padding: clamp(1rem, 4vw, 3.5rem); }
+h1 { margin: .25rem 0 .45rem; font-size: clamp(2rem, 5vw, 3.65rem); line-height: 1.04; letter-spacing: -.045em; }
+h2 { margin: 0; font-size: 1.25rem; line-height: 1.25; }
+h3 { margin: 1.15rem 0 .4rem; font-size: 1.05rem; }
+p { max-width: 72ch; }
+a { color: var(--accent); text-underline-offset: .18em; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.report-period { margin: 0; color: var(--accent); font-size: 1.2rem; font-weight: 650; }
+.report-context { margin: .55rem 0 1.2rem; color: var(--muted); font-size: .92rem; }
+.report-context span { display: inline-block; margin-right: 1rem; }
+.scope-note { color: var(--muted); font-size: .92rem; margin: 0 0 1.25rem; }
+.coverage-alert { padding: .8rem 1rem; border-left: .25rem solid var(--attention); background: var(--paper); }
+.headlines {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  color: #fff;
+  background: #292046;
+  border-radius: 1.05rem;
+  overflow: hidden;
+}
+.headlines > div { padding: 1.2rem clamp(.75rem, 1.65vw, 1.35rem); }
+.headlines > div + div { border-left: 1px solid #565070; }
+.headlines dt { color: #ebe3ff; font-size: .94rem; font-weight: 650; }
+.headlines dd { margin: .45rem 0 0; }
+.metric-value { display: block; font-size: clamp(1.65rem, 3vw, 2.75rem); font-weight: 700; line-height: 1.08; }
+.metric-value.is-unavailable { color: #e6dbff; font-size: clamp(1.1rem, 2vw, 1.55rem); padding-block: .25rem; }
+.metric-note { display: block; color: #ede8f8; margin-top: .5rem; font-size: .83rem; }
+.metric-note > span { display: block; }
+.metric-value, .bar-value { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.charts { display: grid; grid-template-columns: 1.2fr 1fr; gap: 1rem; margin-top: 1rem; }
+figure { min-width: 0; margin: 0; padding: clamp(.9rem, 2.4vw, 1.45rem); background: var(--paper);
+         border: 1px solid var(--rule); border-radius: .7rem; }
+figcaption p, .chart-note { margin: .55rem 0 .8rem; color: var(--muted); font-size: .89rem; }
+.chart-rows { display: grid; gap: .48rem; list-style: none; margin: 1rem 0 0; padding: 0; }
+.chart-rows li { display: grid; align-items: center; gap: .25rem .65rem; font-size: .87rem; }
+.outcome-chart li { grid-template-columns: minmax(7rem, 1fr) minmax(2rem, 1.3fr) minmax(1.6rem, auto); }
+.coverage-chart li { grid-template-columns: minmax(0, 1fr) auto; margin-bottom: .28rem; }
+.coverage-chart meter { grid-column: 1 / -1; grid-row: 2; }
+.bar-value { text-align: right; }
+.bar-value-empty { color: var(--muted); font-weight: 500; }
+meter { display: block; width: 100%; height: .66rem; }
+meter::-webkit-meter-bar { border: none; border-radius: .2rem; background: #e8e1f4; }
+meter::-webkit-meter-optimum-value { background: var(--accent); }
+meter::-moz-meter-bar { background: var(--accent); }
+.pending meter::-webkit-meter-optimum-value { background: var(--attention); }
+.pending meter::-moz-meter-bar { background: var(--attention); }
+.details-section { margin-top: 2rem; }
+.details-section > h2 { margin-bottom: .65rem; }
+details { border-top: 1px solid var(--rule); background: var(--paper); }
+details:last-child { border-bottom: 1px solid var(--rule); }
+summary { display: list-item; padding: .7rem 1rem; color: var(--ink); font-weight: 650; cursor: pointer; }
+summary:hover { color: var(--accent); }
+.detail-content { padding: 0 1rem .7rem 1.8rem; line-height: 1.6; overflow-wrap: anywhere; }
+.detail-content p { margin: .25rem 0 .7rem; }
+.detail-content ul { padding-left: 1.3rem; }
+footer { margin-top: 1.15rem; font-size: .9rem; }
+@media (max-width: 55rem) {
+  .headlines { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .headlines > div:nth-child(3) { border-left: 0; }
+  .headlines > div:nth-child(n+3) { border-top: 1px solid #565070; }
+}
+@media (max-width: 44rem) { .charts { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 23rem) {
+  .headlines { grid-template-columns: minmax(0, 1fr); }
+  .headlines > div + div { border: 0; border-top: 1px solid #565070; }
+}
+"""
 
 
 def _numbers(values, fields):
@@ -225,6 +317,106 @@ def _show(value):
     return "unknown" if value is None else html.escape(str(value))
 
 
+def _headline(label, value, note):
+    state = " is-unavailable" if value == "Unavailable" else ""
+    return (f'<div><dt>{label}</dt><dd><span class="metric-value{state}">{value}</span>'
+            f'<span class="metric-note">{note}</span></dd></div>')
+
+
+def _rate_value(metric):
+    return "Unavailable" if metric is None or metric["percent"] is None else f"{metric['percent']:g}%"
+
+
+def _headlines(metrics):
+    delivered = metrics["delivery"]["count"]
+    acceptance = metrics["acceptance"]["rate"]
+    effort, defects = metrics["owner_effort"], metrics["escaped_defects"]
+    defect_rate = defects["rate"]
+    defect_note = "Follow-up window unset."
+    if defect_rate is not None:
+        mature = defect_rate["eligible"]
+        deliveries = "delivery" if mature == 1 else "deliveries"
+        defect_note = (
+            f"<span>{defects['window_days']}-day follow-up</span>"
+            f"<span>{defect_rate['numerator']} confirmed affected among {mature} mature {deliveries}.</span>"
+            f"<span>{defect_rate['covered']} observed, {defect_rate['unknown']} unknown. "
+            f"{defects['immature']} still in follow-up.</span>"
+        )
+    effort_value = "Unavailable" if effort["known_minutes"] is None else f"{effort['known_minutes']} min"
+    eligible = acceptance["eligible"]
+    submissions = "submission" if eligible == 1 else "submissions"
+    return [
+        '<dl class="headlines" id="weekly-headlines" aria-label="Weekly headline metrics">',
+        _headline("Recorded deliveries", delivered, "GitHub merge verification is unavailable offline."),
+        _headline("Owner accepted as built", _rate_value(acceptance),
+                  f"<span>{acceptance['numerator']} recorded as accepted among {eligible} eligible {submissions}.</span>"
+                  f"<span>{acceptance['covered']} observed, {acceptance['unknown']} unknown.</span>"),
+        _headline("Known owner time", effort_value,
+                  f"{effort['covered_jobs']}/{effort['eligible_jobs']} jobs fully covered. "
+                  f"{effort['unknown_jobs']} jobs with incomplete or missing records."),
+        _headline("Escaped defects", _rate_value(defect_rate), defect_note),
+        "</dl>",
+    ]
+
+
+def _chart_row(label, count, eligible, value, *, pending=False):
+    # The visible text gives assistive technology the same values as the graphical bar.
+    bar = f'<meter min="0" max="{eligible}" value="{count}" aria-hidden="true"></meter>' if eligible else ""
+    row_class = ' class="pending"' if pending else ""
+    value_class = " bar-value-empty" if not eligible else ""
+    return f'<li{row_class}><span>{label}</span>{bar}<strong class="bar-value{value_class}">{value}</strong></li>'
+
+
+def _coverage_row(label, covered, eligible):
+    value = f"{covered} of {eligible}" if eligible else "0 of 0 eligible"
+    return _chart_row(label, covered, eligible, value)
+
+
+def _charts(metrics):
+    acceptance, effort, defects, guardrails = (metrics[key] for key in
+                                              ("acceptance", "owner_effort", "escaped_defects", "guardrails"))
+    submissions = acceptance["rate"]["eligible"]
+    defect_rate = defects["rate"]
+    lines = [
+        '<div class="charts">',
+        '<figure class="outcome-chart" aria-labelledby="outcome-heading">',
+        '<figcaption><h2 id="outcome-heading">Submission outcomes</h2>',
+        f'<p>{submissions} eligible submissions in the reporting week. Each bar uses that total.</p></figcaption>',
+    ]
+    if submissions:
+        lines += ['<ul class="chart-rows" role="list">', *(
+            _chart_row(label, acceptance[key], submissions, acceptance[key], pending=key in ("pending", "unobserved"))
+            for key, label in OUTCOME_LABELS
+        ), "</ul>"]
+    else:
+        lines.append('<p class="chart-note">No submissions with a recorded date in this week.</p>')
+    if undated := acceptance["submission_unobserved"]:
+        jobs = "job has" if undated == 1 else "jobs have"
+        lines.append(f'<p class="chart-note">{undated} active {jobs} no recorded submission time.</p>')
+    lines += [
+        '</figure><figure class="coverage-chart" aria-labelledby="coverage-heading">',
+        '<figcaption><h2 id="coverage-heading">Evidence coverage</h2>',
+        '<p>Observed or fully covered out of the eligible total for each measure.</p></figcaption>',
+        '<ul class="chart-rows" role="list">',
+        _coverage_row("Submission outcomes", acceptance["rate"]["covered"], submissions),
+        _coverage_row("Jobs with complete owner time", effort["covered_jobs"], effort["eligible_jobs"]),
+        (_coverage_row("Mature deliveries with known defect status", defect_rate["covered"], defect_rate["eligible"])
+         if defect_rate is not None else _chart_row("Escaped-defect coverage", 0, 0, "Window unset")),
+        _coverage_row("Verified inventoried requirements", guardrails["covered_requirements"],
+                      guardrails["eligible_requirements"]),
+        "</ul>",
+    ]
+    if without_inventory := guardrails["jobs_without_requirement_inventory"]:
+        jobs = "job has" if without_inventory == 1 else "jobs have"
+        lines.append(f'<p class="chart-note">{without_inventory} active {jobs} no requirement inventory.</p>')
+    lines.append("</figure></div>")
+    return lines
+
+
+def _detail(title, content):
+    return [f'<details><summary>{title}</summary><div class="detail-content">', *content, "</div></details>"]
+
+
 def _frequency(metric):
     if metric is None:
         return "Rate unavailable"
@@ -239,16 +431,13 @@ def _duration(metric, unit):
             f"{', small sample' if metric['sample'] < SMALL_SAMPLE else ''})")
 
 
-def _overview(data):
+def _metric_details(data):
     m = data["metrics"]
     delivery, a, e, g = (m[key] for key in ("delivery", "acceptance", "owner_effort", "guardrails"))
     defects, recovery, escalation = (m[key] for key in ("escaped_defects", "recovery", "escalations"))
     timing, coverage = e["per_merge_median"], recovery["source_coverage"]
     per_delivery = {"median": timing["minutes"], "sample": timing["sample"], "excluded": timing["excluded"]}
-    lines = [
-        f"<p>{m['observed_active_jobs']} jobs in the observed active cohort. {'Small sample. ' if m['small_sample'] else ''}"
-        f"{delivery['count']} recorded deliveries. GitHub merge verification is unavailable in this offline bundle.</p>",
-        "<h2>Delivery and owner outcomes</h2>",
+    lines = _detail("Delivery and owner outcomes", [
         f"<p>Median lead time {_duration(delivery['lead_hours'], 'hours')}. "
         f"Median elapsed time to ready {_duration(delivery['agent_elapsed_minutes'], 'minutes')}. "
         f"First gate passed {_frequency(delivery['first_gate'])}.</p>",
@@ -257,13 +446,18 @@ def _overview(data):
         f"abandoned {a['abandoned']}, failed {a['failed']}, pending {a['pending']}, unobserved {a['unobserved']}. "
         f"{a['no_recorded_submission']} terminal jobs with no recorded submission and "
         f"{a['submission_unobserved']} other jobs missing a submission time.</p>",
-        "<h2>Owner effort and rework</h2>",
+        "<h3>Recorded deliveries</h3>",
+        *(_preview(delivery["jobs"], lambda row: f"Job {row['job']} · {_receipt_links(row['selected_receipts'])}")
+          or ["<p>No recorded deliveries.</p>"]),
+    ])
+    lines += _detail("Owner effort and rework", [
         f"<p>{_show(e['known_minutes'])} known active minutes. {e['covered_jobs']}/{e['eligible_jobs']} jobs fully "
         f"covered, {e['unknown_jobs']} unknown. Known rework {_show(e['rework_minutes'])} minutes, "
         f"total rework {_show(e['rework_total_minutes'])} minutes. "
         f"Median per delivery {_duration(per_delivery, 'minutes')}.</p>",
         "<p>Minutes by activity · " + ", ".join(f"{key} {_show(value)}" for key, value in e["activities"].items()) + ".</p>",
-        "<h2>Defects, escalation and recovery</h2>",
+    ])
+    lines += _detail("Defects, escalation and recovery", [
         f"<p>Escaped defects {_frequency(defects['rate'])}. Follow-up window "
         f"{_show(defects['window_days'])} days. {_show(defects['immature'])} recorded deliveries still maturing. "
         f"{defects['unwindowed_observations']} defect observations on delivered jobs.</p>",
@@ -277,7 +471,8 @@ def _overview(data):
         f"Observation coverage {coverage['jobs_with_complete_observation']}/{coverage['eligible_jobs']} jobs. "
         f"Median elapsed {_duration(recovery['elapsed_minutes'], 'minutes')}. "
         f"Linked owner effort {_show(recovery['known_owner_minutes'])} known minutes.</p>",
-        "<h2>Guardrails</h2>",
+    ])
+    lines += _detail("Guardrails and recurring bottlenecks", [
         f"<p>{g['covered_requirements']}/{g['eligible_requirements']} requirements verified, "
         f"{g['proven_requirements']} passing, {g['jobs_without_requirement_inventory']} jobs without a requirement "
         f"inventory. {g['requirement_gap_count']} requirement gaps, including {len(g['repeated_gap_groups'])} recurring "
@@ -286,17 +481,19 @@ def _overview(data):
         f"({g['confirmed_effective_observed']} confirmed, {g['incident_coverage_jobs']}/{g['eligible_jobs']} jobs covered). "
         f"{g['confirmed_blocked_observed']} confirmed blocked attempts and {g['suspected_observed']} suspected "
         "incidents observed. Independent incident and interruption sources are unavailable.</p>",
-    ]
-    lines += ["<h2>Recorded deliveries</h2>", *_preview(
-        delivery["jobs"], lambda row: f"Job {row['job']} · {_receipt_links(row['selected_receipts'])}"),
-        "<h2>Guardrail evidence gaps</h2>", *_preview(
-            g["gaps"], lambda row: f"Job {row['job']} · {row['requirement']} · {row['status']} · "
-                                   f"{_receipt_links(row['selected_receipts'])}"),
-        "<h2>Recurring bottlenecks</h2>", *_preview(
-            g["repeated_gap_groups"], lambda row: f"{row['requirement']} · {row['status']} on {row['jobs']} jobs"),
-        *_preview(recovery["reported_recurring_cause_groups"], lambda row:
-                  f"Reported cause group {row['group']} · {row['reported_failures']} failures on "
-                  f"{len(row['jobs'])} jobs · cause unverified"), "<h2>Usage and cost</h2><ul>"]
+        "<h3>Guardrail evidence gaps</h3>",
+        *(_preview(g["gaps"], lambda row: f"Job {row['job']} · {row['requirement']} · {row['status']} · "
+                                         f"{_receipt_links(row['selected_receipts'])}")
+          or ["<p>No requirement gaps recorded.</p>"]),
+        "<h3>Recurring bottlenecks</h3>",
+        *([*_preview(g["repeated_gap_groups"], lambda row:
+                     f"{row['requirement']} · {row['status']} on {row['jobs']} jobs"),
+           *_preview(recovery["reported_recurring_cause_groups"], lambda row:
+                     f"Reported cause group {row['group']} · {row['reported_failures']} failures on "
+                     f"{len(row['jobs'])} jobs · cause unverified")]
+          or ["<p>No recurring bottlenecks recorded.</p>"]),
+    ])
+    costs = ["<ul>"]
     for category in m["costs"]["categories"]:
         pieces = []
         for row in category["totals"]:
@@ -306,77 +503,98 @@ def _overview(data):
             pieces.append(f"{_show(row['amount'])} {unit} (group {row['unit_group']}, "
                           f"{source_types or 'source unavailable'}{status})")
         cov = category["coverage"]
-        lines.append(f"<li>{COST_LABELS[category['cost_type']]} · {', '.join(pieces) or 'unknown'} "
+        costs.append(f"<li>{COST_LABELS[category['cost_type']]} · {', '.join(pieces) or 'unknown'} "
                      f"({cov['jobs_with_amount']}/{cov['eligible_jobs']} active jobs and "
                      f"{cov['other_jobs_with_amount']} other jobs with recorded amounts).</li>")
-    lines += ["</ul>", f"<p>{m['costs']['unattributed_observations']} cost or usage observations could not be "
-                       "attributed. Original source details stay in the private scorecard.</p>",
-              "<h2>Task cohorts and matched work</h2>",
-              f"<p>Small groups contain fewer than {SMALL_SAMPLE} jobs. Views overlap. Group numbers are local to "
-              "this bundle. The private scorecard holds the source labels.</p>"]
+    costs += ["</ul>", f"<p>{m['costs']['unattributed_observations']} cost or usage observations could not be "
+                       "attributed. Original source details stay in the private scorecard.</p>"]
+    lines += _detail("Usage and cost", costs)
+
+    cohorts = [f"<p>Small groups contain fewer than {SMALL_SAMPLE} jobs. Views overlap. Group numbers are local to "
+               "this bundle. The private scorecard holds the source labels.</p>"]
     for key, label in (("type_and_size", "Type and size"), ("task_type", "Type"), ("task_size", "Size")):
         view = m["cohorts"][key]
         cov = view["coverage"]
-        lines.append(f"<p>{label} · {cov['covered']}/{cov['eligible']} classified, {cov['unknown']} unknown "
-                     f"and {view['small_groups']} small groups.</p>")
-        lines.extend(_preview(view["groups"], lambda row:
-                              f"Group {row['group']} · {row['jobs']} active, {row['merged_jobs']} delivered. "
-                              f"Owner accepted as built {_frequency(row['acceptance']['rate'])}. "
-                              f"{_show(row['owner_effort']['known_minutes'])} known owner minutes "
-                              f"({row['owner_effort']['covered_jobs']}/{row['owner_effort']['eligible_jobs']} "
-                              "jobs fully covered)."))
+        cohorts.append(f"<p>{label} · {cov['covered']}/{cov['eligible']} classified, {cov['unknown']} unknown "
+                       f"and {view['small_groups']} small groups.</p>")
+        cohorts.extend(_preview(view["groups"], lambda row:
+                                f"Group {row['group']} · {row['jobs']} active, {row['merged_jobs']} delivered. "
+                                f"Owner accepted as built {_frequency(row['acceptance']['rate'])}. "
+                                f"{_show(row['owner_effort']['known_minutes'])} known owner minutes "
+                                f"({row['owner_effort']['covered_jobs']}/{row['owner_effort']['eligible_jobs']} "
+                                "jobs fully covered)."))
     match = m["matched_tasks"]
-    lines.append(f"<p>{match['pairs']}/{match['candidate_keys']} matched-task pairs measured. Median observed "
-                 f"factory minus direct time {_show(match['median_factory_minus_direct_minutes'])} minutes."
-                 f"{' Small sample.' if match['pairs'] < SMALL_SAMPLE else ''} Observed comparisons are descriptive.</p>")
+    cohorts.append(f"<p>{match['pairs']}/{match['candidate_keys']} matched-task pairs measured. Median observed "
+                   f"factory minus direct time {_show(match['median_factory_minus_direct_minutes'])} minutes."
+                   f"{' Small sample.' if match['pairs'] < SMALL_SAMPLE else ''} Observed comparisons are descriptive.</p>")
+    lines += _detail("Task cohorts and matched work", cohorts)
     return lines
 
 
 def _page(manifest):
     period, coverage = manifest["period"], manifest["source_coverage"]
-    lines = page_header("Weekly factory evidence") + [
-        f"<p>Week starting {period['start']} through {period['end_exclusive']} (exclusive). "
-        f"Observation cutoff {period['as_of']}.</p>",
-        "<p>Owner review pending. This bundle projects recorded data from the local scorecard. "
-        "The selection and source associations are unverified. Technical verdicts and owner decisions are separate.</p>",
+    start = date.fromisoformat(period["start"])
+    end = date.fromisoformat(period["end_exclusive"]) - timedelta(days=1)
+    lines = page_header("Weekly factory evidence", style=_DASHBOARD_STYLE) + [
+        f'<p class="report-period"><time datetime="{start}">{start:%d %b %Y}</time> to '
+        f'<time datetime="{end}">{end:%d %b %Y}</time></p>',
+        f'<p class="report-context"><span>Observation cutoff <time datetime="{period["as_of"]}">'
+        f'{period["as_of"]}</time></span><span>Owner review pending</span></p>',
     ]
-    if period["time_zone_configured"]:
-        lines.append(f"<p>Cohort boundaries in UTC · {period['start_utc']} to {period['end_utc']}."
-                     f"{' Partial week at the observation cutoff.' if period['partial'] else ''}</p>")
+    metrics = manifest["metrics"]
+    if metrics is not None:
+        observed = metrics["observed_active_jobs"]
+        lines += [
+            f'<p class="scope-note">Observed active jobs: <strong>{observed}</strong>.'
+            f'{" Small sample." if metrics["small_sample"] else ""}'
+            f'{" Partial week at the observation cutoff." if period["partial"] else ""}</p>',
+        ]
         if outside_active := coverage["recorded_deliveries_outside_active_cohort"]:
             deliveries = "delivery falls" if outside_active == 1 else "deliveries fall"
-            lines.append(f"<p>Active job coverage is incomplete. {outside_active} recorded {deliveries} outside "
-                         "the observed active cohort. Active-job measures describe the observed subset.</p>")
-        lines.extend(_overview(manifest))
+            lines.append(f'<p class="coverage-alert">Active job coverage is incomplete. {outside_active} recorded '
+                         f'{deliveries} outside the observed active cohort. Active-job measures describe the '
+                         "observed subset.</p>")
+        lines.extend(_headlines(metrics))
+        lines.extend(_charts(metrics))
     else:
-        lines.append("<p>The weekly cohort is unknown until a reporting time zone is supplied.</p>")
-    lines += [
-        "<h2>Source coverage</h2>",
+        lines.append('<p class="coverage-alert">The weekly cohort is unknown until a reporting time zone is supplied.</p>')
+
+    lines.append('<section class="details-section" id="report-details"><h2>Report details</h2>')
+    if metrics is not None:
+        lines.extend(_metric_details(manifest))
+    coverage_details = ["<p>This bundle projects recorded data from the local scorecard. The selection and source "
+                        "associations are unverified. Technical verdicts and owner decisions are separate.</p>"]
+    if period["time_zone_configured"]:
+        coverage_details.append(f"<p>UTC cohort boundaries are {period['start_utc']} through {period['end_utc']} "
+                                "(exclusive).</p>")
+    coverage_details.append(
         f"<p>{coverage['unwindowed_jobs']} jobs in the unwindowed inventory with "
         f"{coverage['unwindowed_real_observations']} real observations. "
         f"{coverage['controlled_jobs_excluded']} controlled jobs excluded. "
         f"{coverage['unreadable_jobs_omitted']} unreadable jobs and {coverage['invalid_job_directories']} "
         f"invalid job directories omitted. {coverage['jobs_without_start_time']} jobs lack a start time. "
         f"{coverage['jobs_with_incomplete_observations']} jobs have incomplete observation files. "
-        f"{coverage['jobs_with_legacy_values']} jobs have unwindowed legacy values.</p>",
-        "<h2>Selected local evidence</h2>",
+        f"{coverage['jobs_with_legacy_values']} jobs have unwindowed legacy values.</p>")
+    lines += _detail("Source coverage and reporting period", coverage_details)
+    evidence_details = [
         "<p>Only explicitly selected receipts appear here. Unselected job evidence and direct source links remain "
         "in the private scorecard. Local links open verdicts projected from current local artifacts. Their presence "
         "during the reporting week or by the reporting cutoff is unverified.</p>",
     ]
     rows = manifest["selected_evidence"]
     if rows:
-        lines.append("<ul>")
+        evidence_details.append("<ul>")
         for row in rows:
             label = f"Job {row['job']} · {row['requirement']}"
             receipt = f' · <a href="{row["file"]}">Projected receipt</a>' if "file" in row else ""
-            lines.append(f"<li>{label} · {row['reported_verdict']} · {row['artifact_status']} · "
-                         f"current local artifact, week association unverified{receipt}</li>")
-        lines.append("</ul>")
+            evidence_details.append(f"<li>{label} · {row['reported_verdict']} · {row['artifact_status']} · "
+                                    f"current local artifact, week association unverified{receipt}</li>")
+        evidence_details.append("</ul>")
     else:
-        lines.append("<p>No receipts selected.</p>")
-    lines += [f"<h2>Historical baseline</h2><p>{html.escape(BASELINE)}</p>",
-              '<p><a href="manifest.json">Manifest and receipt digests</a></p></main></body></html>']
+        evidence_details.append("<p>No receipts selected.</p>")
+    lines += _detail("Selected local evidence", evidence_details)
+    lines += _detail("Historical baseline", [f"<p>{html.escape(BASELINE)}</p>"])
+    lines += ['</section><footer><a href="manifest.json">Manifest and receipt digests</a></footer></main></body></html>']
     return "\n".join(lines).encode("utf-8")
 
 

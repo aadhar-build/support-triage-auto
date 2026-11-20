@@ -369,14 +369,14 @@ th { background: #eef2f3; }
 """
 
 
-def page_header(title):
-    style_digest = base64.b64encode(hashlib.sha256(_STYLE.encode()).digest()).decode("ascii")
+def page_header(title, *, style=_STYLE):
+    style_digest = base64.b64encode(hashlib.sha256(style.encode()).digest()).decode("ascii")
     policy = f"default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'sha256-{style_digest}'"
     title = html.escape(title)
     return ["<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             f'<meta http-equiv="Content-Security-Policy" content="{policy}">',
-            f"<style>{_STYLE}</style>",
+            f"<style>{style}</style>",
             f"<title>{title}</title></head><body><main><h1>{title}</h1>"]
 
 

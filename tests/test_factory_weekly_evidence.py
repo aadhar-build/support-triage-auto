@@ -12,7 +12,7 @@ from tests.test_factory_observation_integration import FactoryCLI, JOB_ID, ROOT
 
 sys.path.insert(0, str(ROOT / "factory" / "lib"))
 import evidence_bundle
-from weekly_evidence import export_week
+from weekly_evidence import _page, export_week
 
 
 class WeeklyEvidenceTests(FactoryCLI, unittest.TestCase):
@@ -32,9 +32,9 @@ class WeeklyEvidenceTests(FactoryCLI, unittest.TestCase):
         manifest = json.loads((self.output / "manifest.json").read_bytes())
         return page, manifest
 
-    def observe(self, kind, data, *, origin="real", actor="owner"):
-        self.cli("job", "observe", JOB_ID, "-", input=json.dumps({
-            "schema_version": 1, "event_id": str(uuid4()), "job_id": JOB_ID, "kind": kind,
+    def observe(self, kind, data, *, origin="real", actor="owner", job=JOB_ID):
+        self.cli("job", "observe", job, "-", input=json.dumps({
+            "schema_version": 1, "event_id": str(uuid4()), "job_id": job, "kind": kind,
             "origin": origin, "occurred_at": "2026-11-19T08:00:00Z",
             "source": {"kind": actor, "record_id": "SECRET-source"}, "data": data,
         }))
@@ -50,9 +50,87 @@ class WeeklyEvidenceTests(FactoryCLI, unittest.TestCase):
         self.assertEqual(data["metrics"]["delivery"]["first_gate"],
                          {"numerator": 0, "eligible": 0, "covered": 0, "unknown": 0, "percent": None})
         self.assertIn("Rate unavailable", page)
+        self.assertIn('id="weekly-headlines"', page)
+        self.assertIn("No submissions with a recorded date in this week", page)
+        self.assertNotIn("<meter", page)
+        self.assertIn("<details", page)
         self.assertIn("1 day", page)
         self.assertIn("unit and scope", page)
         self.assertIn("Owner review pending", page)
+
+    def test_dashboard_charts_observed_counts_without_a_partial_acceptance_rate(self):
+        self.write_job()
+        pending = self.job_dir.with_name("002-pending")
+        pending.mkdir()
+        pending_job = json.loads(self.state.read_bytes())
+        pending_job.update(id=pending.name, issue=2)
+        (pending / "job.json").write_text(json.dumps(pending_job))
+        context = {"submitted_at": "2026-11-19T07:30:00Z", "workflow_mode": "direct"}
+        self.observe("task_context", context)
+        self.observe("task_context", context, job=pending.name)
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False})
+        self.observe("owner_effort", {"minutes": 0, "activity": "review", "rework": False})
+
+        page, data = self.export()
+        self.assertEqual(data["metrics"]["acceptance"]["rate"],
+                         {"numerator": 1, "eligible": 2, "covered": 1, "unknown": 1, "percent": None})
+        self.assertIn('id="report-details"', page)
+        overview, details = page.split('id="report-details"', 1)
+        self.assertIn("1 recorded as accepted among 2 eligible submissions", overview)
+        self.assertIn("1 observed, 1 unknown", overview)
+        self.assertIn("0 min", overview)
+        self.assertIn("0/2 jobs fully covered", overview)
+        self.assertIn("Submission outcomes", overview)
+        self.assertRegex(overview, r'<meter[^>]*max="2"[^>]*value="1"')
+        self.assertIn("Evidence coverage", overview)
+        self.assertNotIn("50%", overview)
+        self.assertNotIn("<script", page)
+        self.assertNotIn(' style="', page)
+        self.assertIn("Historical baseline", details)
+
+    def test_dashboard_labels_missing_owner_outcome_as_unknown(self):
+        self.write_job()
+        self.observe("task_context", {"submitted_at": "2026-11-19T07:30:00Z", "workflow_mode": "direct"})
+        page, data = self.export()
+        self.assertEqual(data["metrics"]["acceptance"]["rate"],
+                         {"numerator": 0, "eligible": 1, "covered": 0, "unknown": 1, "percent": None})
+        overview = page.split('id="report-details"', 1)[0]
+        self.assertIn("0 recorded as accepted among 1 eligible submission", overview)
+        self.assertIn("0 observed, 1 unknown", overview)
+        self.assertNotIn(">0%</span>", overview)
+
+    def test_full_requirement_bar_does_not_hide_jobs_without_an_inventory(self):
+        self.write_job()
+        _, data = self.export()
+        data["metrics"]["guardrails"].update(covered_requirements=2, eligible_requirements=2,
+                                             jobs_without_requirement_inventory=1)
+        overview = _page(data).decode().split('id="report-details"', 1)[0]
+        self.assertIn("Verified inventoried requirements", overview)
+        self.assertIn("2 of 2", overview)
+        self.assertIn("1 active job has no requirement inventory", overview)
+
+    def test_seven_day_defect_window_excludes_deliveries_still_in_follow_up(self):
+        self.write_job(stage="merged")
+        options = ("--weekly", "2026-11-19", "--timezone", "UTC", "--as-of", "2026-11-25T10:00:00Z",
+                   "--defect-window-days", "7")
+
+        page, data = self.export(options=options)
+        self.assertEqual(data["metrics"]["escaped_defects"]["immature"], 1)
+        self.assertEqual(data["metrics"]["escaped_defects"]["rate"]["eligible"], 0)
+        overview = page.split('id="report-details"', 1)[0]
+        self.assertIn("7-day follow-up", overview)
+        self.assertIn("1 still in follow-up", overview)
+        self.assertIn("0 confirmed affected among 0 mature deliveries", overview)
+
+        self.output.rename(self.output.with_name("immature"))
+        boundary = (*options[:5], "2026-11-26T07:15:00Z", *options[6:])
+        page, data = self.export(options=boundary)
+        self.assertEqual(data["metrics"]["escaped_defects"]["rate"],
+                         {"numerator": 0, "eligible": 1, "covered": 0, "unknown": 1, "percent": None})
+        overview = page.split('id="report-details"', 1)[0]
+        self.assertIn("0 confirmed affected among 1 mature delivery", overview)
+        self.assertIn("0 observed, 1 unknown. 0 still in follow-up", overview)
+        self.assertNotIn(">0%</span>", overview)
 
     def test_unknown_settings_leave_affected_metrics_unknown(self):
         options = ("--weekly", "2026-11-19", "--as-of", "2099-11-27T10:00:00Z")
@@ -61,9 +139,12 @@ class WeeklyEvidenceTests(FactoryCLI, unittest.TestCase):
         self.assertIsNone(data["defect_window_days"])
         self.assertFalse(data["period"]["time_zone_configured"])
         self.assertIn("weekly cohort is unknown", page)
+        self.assertNotIn('id="weekly-headlines"', page)
+        self.assertNotIn("<meter", page)
         self.output.rename(self.output.with_name("unwindowed"))
-        _, data = self.export(options=(*options, "--timezone", "UTC"))
+        page, data = self.export(options=(*options, "--timezone", "UTC"))
         self.assertIsNone(data["metrics"]["escaped_defects"]["rate"])
+        self.assertIn("Follow-up window unset", page)
 
     def test_reports_typed_zero_coverage_and_cost_without_source_strings(self):
         self.write_job(title="SECRET-title", owner_minutes=18, cost_usd=0)
