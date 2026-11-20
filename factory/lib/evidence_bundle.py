@@ -76,9 +76,13 @@ def _artifact_rows(artifacts, job_round):
         if path in seen:
             raise BundleError("Select each native artifact once.")
         seen.add(path)
-        yield ({"kind": NATIVE_KINDS[path.rsplit("/", 1)[-1]], "reference": path,
-                "reported_verdict": "unknown", "claim_verification": "unverified",
-                "candidate_binding": "unverified"}, digest)
+        yield _native_row(path), digest
+
+
+def _native_row(path):
+    return {"kind": NATIVE_KINDS[path.rsplit("/", 1)[-1]], "reference": path,
+            "reported_verdict": "unknown", "claim_verification": "unverified",
+            "candidate_binding": "unverified"}
 
 
 @contextmanager
@@ -334,8 +338,14 @@ def _source(job_fd, row, expected, bindings):
 def _write_file(directory, name, content):
     fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
     with os.fdopen(fd, "wb") as stream:
-        stream.write(content)
-        return os.fstat(fd)
+        original = os.fstat(fd)
+        try:
+            stream.write(content)
+            stream.flush()
+        except BaseException:
+            _unlink_owned(directory, name, original)
+            raise
+        return original
 
 
 _STYLE = """
@@ -359,15 +369,20 @@ th { background: #eef2f3; }
 """
 
 
-def _page(manifest):
-    esc = html.escape
+def page_header(title):
     style_digest = base64.b64encode(hashlib.sha256(_STYLE.encode()).digest()).decode("ascii")
     policy = f"default-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; style-src 'sha256-{style_digest}'"
-    lines = ["<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
-             '<meta name="viewport" content="width=device-width, initial-scale=1">',
-             f'<meta http-equiv="Content-Security-Policy" content="{policy}">',
-             f"<style>{_STYLE}</style>",
-             "<title>Job evidence</title></head><body><main><h1>Job evidence</h1>",
+    title = html.escape(title)
+    return ["<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">",
+            '<meta name="viewport" content="width=device-width, initial-scale=1">',
+            f'<meta http-equiv="Content-Security-Policy" content="{policy}">',
+            f"<style>{_STYLE}</style>",
+            f"<title>{title}</title></head><body><main><h1>{title}</h1>"]
+
+
+def _page(manifest):
+    esc = html.escape
+    lines = page_header("Job evidence") + [
              f"<p>Issue {esc(str(manifest['issue']))} · Origin {esc(manifest['origin'])}</p>",
              "<p>This export covers check, criterion and demo observations for one job and selected factory reports. "
              "The bundle includes links for explicitly selected receipts and verdict projections.</p>",
@@ -404,6 +419,93 @@ def _unlink_owned(directory, name, original):
         return
     if os.path.samestat(entry, original):
         os.unlink(name, dir_fd=directory)
+
+
+@contextmanager
+def _destination(root, output, forbidden=()):
+    job_store = F.jobs_dir(root)
+    if (not output.name or ".." in output.parts or any(part.casefold() == ".git" for part in output.parts)
+            or output.is_relative_to(job_store)):
+        raise BundleError("Choose a new directory outside factory job state and Git metadata.")
+    protected = list(forbidden)
+    for path in (job_store, root / ".git"):
+        if path.is_dir():
+            protected.append(path.stat())
+    with _directory(output.parent, protected) as parent:
+        parent_stat = os.fstat(parent)
+        if output.name.casefold() == job_store.name and os.path.samestat(parent_stat, job_store.parent.stat()):
+            raise BundleError("Choose a new directory outside factory job state and Git metadata.")
+        if parent_stat.st_uid != os.getuid() or parent_stat.st_mode & 0o022:
+            raise BundleError("Choose an owner-controlled destination parent.")
+        yield parent
+
+
+def _verify_files(directory, output, files, owned):
+    if set(os.listdir(directory)) != set(files):
+        raise BundleError("Destination contains unexpected files.")
+    for name, content in files.items():
+        entry = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        if not os.path.samestat(entry, owned[name]) or _read_file(directory, name, len(content)) != content:
+            raise BundleError("Bundle changed during export.")
+    with _directory(output) as current:
+        if not os.path.samestat(os.fstat(current), os.fstat(directory)):
+            raise BundleError("Destination changed during export.")
+
+
+def _remove_partial_bundle(directory, output, parent, owned):
+    for name, original in owned.items():
+        _unlink_owned(directory, name, original)
+    try:
+        entry = os.stat(output.name, dir_fd=parent, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if os.path.samestat(entry, os.fstat(directory)) and not os.listdir(directory):
+        os.rmdir(output.name, dir_fd=parent)
+
+
+def write_projected_bundle(root, output, files, verify_sources):
+    """Write only materialized projections to an unused owner-controlled directory."""
+    pages = {"index.html", "manifest.json"}
+    if not pages <= files.keys() or any(not re.fullmatch(r"receipt-[0-9]{3}\.json", name)
+                                      for name in files.keys() - pages):
+        raise BundleError("The weekly bundle has unsupported file names.")
+    root, output = Path(root).absolute(), Path(output).absolute()
+    with _destination(root, output) as parent:
+        os.mkdir(output.name, mode=0o700, dir_fd=parent)
+        with _open_directory(output.name, parent) as directory:
+            owned = {}
+            try:
+                for name, content in files.items():
+                    owned[name] = _write_file(directory, name, content)
+                _verify_files(directory, output, files, owned)
+                verify_sources()
+            except BaseException:
+                _remove_partial_bundle(directory, output, parent, owned)
+                raise
+
+
+def project_native_receipt(root, job_id, selection, cutoff):
+    """Read a selected native header through the single-job export policy."""
+    path, number, digest = selection.groups()
+    job_path = F.jobs_dir(root) / job_id
+    row = _native_row(path)
+    try:
+        with _directory(job_path) as directory:
+            snapshot = _snapshot(root, directory, job_id, cutoff, False)
+            _, job, _, bindings, _ = snapshot
+            if job.get("origin") == "controlled":
+                return row, "withheld", None, snapshot
+            if number is not None and int(number) != job.get("round"):
+                return row, "stale", None, snapshot
+            status, data = _source(directory, row, digest, bindings)
+            with _directory(job_path) as current:
+                if (not os.path.samestat(os.fstat(current), os.fstat(directory))
+                        or snapshot != _snapshot(root, current, job_id, cutoff, False)
+                        or (status, data) != _source(current, row.copy(), digest, bindings)):
+                    return _native_row(path), "withheld", None, None
+            return row, status, data, snapshot
+    except (OSError, F.FactoryError, ValueError, RecursionError):
+        return _native_row(path), "withheld", None, None
 
 
 def _create_bundle(root, job_path, job_fd, selection, artifacts, output, parent, overview):
@@ -463,15 +565,7 @@ def _create_bundle(root, job_path, job_fd, selection, artifacts, output, parent,
             files["index.html"] = _page(manifest)
             for name in ("manifest.json", "index.html"):
                 owned[name] = _write_file(directory, name, files[name])
-            if set(os.listdir(directory)) != set(files):
-                raise BundleError("Destination contains unexpected files.")
-            for name, content in files.items():
-                entry = os.stat(name, dir_fd=directory, follow_symlinks=False)
-                if not os.path.samestat(entry, owned[name]) or _read_file(directory, name, len(content)) != content:
-                    raise BundleError("Bundle changed before publication.")
-            with _directory(output) as current:
-                if not os.path.samestat(os.fstat(current), os.fstat(directory)):
-                    raise BundleError("Destination changed during export.")
+            _verify_files(directory, output, files, owned)
             with _directory(job_path) as current:
                 if (not os.path.samestat(os.fstat(current), os.fstat(job_fd))
                         or snapshot != _snapshot(root, current, job_path.name, cutoff, overview)):
@@ -482,11 +576,7 @@ def _create_bundle(root, job_path, job_fd, selection, artifacts, output, parent,
                         if content != files[name]:
                             raise BundleError("Selected evidence changed before publication.")
         except BaseException:
-            for name, original in owned.items():
-                _unlink_owned(directory, name, original)
-            entry = os.stat(output.name, dir_fd=parent, follow_symlinks=False)
-            if os.path.samestat(entry, os.fstat(directory)) and not os.listdir(directory):
-                os.rmdir(output.name, dir_fd=parent)
+            _remove_partial_bundle(directory, output, parent, owned)
             raise
 
 
@@ -503,21 +593,11 @@ def export_job(root, job_id, output, selected, gate=None, *, artifacts=(), overv
     if (not F.valid_reporting_job_id(job_id) or selection_count > MAX_SELECTED or not (overview or selection_count)
             or not all(SLOT.fullmatch(path) for path in selected)):
         raise BundleError("Select a job and one to 32 allowed artifact or receipt paths.")
-    if (not output.name or ".." in output.parts or any(part.casefold() == ".git" for part in output.parts)
-            or output.is_relative_to(root / "factory" / "jobs")):
-        raise BundleError("Choose a new directory outside factory job state and Git metadata.")
     job_path = root / "factory" / "jobs" / job_id
     try:
         with ExitStack() as stack:
             job_fd = stack.enter_context(_directory(job_path))
-            forbidden = [os.stat("..", dir_fd=job_fd)]
-            git_dir = root / ".git"
-            if git_dir.is_dir():
-                forbidden.append(git_dir.stat())
-            parent = stack.enter_context(_directory(output.parent, forbidden))
-            parent_stat = os.fstat(parent)
-            if parent_stat.st_uid != os.getuid() or parent_stat.st_mode & 0o022:
-                raise BundleError("Choose an owner-controlled destination parent.")
+            parent = stack.enter_context(_destination(root, output, [os.stat("..", dir_fd=job_fd)]))
             _create_bundle(root, job_path, job_fd, set(selected), selections, output, parent, overview)
     except (OSError, F.FactoryError, ValueError) as error:
         if isinstance(error, BundleError):
