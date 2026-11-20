@@ -71,9 +71,25 @@ factory/bin/scorecard --weekly "$WEEK_START" --timezone "$REPORT_TIMEZONE" --def
 
 Append `--json` for structured output. Use `--as-of` with the same UTC cutoff to reproduce the observation view. If the zone or follow-up window is pending, the CLI can omit the corresponding flag and report the affected measure as unknown. Defined empty weeks can have zero deliveries and unavailable rates. Review delivered work, owner effort and rework, guardrail evidence gaps and recurring blockers with their coverage and local evidence references. Jobs with only an issue or pull request number appear as local references. A weekly report can link a pull request when the optional GitHub merge check verifies the job’s recorded delivery and local candidate. The weekly command runs on demand. Scheduling and publishing require a separate owner request.
 
+## Open weekly evidence offline
+
+Use the same week, time zone, UTC cutoff and escaped-defect window for the private scorecard and the sanitized bundle. The bundle requires an explicit cutoff. A missing time zone leaves the cohort unknown. A missing defect window leaves the escaped-defect rate unknown.
+
+```bash
+factory/bin/evidence-bundle --weekly "$WEEK_START" --timezone "$REPORT_TIMEZONE" \
+  --as-of "$OBSERVATION_CUTOFF" --defect-window-days "$DEFECT_WINDOW_DAYS" \
+  --output "$NEW_DIRECTORY"
+```
+
+Choose an unused physical path under an existing owner-controlled parent. Open `index.html` in Chrome after the command succeeds. The bundle includes the UTC boundaries, denominators and coverage, known owner effort and rework, cost categories, evidence gaps and the historical baseline. It uses local recorded deliveries. GitHub merge verification is unavailable offline. Controlled jobs and controlled observations are excluded from weekly measures. Unreadable and undated jobs remain visible as counts. Job aliases follow the private scorecard JSON's `active_jobs` order starting from 1. A recorded delivery missing from that list receives the next alias and flags incomplete active-job coverage. Task label groups and cost unit groups also use local numbers. Use the private scorecard with the same settings to inspect individual jobs, task labels, cost units, source records and evidence paths.
+
+To follow particular evidence offline, add `--weekly-evidence "$JOB_ID:round-2/checks.md@$EXPECTED_SHA256"` to the command. Repeat for up to 32 supported native artifacts from active jobs in that week. A projected link opens a finite JSON verdict and its exported SHA-256 appears in the manifest. Missing, stale and withheld artifacts get a status. The bundle keeps the job ID, original path, original digest and report body in the source checkout. Selected receipts project the current local artifacts. Their presence during the reporting week or by the cutoff is unverified. A recorded delivery or evidence gap can link to a relevant selected receipt, and selection can cover only part of the week's evidence. Review job and source associations in the private scorecard.
+
+The weekly exporter checks the cohort and selected source state again before it returns success. Use it for the five-minute owner review of a named week and record the observed review outcome separately. A recipient needs an authorized copy of the entire directory. Scheduling, hosting and publishing require a separate owner request.
+
 ## Open selected job evidence offline
 
-Run `factory/bin/evidence-bundle` in the checkout containing the job. Choose a new directory under an existing local parent that you own and that other users cannot write. Use its physical path, with no symlinked components. The exporter works for one job at a time.
+Run `factory/bin/evidence-bundle` with the job ID in the checkout containing the job. Choose a new directory under an existing local parent that you own and that other users cannot write. Use its physical path, with no symlinked components.
 
 To inspect a current-round gate, use its job-relative path and expected SHA-256. For example, the following command exports a round-two gate after you set the job ID, expected source digest, and destination.
 
@@ -97,7 +113,7 @@ You can also add `--include evidence/check-1.json` for a path and digest referen
 {"kind":"check","schema_version":1,"verdict":"pass"}
 ```
 
-Valid kinds are `check`, `criterion` and `demo`. Valid verdicts are `pass`, `fail` and `pending`. Keys must use the displayed order and spacing. The values must match the referencing observation. The exporter checks the bindings declared by the observation and its evidence references. It accepts a finite set of complete byte strings. Other receipt contents, URLs and free-form identifiers stay out of the bundle. For the full decision card, use `factory/bin/job card "$JOB_ID"`. For a named week, use the weekly scorecard and export selected evidence from the relevant jobs individually.
+Valid kinds are `check`, `criterion` and `demo`. Valid verdicts are `pass`, `fail` and `pending`. Keys must use the displayed order and spacing. The values must match the referencing observation. The exporter checks the bindings declared by the observation and its evidence references. It accepts a finite set of complete byte strings. Other receipt contents, URLs and free-form identifiers stay out of the bundle. For the full decision card, use `factory/bin/job card "$JOB_ID"`.
 
 Open `index.html` in Chrome from the selected directory. The index links to the exported local receipts and to `manifest.json`. A row can show a copied receipt, a projected verdict, a missing source, a stale binding or digest, or withheld evidence. Claim verification and owner acceptance remain unverified. A match confirms the selected bytes at export time. A recipient on another device needs an authorized copy of the entire directory, including its JSON files.
 

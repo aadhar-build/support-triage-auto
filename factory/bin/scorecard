@@ -6,49 +6,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 import factory as F  # noqa: E402
-
-
-def weekly_start(value: str) -> date:
-    try:
-        start = date.fromisoformat(value)
-        if start.isoformat() != value or start > date.max - timedelta(days=7):
-            raise ValueError
-        return start
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("expected a seven-day interval starting YYYY-MM-DD") from exc
-
-
-def utc_cutoff(value: str) -> datetime:
-    try:
-        cutoff = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        if cutoff.utcoffset() == timedelta(0):
-            return cutoff
-    except ValueError:
-        pass
-    raise argparse.ArgumentTypeError("expected a UTC timestamp, e.g. 2026-11-19T09:00:00Z")
-
-
-def read_jobs(root: Path, read):
-    records, unreadable, invalid_ids = [], {}, 0
-    for path in sorted(F.jobs_dir(root).glob("*/job.json")):
-        job_id = path.parent.name
-        if not F.valid_reporting_job_id(job_id):
-            invalid_ids += 1
-            continue
-        try:
-            records.append(read(F.reporting_job_dir(root, job_id)))
-        except F.FactoryError as exc:
-            unreadable[job_id] = [str(exc)]
-        except (OSError, ValueError, RecursionError):
-            unreadable[job_id] = [f"invalid or unreadable job state for {job_id}"]
-    return records, unreadable, invalid_ids
+from scorecard_source import collect_weekly, read_jobs, utc_cutoff, weekly_start
 
 
 def show_unreadable(unreadable, invalid_ids, stream):
@@ -61,36 +26,22 @@ def show_unreadable(unreadable, invalid_ids, stream):
 
 
 def weekly(root: Path, cfg: dict, args: argparse.Namespace) -> None:
-    from evidence_adapter import reporting_record
-    from scorecard_report import render_weekly_report, weekly_report
+    from scorecard_report import render_weekly_report
 
     as_of = args.as_of or datetime.now(timezone.utc)
-    records, unreadable, invalid_ids = read_jobs(
-        root, lambda folder: reporting_record(root, cfg, folder, as_of=as_of, verify_github_links=args.verify_github_links)
+    report, unreadable, _ = collect_weekly(
+        root, cfg, args.weekly, as_of, args.timezone, args.defect_window_days,
+        verify_github_links=args.verify_github_links, verify_github_merges=args.verify_github_merges,
     )
-    verifications = {}
-    if args.verify_github_merges:
-        from merge_evidence import verify_merge_delivery
-
-        for record in records:
-            result = verify_merge_delivery(root, cfg, record, as_of)
-            if result is not None:
-                verifications[record["job"]["id"]] = result
-    report = weekly_report(records, args.weekly, as_of, args.timezone, args.defect_window_days)
-    report["diagnostics"].update(unreadable)
-    report["invalid_job_directories"] = invalid_ids
-    report["incident_and_interruption_source_verification"] = "unavailable"
-    if args.verify_github_merges:
-        report["merge_verification"] = verifications
     if args.json:
         print(json.dumps(report, indent=2))
     else:
         print(render_weekly_report(report), end="")
         print("\nIncident and interruption source verification is unavailable. Reported outcomes remain visible.")
-        show_unreadable(unreadable, invalid_ids, sys.stdout)
-        if verifications:
+        show_unreadable(unreadable, report["invalid_job_directories"], sys.stdout)
+        if verifications := report.get("merge_verification"):
             print("\nGitHub merge delivery verification")
-            for job_id, result in report["merge_verification"].items():
+            for job_id, result in verifications.items():
                 authority = f" ([delivery]({result['url']}))" if "url" in result else ""
                 print(f"- {job_id} — {result['status'].replace('_', ' ')}{authority}")
 
