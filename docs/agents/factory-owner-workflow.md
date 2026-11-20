@@ -70,3 +70,35 @@ factory/bin/scorecard --weekly "$WEEK_START" --timezone "$REPORT_TIMEZONE" --def
 ```
 
 Append `--json` for structured output. Use `--as-of` with the same UTC cutoff to reproduce the observation view. If the zone or follow-up window is pending, the CLI can omit the corresponding flag and report the affected measure as unknown. Defined empty weeks can have zero deliveries and unavailable rates. Review delivered work, owner effort and rework, guardrail evidence gaps and recurring blockers with their coverage and local evidence references. Jobs with only an issue or pull request number appear as local references. A weekly report can link a pull request when the optional GitHub merge check verifies the job’s recorded delivery and local candidate. The weekly command runs on demand. Scheduling and publishing require a separate owner request.
+
+## Open selected job evidence offline
+
+Run `factory/bin/evidence-bundle` in the checkout containing the job. Choose a new directory under an existing local parent that you own and that other users cannot write. Use its physical path, with no symlinked components. The exporter works for one job at a time.
+
+To inspect a current-round gate, use its job-relative path and expected SHA-256. For example, the following command exports a round-two gate after you set the job ID, expected source digest, and destination.
+
+```bash
+factory/bin/evidence-bundle "$JOB_ID" --gate "round-2/checks.md@$EXPECTED_SHA256" --output "$NEW_DIRECTORY"
+```
+
+Use the digest from the receipt you intend to inspect. You can use `shasum -a 256` on the source file to pin its present bytes for a local inspection. An independently obtained digest provides a separate point of comparison. For a bound gate, the exporter compares the recorded candidate, base and spec digest with the local checkout. A mismatch marks the evidence stale. Unavailable bindings withhold the projection. Legacy gate headers provide historical verdicts. The JSON summary contains the recorded PASS or FAIL, and the manifest records both the source and exported SHA-256. The original Markdown can contain command output and private paths.
+
+Use `--overview` to show the stage, round, local candidate commit, applicable checks and reviews, numbered criteria from the local spec, and demo status. Additional routed reviewers appear under numbered labels. The overview reports when acceptance criteria are unavailable and works without any selected artifact, including on a blocked job.
+
+```bash
+factory/bin/evidence-bundle "$JOB_ID" --overview --output "$NEW_DIRECTORY"
+```
+
+Add `--artifact PATH@SHA256` for each native report you want to open. Supported paths are `round-N/checks.md`, `round-N/review-{code,security,eval}.md`, `decision.md`, and `final-checks.md`. Round paths must match the current job round. Reviews show PASS or CHANGES. Conflicting verdict declarations withhold the review projection. Technical decisions show APPROVE or ESCALATE. Each link opens a JSON verdict projection, with the original report body withheld.
+
+You can also add `--include evidence/check-1.json` for a path and digest referenced by a current check, criterion or demo observation. You can use this option alone or repeat it with other selected receipts. The eligible paths are `evidence/check-1.json` through `evidence/check-999.json`. This optional format requires a producer to supply the small receipt and observation. For a check reporting a pass, the exact UTF-8 receipt bytes are the following line followed by one newline.
+
+```json
+{"kind":"check","schema_version":1,"verdict":"pass"}
+```
+
+Valid kinds are `check`, `criterion` and `demo`. Valid verdicts are `pass`, `fail` and `pending`. Keys must use the displayed order and spacing. The values must match the referencing observation. The exporter checks the bindings declared by the observation and its evidence references. It accepts a finite set of complete byte strings. Other receipt contents, URLs and free-form identifiers stay out of the bundle. For the full decision card, use `factory/bin/job card "$JOB_ID"`. For a named week, use the weekly scorecard and export selected evidence from the relevant jobs individually.
+
+Open `index.html` in Chrome from the selected directory. The index links to the exported local receipts and to `manifest.json`. A row can show a copied receipt, a projected verdict, a missing source, a stale binding or digest, or withheld evidence. Claim verification and owner acceptance remain unverified. A match confirms the selected bytes at export time. A recipient on another device needs an authorized copy of the entire directory, including its JSON files.
+
+The command checks up to 32 selected artifacts, 256 evidence rows and 64 ledger directory entries. It refuses an incomplete or busy ledger. Copied receipts are capped at 1 KiB and native report inputs at 256 KiB. Run it in an owner-controlled directory while other processes leave the destination alone. The directory is visible while the command writes it. Wait for success before opening it. The command checks the published names and bytes and rechecks the job state and sources for all exported receipts and verdicts. Forced termination or a write failure can leave a partial private directory. Use a fresh destination for a retry. The bundle makes no network calls and starts no service.
