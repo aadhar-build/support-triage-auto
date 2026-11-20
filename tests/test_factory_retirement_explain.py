@@ -155,6 +155,32 @@ class RetirementExplanation(FactoryCLI, unittest.TestCase):
         self.assertEqual(result["assessment"], "eligibility not evaluated")
         self.assert_private(result)
 
+    def test_gate_replaced_during_checkout_scan_withholds_evidence_counts(self):
+        import retirement_checkout_advisory as checkout
+        gate = self.job_dir / "final-checks.md"
+        native = (self.job_dir / "round-1/checks.md").read_bytes()
+        original_job = self.state.read_bytes()
+        scan = checkout._scan_checkout
+        for initial in (gate.read_bytes(), native):
+            with self.subTest(initially_native=initial == native):
+                gate.write_bytes(initial)
+
+                def publish_during_scan(*args, **kwargs):
+                    staged = gate.with_name("private-pending-gate.md")
+                    staged.write_bytes(native)
+                    staged.replace(gate)
+                    return scan(*args, **kwargs)
+
+                with mock.patch.object(checkout, "_scan_checkout", side_effect=publish_during_scan) as observed:
+                    result = retirement.run(self.root, JOB_ID, explain=True)
+                observed.assert_called_once()
+                self.assertEqual(self.state.read_bytes(), original_job)
+                self.assertEqual(result["status"], "inconclusive")
+                self.assertEqual(result["coverage"], "unresolved")
+                self.assertNotIn("evidence", result)
+                self.assertNotIn("native_headers", json.dumps(result))
+                self.assert_private(result)
+
     def test_rejects_explanation_with_mutation_inventory_or_approval_flags(self):
         before = self.snapshot()
         for option, value in (("apply", True), ("recover", True), ("inventory_generated", True),

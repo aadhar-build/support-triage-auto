@@ -155,7 +155,7 @@ To see which local conditions warrant inspection, request a bounded explanation 
 factory/bin/retire-worktree "$JOB_ID" --explain
 ```
 
-The explanation counts observed dependency directories, build output, bytecode cache directories, other unclassified entries, and mismatches between tracked entry types and the checkout. An unclassified directory counts once. Its contents stay outside the inspection scope. The command separately counts native gate-header indicators in the current and final gate slots. A matching header can require checkout-dependent verification. Only the maintenance verifier can establish which technical receipts require retention.
+The explanation counts observed dependency directories, build output, bytecode cache directories, other unclassified entries, and mismatches between tracked entry types and the checkout. An unclassified directory counts once. Its contents stay outside the inspection scope. The command reads the current and final gate-header slots before and after inspecting the checkout. A change between those reads produces an inconclusive result. A matching header can require checkout-dependent verification. Only the maintenance verifier can establish which technical receipts require retention.
 
 Read each count with its coverage. Truncation, unreadable paths, or changes can leave observations partial or unresolved. A zero count under incomplete coverage gives no assurance of absence. Even complete coverage applies only to the directory and header checks described here. The explanation uses no factory locks and makes no GitHub request. It reports aggregate counts, omits private filenames and receipt bodies, and has an eight-second command budget.
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "factory/lib"))
-from retirement_evidence_advisory import observe_evidence
+from retirement_evidence_advisory import evidence_snapshot, observe_evidence
 
 
 class EvidenceAdvisoryTests(unittest.TestCase):
@@ -117,3 +117,29 @@ class EvidenceAdvisoryTests(unittest.TestCase):
         with patch("retirement_evidence_advisory.os.read", side_effect=move_after_read):
             result = self.observe()
         self.assertEqual(result["slots"]["round_gate"], "unavailable")
+
+    def test_snapshot_detects_same_classification_replacements_and_keeps_identities_private(self):
+        def snapshot():
+            return evidence_snapshot(self.folder, self.job, self.candidate)
+        missing_summary, missing = snapshot()
+        self.assertEqual(missing_summary["slots"]["round_gate"], "missing")
+        self.checks.write_bytes(self.header() + b"one")
+        original_summary, original = snapshot()
+        self.assertNotEqual(original, missing)
+        self.assertEqual(original_summary, self.observe())
+        self.assertEqual((original_summary, original), snapshot())
+        replacement = self.round / "replace"
+        replacement.write_bytes(self.checks.read_bytes())
+        replacement.replace(self.checks)
+        swapped_summary, swapped = snapshot()
+        self.assertEqual(swapped_summary, original_summary)
+        self.assertNotEqual(swapped, original)
+        self.checks.write_bytes(self.header(verdict="FAIL") + b"two")
+        edited_summary, edited = snapshot()
+        self.assertEqual(edited_summary, original_summary)
+        self.assertNotEqual(edited, swapped)
+        self.assertNotIn(str(self.checks.stat().st_ino), json.dumps(edited_summary))
+        self.checks.unlink()
+        absent_summary, absent = snapshot()
+        self.assertEqual(absent_summary, missing_summary)
+        self.assertNotEqual(absent, edited)

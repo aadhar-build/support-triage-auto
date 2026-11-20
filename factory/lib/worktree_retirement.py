@@ -501,7 +501,7 @@ def _preview(root, job_id):
 def _explain(root, job_id):
     """Summarize one observed checkout. Counts concern only the stated scope."""
     from retirement_checkout_advisory import observe_checkout
-    from retirement_evidence_advisory import observe_evidence
+    from retirement_evidence_advisory import evidence_snapshot
 
     result = {"job_id": job_id, "assessment": "eligibility not evaluated", "coverage": "unresolved",
               "coverage_scope": "checkout directory shape and two expected gate-header slots",
@@ -515,9 +515,12 @@ def _explain(root, job_id):
             _, raw, *_ = before[0]
             job = F.validate_reporting_job(json.loads(raw, object_pairs_hook=_unique_fields, parse_constant=_reject_constant), job_id)
             candidate = before[1]["candidate_sha"]
-            evidence = observe_evidence(folder, job, candidate)
+            evidence, receipt_identity = evidence_snapshot(folder, job, candidate)
             _require(time.monotonic() < deadline, "advisory time budget exhausted")
             checkout = observe_checkout(root, job, candidate)
+            _require(time.monotonic() < deadline, "advisory time budget exhausted")
+            _require(evidence_snapshot(folder, job, candidate) == (evidence, receipt_identity),
+                     "native gate observations changed during checkout inspection")
         _require(time.monotonic() < deadline, "advisory time budget exhausted")
         after = _preview_snapshot(root, job_id)
         _require(before == after and time.monotonic() < deadline, "local state changed or advisory budget exhausted")
