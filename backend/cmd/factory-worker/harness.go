@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -135,7 +136,7 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 			args = append(args, "-c", "model_reasoning_effort="+strconv.Quote(chosen.Effort))
 		}
 	} else {
-		settings, tools, err := claudeSettings(s.checkout, r.stage)
+		settings, tools, err := claudeSettings(s, r.stage)
 		if err != nil {
 			return nil, err
 		}
@@ -208,25 +209,44 @@ func executeReview(ctx context.Context, bin, harness string, s snapshot, args []
 	return validateClaudeReadEvents(events, expected, supplemental)
 }
 
-func claudeSettings(checkout, stage string) (string, string, error) {
+// The controller creates this directory with os.MkdirTemp inside the checkout.
+// Only a literal name can be interpolated into a native permission pattern.
+var privateInputName = regexp.MustCompile(`^\.factory-job-[A-Za-z0-9]+$`)
+
+func claudeSettings(s snapshot, stage string) (string, string, error) {
 	tools := "Read,Grep,Glob,Bash"
-	bash := []string{"Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git status *)", "Bash(git rev-parse *)"}
-	denyWrite := []string{checkout}
+	allow := []string{"Bash(git diff *)", "Bash(git log *)", "Bash(git show *)", "Bash(git status *)", "Bash(git rev-parse *)"}
+	var deny []string
+	denyWrite := []string{s.checkout}
 	switch stage {
 	case "build":
+		jobName := filepath.Base(s.job)
+		if !filepath.IsAbs(s.checkout) || filepath.Dir(s.job) != s.checkout || !privateInputName.MatchString(jobName) {
+			return "", "", fmt.Errorf("Claude builder requires its private snapshot input directory")
+		}
 		tools += ",Edit,Write"
-		bash = []string{"Bash(*)"}
-		denyWrite = []string{filepath.Join(checkout, ".git")}
+		// Native Edit and Write both match Edit(path) rules. The shell's OS
+		// sandbox uses physical paths and does not govern those native tools.
+		allow = []string{"Bash(*)", "Edit(./**)"}
+		denyWrite = nil
+		for _, name := range []string{".git", ".claude", jobName} {
+			deny = append(deny, "Edit(./"+name+")", "Edit(./"+name+"/**)")
+			denyWrite = append(denyWrite, filepath.Join(s.checkout, name))
+		}
 	case "review", "approve":
 		tools = "Read"
-		bash = []string{}
+		allow = []string{}
+	}
+	permissions := map[string]any{
+		"allow": allow, "blockReadsOutsideWorkingDirectories": true, "blockWritesOutsideWorkingDirectories": true,
+	}
+	if len(deny) > 0 {
+		permissions["deny"] = deny
 	}
 	settings := map[string]any{
 		"disableAllHooks":           true,
 		"disableClaudeAiConnectors": true,
-		"permissions": map[string]any{
-			"allow": bash, "blockReadsOutsideWorkingDirectories": true, "blockWritesOutsideWorkingDirectories": true,
-		},
+		"permissions":               permissions,
 		"sandbox": map[string]any{
 			"enabled": true, "failIfUnavailable": true, "autoAllowBashIfSandboxed": false,
 			"allowUnsandboxedCommands": false,
