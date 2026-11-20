@@ -321,10 +321,11 @@ func run(root string, args []string, stdout io.Writer) error {
 		specDigest = contentDigest(spec)
 	}
 	prompt := s.prompt(state, cfg, r, brief)
-	content, err := execute(ctx, identity.binary, chosen, s, prompt, r)
+	output, err := executeWorker(ctx, identity.binary, chosen, s, prompt, r)
 	if err != nil {
 		return err
 	}
+	content := output.artifact
 	if err := validateArtifact(r, content); err != nil {
 		return err
 	}
@@ -359,7 +360,7 @@ func run(root string, args []string, stdout io.Writer) error {
 			failurePath := auditPath + ".failure"
 			hint := noCandidateDiagnostic(content)
 			writeErr := admitPublication(func() error {
-				if writeNoChangeFailure(failurePath, chosen.Harness, s.head, content) != nil {
+				if writeNoChangeFailure(failurePath, chosen.Harness, s.head, output) != nil {
 					return fmt.Errorf("%w (%s). %s. The worker could not write %s", err, chosen.Harness, hint, filepath.Base(failurePath))
 				}
 				return nil
@@ -454,16 +455,20 @@ func run(root string, args []string, stdout io.Writer) error {
 
 // The sidecar records the most recent no-change attempt for this round.
 // A later success publishes its own audit and leaves this attempt's record in place.
-func writeNoChangeFailure(path, harness, head string, report []byte) error {
-	// Persist only fixed values, the verified input SHA, and the report length.
+func writeNoChangeFailure(path, harness, head string, output *workerOutput) error {
 	record := struct {
-		Reason         string `json:"reason"`
-		Harness        string `json:"harness"`
-		InputSHA       string `json:"input_sha"`
-		ReportBytes    int    `json:"report_bytes"`
-		ReportedReason string `json:"reported_reason,omitempty"`
-		At             string `json:"at"`
-	}{"no_candidate_changes", harness, head, len(report), reportedNoChangeReason(report), time.Now().UTC().Format(time.RFC3339)}
+		Reason         string               `json:"reason"`
+		Harness        string               `json:"harness"`
+		InputSHA       string               `json:"input_sha"`
+		ReportBytes    int                  `json:"report_bytes"`
+		ReportedReason string               `json:"reported_reason,omitempty"`
+		NativeDenials  *nativeDenialSummary `json:"native_permission_denials,omitempty"`
+		At             string               `json:"at"`
+	}{
+		Reason: "no_candidate_changes", Harness: harness, InputSHA: head, ReportBytes: len(output.artifact),
+		ReportedReason: reportedNoChangeReason(output.artifact), NativeDenials: output.nativeDenials,
+		At: time.Now().UTC().Format(time.RFC3339),
+	}
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
