@@ -414,6 +414,7 @@ def _complete(root, path, job, record):
 
 
 PREVIEW_SECONDS = 5
+EXPLAIN_SECONDS = 8
 INVENTORY_SECONDS = 30
 
 
@@ -439,7 +440,7 @@ def _preview_head(root, branch):
 
 
 def _preview_snapshot(root, job_id):
-    """Observe a fixed set of small files for one job without acquiring any lock."""
+    """Return a signature (folder inode, exact job bytes, bindings) and local observations."""
     folder = F.jobs_dir(root) / job_id
     folder_id = _identity(folder)
     raw = read_job_artifact(folder, "job.json", max_bytes=64 * 1024)
@@ -482,7 +483,7 @@ def _preview_snapshot(root, job_id):
 
 
 def _preview(root, job_id):
-    result = {"job_id": job_id, "assessment": "eligibility not evaluated",
+    result = {"job_id": job_id, "assessment": "eligibility not evaluated", "detail_option": "--explain",
               "deferred_checks": ["GitHub merge", "checkout contents", "evidence", "dependencies", "active processes and locks"]}
     deadline = time.monotonic() + PREVIEW_SECONDS
     try:
@@ -495,6 +496,42 @@ def _preview(root, job_id):
     except (F.FactoryError, OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
         reason = str(error) if isinstance(error, (F.FactoryError, TimeoutError)) else "local state is unavailable or changed during preview"
         return {**result, "status": "inconclusive", "reason": reason}
+
+
+def _explain(root, job_id):
+    """Summarize one observed checkout. Counts concern only the stated scope."""
+    from retirement_checkout_advisory import observe_checkout
+    from retirement_evidence_advisory import observe_evidence
+
+    result = {"job_id": job_id, "assessment": "eligibility not evaluated", "coverage": "unresolved",
+              "coverage_scope": "checkout directory shape and two expected gate-header slots",
+              "deferred_checks": ["GitHub merge", "file contents and metadata", "bytecode reproducibility",
+                                  "native receipt verification", "stacked dependencies", "active processes and locks"]}
+    deadline = time.monotonic() + EXPLAIN_SECONDS
+    try:
+        before = _preview_snapshot(root, job_id)
+        if before[1]["status"] == "screened locally":
+            folder = F.jobs_dir(root) / job_id
+            _, raw, *_ = before[0]
+            job = F.validate_reporting_job(json.loads(raw, object_pairs_hook=_unique_fields, parse_constant=_reject_constant), job_id)
+            candidate = before[1]["candidate_sha"]
+            evidence = observe_evidence(folder, job, candidate)
+            _require(time.monotonic() < deadline, "advisory time budget exhausted")
+            checkout = observe_checkout(root, job, candidate)
+        _require(time.monotonic() < deadline, "advisory time budget exhausted")
+        after = _preview_snapshot(root, job_id)
+        _require(before == after and time.monotonic() < deadline, "local state changed or advisory budget exhausted")
+        if before[1]["status"] != "screened locally":
+            return {**result, **before[1]}
+        coverage = checkout["coverage"]
+        if ((coverage == "complete" and evidence["unresolved_slots"]) or
+                (coverage == "unresolved" and evidence["unresolved_slots"] < len(evidence["slots"]))):
+            coverage = "partial"
+        return {**result, "status": "advisory", "coverage": coverage, "count_scope": "observed roots and entries only",
+                "checkout": checkout, "evidence": evidence}
+    except (F.FactoryError, OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError):
+        # Keep private local paths and content out of this aggregate advisory.
+        return {**result, "status": "inconclusive", "reason": "local state changed, was unavailable, or exceeded the inspection budget"}
 
 
 def _inventory_generated(root, job_id):
@@ -535,16 +572,18 @@ def _inspect_checkout(root, folder, job, cfg, approved_digest):
 
 
 def run(root, job_id, *, apply=False, recover=False, confirm_pr=None,
-        inventory_generated=False, discard_generated=None):
+        inventory_generated=False, discard_generated=None, explain=False):
     """Preview by default. Recovery can finalize a completed removal, never replay one."""
     _require(F.valid_reporting_job_id(job_id), "invalid job ID")
-    _require(sum(bool(mode) for mode in (apply, recover, inventory_generated)) <= 1,
-             "apply, recovery and generated inventory are separate operations")
+    _require(sum(bool(mode) for mode in (apply, recover, inventory_generated, explain)) <= 1,
+             "apply, recovery, explanation and generated inventory are separate operations")
     _require(discard_generated is None or apply and isinstance(discard_generated, str)
              and re.fullmatch(r"[0-9a-f]{64}", discard_generated),
              "generated discard requires --apply and the complete inventory SHA-256")
     _require(confirm_pr is None or apply, "PR confirmation is only valid with --apply")
     _require(root.is_absolute() and root.resolve() == root, "expected canonical repository root")
+    if explain:
+        return _explain(root, job_id)
     if inventory_generated:
         return _inventory_generated(root, job_id)
     if not apply and not recover:

@@ -24,6 +24,7 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--apply", action="store_true", help="confirm exclusive access during maintenance and remove the verified clean linked checkout")
     mode.add_argument("--recover", action="store_true", help="reconcile an interrupted retirement without replaying removal")
+    mode.add_argument("--explain", action="store_true", help="show bounded counts of observed local blockers and unknowns")
     mode.add_argument("--inventory-generated", action="store_true", help="inspect one checkout for reproducible Python caches")
     parser.add_argument("--discard-generated", metavar="SHA256", help="with --apply, confirm the exact generated-file inventory")
     parser.add_argument("--confirm-pr", metavar="PR@SHA", help="confirm the reported job-to-PR or rewritten-merge uncertainty")
@@ -40,14 +41,21 @@ def main():
         parser.error("--discard-generated requires --apply")
     if advisory:
         signal.signal(signal.SIGALRM, _preview_timeout)
-        signal.setitimer(signal.ITIMER_REAL, retirement.INVENTORY_SECONDS if args.inventory_generated else retirement.PREVIEW_SECONDS)
+        timeout = retirement.PREVIEW_SECONDS
+        if args.explain:
+            timeout = retirement.EXPLAIN_SECONDS
+        if args.inventory_generated:
+            timeout = retirement.INVENTORY_SECONDS
+        signal.setitimer(signal.ITIMER_REAL, timeout)
     try:
         root = retirement.preview_root() if advisory else F.repo_root()
         result = retirement.run(root, args.job, apply=args.apply, recover=args.recover,
                                 confirm_pr=args.confirm_pr, inventory_generated=args.inventory_generated,
-                                discard_generated=args.discard_generated)
+                                discard_generated=args.discard_generated, explain=args.explain)
     except (F.FactoryError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         result = {"job_id": args.job, "status": "inconclusive" if advisory else "blocked", "reason": str(error)}
+        if args.explain:
+            result.update(coverage="unresolved", reason="the local advisory could not be completed")
         if advisory:
             result["assessment"] = "eligibility not evaluated"
     finally:

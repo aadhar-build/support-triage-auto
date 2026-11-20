@@ -149,6 +149,16 @@ factory/bin/retire-worktree "$JOB_ID"
 
 A `screened locally` result shows the PR number from the job record and the local branch SHA. Eligibility is still open. A local blocker produces `blocked`. Missing, changing, oversized or ambiguous state produces `inconclusive`. Preview checks the observations twice with a 64 KiB job-state limit, a 4 KiB limit per Git registration file and a five-second screening budget.
 
+To see which local conditions warrant inspection, request a bounded explanation for that job.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --explain
+```
+
+The explanation counts observed dependency directories, build output, bytecode cache directories, other unclassified entries, and mismatches between tracked entry types and the checkout. An unclassified directory counts once. Its contents stay outside the inspection scope. The command separately counts native gate-header indicators in the current and final gate slots. A matching header can require checkout-dependent verification. Only the maintenance verifier can establish which technical receipts require retention.
+
+Read each count with its coverage. Truncation, unreadable paths, or changes can leave observations partial or unresolved. A zero count under incomplete coverage gives no assurance of absence. Even complete coverage applies only to the directory and header checks described here. The explanation uses no factory locks and makes no GitHub request. It reports aggregate counts, omits private filenames and receipt bodies, and has an eight-second command budget.
+
 **Apply requires a factory-wide maintenance window.** Finish active workers, pause new admissions, and ensure the operator controls every writer that can reach the checkout, including editors, tests and shared mounts. Apply takes exclusive locks on the jobs directory, all registered jobs and the target checkout. The locks remain held through GitHub verification and physical checkout inspection. The process scans observe activity at each inspection. A writer outside the controller can still start afterward.
 
 ```bash
