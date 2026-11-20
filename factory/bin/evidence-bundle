@@ -22,6 +22,8 @@ def main():
                         help="project a native gate, code/security/eval review, or technical decision")
     parser.add_argument("--overview", action="store_true",
                         help="show local job stage, candidate and missing or unselected evidence")
+    parser.add_argument("--private-owner-view", action="store_true",
+                        help="include private job labels and decisions in a local owner-only page")
     parser.add_argument("--weekly", type=weekly_start, metavar="YYYY-MM-DD", help="start of the reporting week")
     parser.add_argument("--timezone", metavar="IANA", help="time zone for weekly cohort boundaries")
     parser.add_argument("--as-of", type=utc_cutoff, metavar="UTC", help="recording-time cutoff for weekly observations")
@@ -34,8 +36,10 @@ def main():
         if not args.job_id or args.weekly_evidence or any(value is not None for value in
                                                          (args.timezone, args.as_of, args.defect_window_days)):
             parser.error("choose a job ID for job export or use --weekly for weekly options")
+        if args.private_owner_view and args.overview:
+            parser.error("--private-owner-view and --overview are separate job views")
     else:
-        if args.job_id or args.include or args.gate or args.artifact or args.overview:
+        if args.job_id or args.include or args.gate or args.artifact or args.overview or args.private_owner_view:
             parser.error("--weekly cannot be combined with single-job options")
         if args.as_of is None:
             parser.error("--weekly requires an explicit --as-of cutoff")
@@ -45,7 +49,7 @@ def main():
         root = F.repo_root()
         if args.weekly is None:
             export_job(root, args.job_id, args.output, args.include, args.gate,
-                       artifacts=args.artifact, overview=args.overview)
+                       artifacts=args.artifact, overview=args.overview, private_owner_view=args.private_owner_view)
         else:
             export_week(root, args.weekly, args.as_of, args.timezone, args.defect_window_days,
                         args.output, args.weekly_evidence)

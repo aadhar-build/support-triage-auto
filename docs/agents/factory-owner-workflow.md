@@ -120,3 +120,17 @@ Valid kinds are `check`, `criterion` and `demo`. Valid verdicts are `pass`, `fai
 Open `index.html` in Chrome from the selected directory. The index links to the exported local receipts and to `manifest.json`. A row can show a copied receipt, a projected verdict, a missing source, a stale binding or digest, or withheld evidence. Claim verification and owner acceptance remain unverified. A match confirms the selected bytes at export time. A recipient on another device needs an authorized copy of the entire directory, including its JSON files.
 
 The command checks up to 32 selected artifacts, 256 evidence rows and 64 ledger directory entries. It refuses an incomplete or busy ledger. Copied receipts are capped at 1 KiB and native report inputs at 256 KiB. Run it in an owner-controlled directory while other processes leave the destination alone. The directory is visible while the command writes it. Wait for success before opening it. The command checks the published names and bytes and rechecks the job state and sources for all exported receipts and verdicts. Forced termination or a write failure can leave a partial private directory. Use a fresh destination for a retry. The bundle makes no network calls and starts no service.
+
+### Review a private decision view
+
+Use `--private-owner-view` when the owner needs criterion wording, the local candidate, checks and reviews, demonstration status, limitations, decisions, measured time and available cost records, and one next action on the same page. Choose a private local destination outside Git checkouts and folders that sync to other devices. The exporter checks the factory's Git worktree inventory and the destination's parent directories. This mode excludes controlled observations and requires a normal job.
+
+```bash
+factory/bin/evidence-bundle "$JOB_ID" --private-owner-view --output "$PRIVATE_DIRECTORY"
+```
+
+Add the same `--gate`, `--artifact` or `--include` selections to make projected evidence clickable next to the relevant requirement. Use `1. [stable-id] Wording` in the local spec to retain a criterion’s ID if you reorder it. A criterion identified only by its written number needs a matching candidate, round and spec digest before a report links to its current wording. Reports with uncertain associations appear under Additional evidence. The private view displays criterion IDs, refuses duplicates and can indicate when a separate native report is available locally.
+
+Source reports show their candidate, round, base and spec bindings. Independent verification and the owner decision have separate fields. A matching digest identifies the selected bytes. It leaves the claim unverified unless the local factory verifier can establish it independently. Owner reports follow their occurrence time. If a current report has no occurrence date, the current owner decision remains unknown. A demonstration receipt records a report about the working software. Use the normal approval workflow to inspect the demonstration itself and record the owner decision.
+
+Open the private `index.html` in Chrome after the export succeeds. The directory and files use owner-only permissions. Criterion text and decision details appear in the private HTML. The manifest still contains the limited row and digest fields. Keep the whole directory local and use the sanitized export when you need outputs without the private labels.

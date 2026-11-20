@@ -14,9 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import factory as F
-from evidence_adapter import _bindings, _required
+from evidence_adapter import _bindings, _git, _required, collect_local_guardrails
 from observations import (_check_directory_entry, _open_directory, _project, _read_records,
                           decode_event_json)
+from owner_decision_view import OWNER_VIEW_STYLE, observation_key, render_owner_view
 
 KINDS = {"check_evidence": "check", "criterion": "criterion", "demo": "demo"}
 SLOT = re.compile(r"evidence/check-([1-9][0-9]{0,2})\.json")
@@ -67,7 +68,7 @@ PERMITTED = {(kind, verdict): _canonical(kind, verdict) for kind in KINDS.values
              for verdict in ("pass", "fail", "pending")}
 
 
-def _artifact_rows(artifacts, job_round):
+def _artifact_rows(artifacts, job_round, *, private_owner_view=False):
     seen = set()
     for selection in artifacts:
         path, number, digest = selection.groups()
@@ -76,7 +77,10 @@ def _artifact_rows(artifacts, job_round):
         if path in seen:
             raise BundleError("Select each native artifact once.")
         seen.add(path)
-        yield _native_row(path), digest
+        row = _native_row(path)
+        if private_owner_view:
+            row["_owner_bindings"] = {}
+        yield row, digest
 
 
 def _native_row(path):
@@ -86,7 +90,7 @@ def _native_row(path):
 
 
 @contextmanager
-def _directory(path, forbidden=()):
+def _directory(path, forbidden=(), *, outside_git=False):
     path = Path(path).absolute()
     if ".." in path.parts:
         raise BundleError("Choose a direct local directory path.")
@@ -96,6 +100,14 @@ def _directory(path, forbidden=()):
             fd = stack.enter_context(_open_directory(component, fd))
             if any(os.path.samestat(os.fstat(fd), item) for item in forbidden):
                 raise BundleError("Choose a destination outside factory job state and Git metadata.")
+            if outside_git:
+                try:
+                    os.stat(".git", dir_fd=fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    continue
+                except OSError as exc:
+                    raise BundleError("Cannot verify that the destination is outside a Git checkout.") from exc
+                raise BundleError("Choose a private destination outside a Git checkout.")
         yield fd
 
 
@@ -114,16 +126,18 @@ def _read_file(directory, name, limit):
     return content
 
 
-def _snapshot(root, job_fd, job_id, cutoff, overview):
+def _snapshot(root, job_fd, job_id, cutoff, overview, *, private_owner_view=False):
     raw = _read_file(job_fd, "job.json", 64 * 1024)
     job = F.validate_reporting_job(decode_event_json(raw), job_id)
+    if private_owner_view and job.get("origin") == "controlled":
+        raise BundleError("The private owner view requires a non-controlled job.")
     events = {}
     try:
         observations = _open_directory("observations", job_fd)
         with observations as directory:
             fcntl.flock(directory, fcntl.LOCK_SH | fcntl.LOCK_NB)
             records, errors = _read_records(directory, job_id, for_transition=True)
-            events, _, remaining = _project(records, cutoff)
+            events, _, remaining = _project(records, cutoff, include_ancestry=private_owner_view)
             _check_directory_entry(job_fd, directory)
             if errors or remaining:
                 raise BundleError("Observation coverage is incomplete. Review the local ledger.")
@@ -132,7 +146,23 @@ def _snapshot(root, job_fd, job_id, cutoff, overview):
         events = {}
     config = F.load_config(root)
     spec, spec_status = _read_spec(job_fd)
-    bindings, _ = _bindings(root, config, job, spec)
+    bindings, clean = _bindings(root, config, job, spec)
+    if private_owner_view:
+        events = {key: event for key, event in events.items() if event["origin"] == "real"
+                  and (not event["occurred_at"]
+                       or datetime.fromisoformat(event["occurred_at"].replace("Z", "+00:00")) <= cutoff)}
+        try:
+            required = _required(config, job, spec, bindings["round"], cutoff, unique_criteria=True)
+        except F.FactoryError as error:
+            raise BundleError(str(error)) from error
+        if len(required) > MAX_ROWS:
+            raise BundleError("Too many requirements for an owner view.")
+        job_path = F.jobs_dir(root) / job_id
+        guardrails, _ = collect_local_guardrails(root, config, job_path, job, raw, spec, list(events.values()),
+                                                [], bindings, clean, required, cutoff)
+        context = {"config": config, "required": required, "guardrails": guardrails,
+                   "spec_status": spec_status, "clean": clean}
+        return raw, job, events, bindings, context
     requirements = _overview_requirements(config, job_fd, job, cutoff, spec, spec_status) if overview else None
     return raw, job, events, bindings, requirements
 
@@ -214,21 +244,32 @@ def _missing_row(label, kind, required, status="missing"):
     return row
 
 
-def _binding_status(bindings, records):
-    missing = False
+def _binding_coverage(bindings, records):
+    coverage = {}
     for key, expected in bindings.items():
-        for record in records:
-            value = record.get(key)
-            if value is None:
-                continue
-            if expected is None:
-                missing = True
-            elif value != expected:
-                return "stale"
-    return "withheld" if missing else None
+        recorded = [record[key] for record in records if record.get(key) is not None]
+        if not recorded:
+            coverage[key] = "unrecorded"
+        elif expected is None:
+            coverage[key] = "unknown"
+        elif any(value != expected for value in recorded):
+            coverage[key] = "stale"
+        else:
+            coverage[key] = "matched"
+    return coverage
 
 
-def _rows(job, events, bindings, selected, criteria):
+def _binding_status(bindings, records):
+    return _blocking_binding(_binding_coverage(bindings, records))
+
+
+def _blocking_binding(coverage):
+    if "stale" in coverage.values():
+        return "stale"
+    return "withheld" if "unknown" in coverage.values() else None
+
+
+def _rows(job, events, bindings, selected, criteria, *, private_owner_view=False):
     rows = []
     targets = set()
     origin = "controlled" if job.get("origin") == "controlled" else "real"
@@ -255,6 +296,10 @@ def _rows(job, events, bindings, selected, criteria):
             row = {"kind": kind, "reported_verdict": verdict, "claim_verification": "unverified",
                    "candidate_binding": "stale" if binding == "stale" else "unverified",
                    "artifact_status": binding or ("withheld" if ref else "missing")}
+            if private_owner_view:
+                row["_owner_key"] = observation_key(event)
+                row["_owner_bindings"] = _binding_coverage(bindings, (event, data, ref))
+                row["_owner_event_blocked"] = binding is not None
             if criteria is not None:
                 if label:
                     row.update(label=label, required=True)
@@ -300,6 +345,11 @@ def _source(job_fd, row, expected, bindings):
     native = kind in NATIVE_KINDS.values()
     if native:
         row["reported_verdict"] = "unknown"
+        round_binding = {"round": bindings["round"]} if row["reference"].startswith("round-") else {}
+        if "_owner_bindings" in row:
+            row["_owner_bindings"] = _binding_coverage(bindings, (round_binding,))
+            if round_binding:
+                row["_owner_bindings"]["round"] = "matched by path"
     try:
         with _source_parent(job_fd, row["reference"]) as (directory, name):
             content = _read_file(directory, name, 256 * 1024 if native else 1024)
@@ -315,7 +365,12 @@ def _source(job_fd, row, expected, bindings):
             return "withheld", None
         recorded = {key: header[key].decode("ascii") for key in ("candidate_sha", "base_sha", "spec_digest")
                     if header[key] is not None}
-        binding = _binding_status(bindings, (recorded,))
+        coverage = _binding_coverage(bindings, (recorded, round_binding))
+        if "_owner_bindings" in row:
+            row["_owner_bindings"] = coverage
+            if round_binding:
+                row["_owner_bindings"]["round"] = "matched by path"
+        binding = _blocking_binding(coverage)
         if binding:
             if binding == "stale":
                 row["candidate_binding"] = "stale"
@@ -422,7 +477,7 @@ def _unlink_owned(directory, name, original):
 
 
 @contextmanager
-def _destination(root, output, forbidden=()):
+def _destination(root, output, forbidden=(), *, outside_git=False):
     job_store = F.jobs_dir(root)
     if (not output.name or ".." in output.parts or any(part.casefold() == ".git" for part in output.parts)
             or output.is_relative_to(job_store)):
@@ -431,13 +486,42 @@ def _destination(root, output, forbidden=()):
     for path in (job_store, root / ".git"):
         if path.is_dir():
             protected.append(path.stat())
-    with _directory(output.parent, protected) as parent:
+    with _directory(output.parent, protected, outside_git=outside_git) as parent:
         parent_stat = os.fstat(parent)
         if output.name.casefold() == job_store.name and os.path.samestat(parent_stat, job_store.parent.stat()):
             raise BundleError("Choose a new directory outside factory job state and Git metadata.")
         if parent_stat.st_uid != os.getuid() or parent_stat.st_mode & 0o022:
             raise BundleError("Choose an owner-controlled destination parent.")
         yield parent
+
+
+def _private_worktrees(root, output):
+    """Protect every checkout in the local worktree registry by path and inode."""
+    inventory = _git(root, "worktree", "list", "--porcelain", "-z")
+    error = "Cannot verify the local factory checkout locations."
+    if not inventory or not inventory.endswith("\0\0"):
+        raise BundleError(error)
+    protected = []
+    for block in inventory[:-2].split("\0\0"):
+        entry = block.split("\0", 1)[0]
+        if not entry.startswith("worktree "):
+            raise BundleError(error)
+        checkout = Path(entry.removeprefix("worktree "))
+        if not checkout.is_absolute() or ".." in checkout.parts:
+            raise BundleError(error)
+        if output.is_relative_to(checkout):
+            raise BundleError("Choose a private destination outside all factory checkouts.")
+        try:
+            info = checkout.stat()
+        except OSError as exc:
+            raise BundleError(error) from exc
+        if not stat.S_ISDIR(info.st_mode):
+            raise BundleError(error)
+        protected.append(info)
+    root_info = root.stat()
+    if not any(os.path.samestat(root_info, info) for info in protected):
+        raise BundleError(error)
+    return protected
 
 
 def _verify_files(directory, output, files, owned):
@@ -508,12 +592,13 @@ def project_native_receipt(root, job_id, selection, cutoff):
         return _native_row(path), "withheld", None, None
 
 
-def _create_bundle(root, job_path, job_fd, selection, artifacts, output, parent, overview):
+def _create_bundle(root, job_path, job_fd, selection, artifacts, output, parent, overview, private_owner_view):
     cutoff = datetime.now(timezone.utc)
-    snapshot = _snapshot(root, job_fd, job_path.name, cutoff, overview)
+    snapshot = _snapshot(root, job_fd, job_path.name, cutoff, overview, private_owner_view=private_owner_view)
     _, job, events, bindings, context = snapshot
-    rows = _rows(job, events, bindings, selection, context[1] if overview else None)
-    rows.extend(_artifact_rows(artifacts, job.get("round")))
+    rows = _rows(job, events, bindings, selection, context[1] if overview else None,
+                 private_owner_view=private_owner_view)
+    rows.extend(_artifact_rows(artifacts, job.get("round"), private_owner_view=private_owner_view))
     if overview:
         _overview_rows(rows, *context)
     if len(rows) > MAX_ROWS:
@@ -553,35 +638,49 @@ def _create_bundle(root, job_path, job_fd, selection, artifacts, output, parent,
                 _unlink_owned(directory, name, owned.pop(name))
                 del files[name]
             issue = job.get("issue")
+            manifest_rows = [{key: value for key, value in row.items() if not key.startswith("_owner_")}
+                             for row, _ in rows]
             manifest = {"schema_version": 1, "scope": "one job with check, criterion and demo observations and selected factory reports",
                         "issue": issue if type(issue) is int and 0 < issue < 10**10 else "unknown",
                         "origin": job.get("origin") if job.get("origin") in ("controlled", "real") else "unspecified",
-                        "rows": sorted((row for row, _ in rows), key=lambda row: json.dumps(row, sort_keys=True))}
+                        "rows": sorted(manifest_rows, key=lambda row: json.dumps(row, sort_keys=True))}
             if overview:
                 stage = job.get("stage")
                 manifest["overview"] = {"stage": stage if stage in F.TRANSITIONS else "unknown",
                                         "round": job.get("round"), "candidate_sha": bindings["candidate_sha"]}
             files["manifest.json"] = (json.dumps(manifest, indent=2) + "\n").encode("ascii")
-            files["index.html"] = _page(manifest)
+            if private_owner_view:
+                files["index.html"] = render_owner_view(
+                    job, list(events.values()), bindings, context, [row for row, _ in rows], cutoff,
+                    page_header("Private owner view", style=_STYLE + OWNER_VIEW_STYLE), _binding_status,
+                )
+            else:
+                files["index.html"] = _page(manifest)
             for name in ("manifest.json", "index.html"):
                 owned[name] = _write_file(directory, name, files[name])
             _verify_files(directory, output, files, owned)
             with _directory(job_path) as current:
                 if (not os.path.samestat(os.fstat(current), os.fstat(job_fd))
-                        or snapshot != _snapshot(root, current, job_path.name, cutoff, overview)):
+                        or snapshot != _snapshot(root, current, job_path.name, cutoff, overview,
+                                                 private_owner_view=private_owner_view)):
                     raise BundleError("Job evidence changed during export.")
                 for row, expected in rows:
                     if name := row.get("file"):
                         _, content = _source(current, row.copy(), expected, bindings)
                         if content != files[name]:
                             raise BundleError("Selected evidence changed before publication.")
+            if private_owner_view:
+                with _directory(output.parent, _private_worktrees(root, output), outside_git=True):
+                    pass
         except BaseException:
             _remove_partial_bundle(directory, output, parent, owned)
             raise
 
 
-def export_job(root, job_id, output, selected, gate=None, *, artifacts=(), overview=False):
+def export_job(root, job_id, output, selected, gate=None, *, artifacts=(), overview=False, private_owner_view=False):
     root, output = Path(root).absolute(), Path(output).absolute()
+    if private_owner_view and overview:
+        raise BundleError("Choose either the private owner view or the sanitized overview.")
     if gate is not None:
         if not GATE_SELECTION.fullmatch(gate):
             raise BundleError("Select a current round gate by path and expected SHA-256.")
@@ -590,15 +689,19 @@ def export_job(root, job_id, output, selected, gate=None, *, artifacts=(), overv
     if not all(selections):
         raise BundleError("Select a supported native artifact by path and expected SHA-256.")
     selection_count = len(selected) + len(selections)
-    if (not F.valid_reporting_job_id(job_id) or selection_count > MAX_SELECTED or not (overview or selection_count)
+    if (not F.valid_reporting_job_id(job_id) or selection_count > MAX_SELECTED
+            or not (overview or private_owner_view or selection_count)
             or not all(SLOT.fullmatch(path) for path in selected)):
         raise BundleError("Select a job and one to 32 allowed artifact or receipt paths.")
     job_path = root / "factory" / "jobs" / job_id
     try:
         with ExitStack() as stack:
             job_fd = stack.enter_context(_directory(job_path))
-            parent = stack.enter_context(_destination(root, output, [os.stat("..", dir_fd=job_fd)]))
-            _create_bundle(root, job_path, job_fd, set(selected), selections, output, parent, overview)
+            forbidden = [os.stat("..", dir_fd=job_fd)]
+            if private_owner_view:
+                forbidden.extend(_private_worktrees(root, output))
+            parent = stack.enter_context(_destination(root, output, forbidden, outside_git=private_owner_view))
+            _create_bundle(root, job_path, job_fd, set(selected), selections, output, parent, overview, private_owner_view)
     except (OSError, F.FactoryError, ValueError) as error:
         if isinstance(error, BundleError):
             raise

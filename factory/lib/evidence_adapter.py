@@ -148,7 +148,8 @@ def _bindings(root: Path, cfg: dict, job: dict, spec: bytes | None) -> tuple[dic
     return bindings, bool(clean)
 
 
-def _required(cfg: dict, job: dict, spec: bytes | None, number: int | None, cutoff: datetime) -> list[dict]:
+def _required(cfg: dict, job: dict, spec: bytes | None, number: int | None, cutoff: datetime, *,
+              unique_criteria: bool = False) -> list[dict]:
     reviews = cfg.get("routing", {})
     surfaces = cfg.get("surface_reviewers", {})
     expected = set(reviews.get(job.get("risk"), {}))
@@ -179,9 +180,15 @@ def _required(cfg: dict, job: dict, spec: bytes | None, number: int | None, cuto
             if match:
                 position, identifier, label = match.groups()
                 check_id = f"criterion:{identifier or position}"
-                if check_id not in seen:
-                    rows.append(dict(id=check_id, label=label))
-                    seen.add(check_id)
+                if check_id in seen:
+                    if unique_criteria:
+                        raise F.FactoryError("The spec has a duplicate acceptance criterion ID.")
+                    continue
+                row = dict(id=check_id, label=label)
+                if unique_criteria:
+                    row["criterion_identity"] = "explicit" if identifier else "position"
+                rows.append(row)
+                seen.add(check_id)
     return rows
 
 
@@ -456,17 +463,9 @@ def _receipt_rows(verifier, folder: Path, job: dict, bindings: dict, as_of: date
     return rows, first
 
 
-def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | None = None,
-                     verify_github_links=False) -> dict:
-    """Collect as-of observations and read local technical evidence independently."""
-    cutoff = as_of or datetime.now(timezone.utc)
-    job, state = _job_state(folder)
-    events, diagnostics = load_events(folder, as_of=cutoff, include_ancestry=True)
-    if job.get("origin") != "controlled":
-        events = [event for event in events if event["origin"] == "real"]
-    spec = read_job_artifact(folder, "spec.md")
-    candidate, clean = _bindings(root, cfg, job, spec)
-    required = _required(cfg, job, spec, candidate["round"], cutoff)
+def collect_local_guardrails(root, cfg, folder, job, state, spec, events, diagnostics, candidate,
+                             clean, required, cutoff):
+    """Evaluate an as-of snapshot with the existing offline independent receipt adapter."""
     receipt_events, first_gate = [], None
     verifier = _installed_validator() if clean else None
     unstable = False
@@ -498,6 +497,22 @@ def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | N
     if first_gate and not any(row["id"] == _CHECKS and row["status"] == first_gate["status"]
                               for row in guardrails["requirements"]):
         first_gate = None
+    return guardrails, first_gate
+
+
+def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | None = None,
+                     verify_github_links=False) -> dict:
+    """Collect as-of observations and read local technical evidence independently."""
+    cutoff = as_of or datetime.now(timezone.utc)
+    job, state = _job_state(folder)
+    events, diagnostics = load_events(folder, as_of=cutoff, include_ancestry=True)
+    if job.get("origin") != "controlled":
+        events = [event for event in events if event["origin"] == "real"]
+    spec = read_job_artifact(folder, "spec.md")
+    candidate, clean = _bindings(root, cfg, job, spec)
+    required = _required(cfg, job, spec, candidate["round"], cutoff)
+    guardrails, first_gate = collect_local_guardrails(root, cfg, folder, job, state, spec, events, diagnostics,
+                                                     candidate, clean, required, cutoff)
     source, commit_link = None, None
     if verify_github_links and job.get("origin") != "controlled":
         source, commit_link = verified_links(root, job, candidate["candidate_sha"], github_repo)
