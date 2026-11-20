@@ -168,3 +168,22 @@ factory/bin/retire-worktree "$JOB_ID" --recover
 ```
 
 Recovery restores an intact parked checkout and records cancellation, or finalizes a removal Git already completed. A partial checkout, new files, changed evidence or ambiguous registration leaves the journal available for inspection. If any process outside the controller is writing to the repository, finish that work before retirement. Each command addresses exactly one job.
+
+
+### Discard reproducible Python bytecode for one job
+
+Default retirement retains checkouts with ignored files. If a merged checkout contains CPython bytecode, run a separate local inventory. This scans one candidate and has a 30-second command budget. It leaves factory admission available while it runs.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --inventory-generated
+```
+
+Inspect the manifest before applying. It identifies the job, candidate, directories, files and SHA-256 digest. Each cache must be ignored by Git. At inspection time, the controller reproduces its complete bytes using the exact tracked source, the original filename and a compatible interpreter. For timestamp-mode caches it also checks the source checkout’s modification time. Future reproduction of those bytes also requires that filesystem timestamp. The verifier compiles source in isolation. It rejects unsupported cache formats, missing source, unsafe file metadata and extra contents. Dependency installations, distribution directories and other ignored files keep the checkout in place. A clean checkout with zero caches reports `no generated files` and supplies no discard digest. A failed or incomplete inventory supplies no approval.
+
+To authorize discarding exactly the listed bytecode in the maintenance window, use the complete digest from the reviewed manifest.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --apply --discard-generated "$MANIFEST_SHA256"
+```
+
+The discard approval is separate from any required `--confirm-pr` confirmation. Apply repeats the inventory before parking and at the private parking path immediately before removal. A changed file or directory blocks disposal. The retirement journal retains the approved manifest. Recovery can restore a fully validated parked checkout with its caches or finalize an already completed removal.

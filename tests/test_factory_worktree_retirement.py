@@ -63,6 +63,16 @@ class RetirementTransaction(FactoryCLI, unittest.TestCase):
         self.assertFalse(os.path.lexists(self.wt))
         self.assertEqual(R.read_retirement(self.root, JOB_ID)["status"], "retired")
 
+    def test_empty_generated_inventory_supplies_no_discard_approval(self):
+        result = self.retire(inventory_generated=True)
+        self.assertEqual(result, {"job_id": JOB_ID, "status": "no generated files", "file_count": 0,
+                                  "assessment": "eligibility not evaluated"})
+        with self.assertRaises(R.F.FactoryError):
+            self.retire(apply=True, discard_generated="0" * 64)
+        self.assertTrue(self.wt.exists())
+        self.assertFalse(self.record.exists())
+        self.merge.assert_not_called()
+
     def test_legacy_requires_exact_second_confirmation(self):
         self.merge.side_effect = lambda *args: {**self.proof(*args), "job_pr_association": "local_only"}
         self.assertNotIn("confirm_pr", self.retire())

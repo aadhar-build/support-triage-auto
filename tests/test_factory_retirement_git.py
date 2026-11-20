@@ -1,5 +1,6 @@
 """Check retirement Git evidence with real worktrees and offline GitHub responses."""
 
+import hashlib
 import json
 import os
 import subprocess
@@ -101,6 +102,24 @@ print(json.dumps(json.loads(Path('responses.json').read_text())[args[-1]]))
             os.removexattr(path, name)
         else:
             subprocess.run(["/usr/bin/xattr", "-d", name, str(path)], check=True, capture_output=True)
+
+    def generated_cache(self, *, ignored=True, source="pkg/sample.py"):
+        if ignored:
+            self.change(self.worktree, ".gitignore", "private-cache/\n__pycache__/\n")
+        source_path = self.worktree / source
+        source_path.parent.mkdir(exist_ok=True)
+        self.change(self.worktree, source, 'raise RuntimeError("inspection must not execute source")\n')
+        self.candidate = self.git("rev-parse", "HEAD", cwd=self.worktree)
+        subprocess.run([sys.executable, "-I", "-m", "py_compile", source], cwd=self.worktree,
+                       check=True, capture_output=True)
+        return next(source_path.parent.glob(f"__pycache__/{source_path.stem}.*.pyc"))
+
+    def generated(self):
+        import retirement_git
+
+        inspect = getattr(retirement_git, "inspect_generated", None)
+        self.assertIsNotNone(inspect, "opt-in Git inventory is unavailable")
+        return inspect(self.root, self.folder, self.job, self.config)
 
     def pull(self, merged_sha, **changes):
         return {"id": 9, "number": 4, "url": self.api + "/pulls/4", "html_url": self.web + "/pull/4",
@@ -204,6 +223,129 @@ print(json.dumps(json.loads(Path('responses.json').read_text())[args[-1]]))
         self.put_xattr(parked / "code.txt", "user.retirement.after-parking")
         with self.assertRaises(FactoryError):
             self.validate_parked(self.root, self.folder, self.job, self.config, original, parked)
+
+    def test_opt_in_inventory_binds_cache_and_bytes_while_default_remains_strict(self):
+        cache = self.generated_cache()
+        baseline = cache.read_bytes()
+        with self.assertRaises(FactoryError):
+            self.local()
+        local, manifest = self.generated()
+        self.assertEqual(local["candidate_sha"], self.candidate)
+        self.assertEqual([entry["kind"] for entry in manifest["entries"]], ["directory", "file"])
+        self.assertEqual([entry["path"] for entry in manifest["entries"]],
+                         ["pkg/__pycache__", cache.relative_to(self.worktree).as_posix()])
+        self.assertEqual(manifest["entries"][1]["size"], len(baseline))
+        self.assertEqual(manifest["entries"][1]["sha256"], hashlib.sha256(baseline).hexdigest())
+        self.assertEqual(self.generated(), (local, manifest))
+        self.assertEqual(cache.read_bytes(), baseline)
+
+    def test_opt_in_refuses_a_real_cache_without_an_ignore_rule(self):
+        self.generated_cache(ignored=False)
+        with self.assertRaises(FactoryError):
+            self.generated()
+
+    def test_opt_in_allows_a_canonical_zero_inventory_for_a_clean_checkout(self):
+        from retirement_git import check_generated_manifest
+
+        local, manifest = self.generated()
+        self.assertEqual(local, self.local())
+        self.assertEqual(manifest["entries"], [])
+        check_generated_manifest(manifest, self.job["id"], self.candidate)
+
+    def test_opt_in_refuses_other_ignored_contents_or_an_empty_cache(self):
+        cache = self.generated_cache()
+        other = self.worktree / "private-cache"
+        other.mkdir()
+        (other / "surrogate.pyc").write_bytes(cache.read_bytes())
+        with self.assertRaises(FactoryError):
+            self.generated()
+        (other / "surrogate.pyc").unlink()
+        other.rmdir()
+        cache.unlink()
+        with self.assertRaises(FactoryError):
+            self.generated()
+
+    def test_opt_in_refuses_hardlinks_unsafe_permissions_or_cache_xattrs(self):
+        cache = self.generated_cache()
+        other = self.root / "other-reference"
+        os.link(cache, other)
+        with self.assertRaises(FactoryError):
+            self.generated()
+        other.unlink()
+        cache.chmod(0o664)
+        with self.assertRaises(FactoryError):
+            self.generated()
+        cache.chmod(0)
+        with self.assertRaises(FactoryError):
+            self.generated()
+        cache.chmod(0o644)
+        self.put_xattr(cache.parent, "user.retirement.unexpected")
+        with self.assertRaises(FactoryError):
+            self.generated()
+
+    def test_opt_in_refuses_tracked_content_or_git_inventory_over_budget(self):
+        self.generated_cache()
+        for limit in ("_MAX_TRACKED_BYTES", "_MAX_TRACKED_LIST_BYTES", "_MAX_TRACKED_ENTRIES"):
+            with self.subTest(limit=limit), patch(f"retirement_git.{limit}", 1), self.assertRaises(FactoryError):
+                self.generated()
+
+    def test_parked_checkout_requires_the_same_approved_cache_identities(self):
+        cache = self.generated_cache()
+        local, manifest = self.generated()
+        parked = self.root / ".git/factory-retirements/fixture.checkout"
+        parked.parent.mkdir()
+        self.git("worktree", "move", str(self.worktree), str(parked))
+        self.validate_parked(self.root, self.folder, self.job, self.config, local, parked,
+                             expected_generated=manifest)
+        parked_cache = parked / cache.relative_to(self.worktree)
+        identical = parked_cache.read_bytes()
+        parked_cache.unlink()
+        parked_cache.write_bytes(identical)
+        with self.assertRaises(FactoryError):
+            self.validate_parked(self.root, self.folder, self.job, self.config, local, parked,
+                                 expected_generated=manifest)
+
+    def test_inventory_rechecks_a_cache_changed_while_another_cache_is_compiled(self):
+        from retirement_bytecode import inspect_bytecode
+
+        self.generated_cache()
+        subprocess.run([sys.executable, "-I", "-O", "-m", "py_compile", "pkg/sample.py"], cwd=self.worktree,
+                       check=True, capture_output=True)
+        verified = []
+
+        def change_previous_cache(directory, name, *args):
+            if verified:
+                flags = os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW
+                with os.fdopen(os.open(verified[0], flags, dir_fd=directory), "wb") as first:
+                    first.write(b"unexpected bytes")
+            result = inspect_bytecode(directory, name, *args)
+            verified.append(name)
+            return result
+
+        with patch("retirement_bytecode.inspect_bytecode", side_effect=change_previous_cache):
+            with self.assertRaises(FactoryError):
+                self.generated()
+        self.assertEqual(len(verified), 2)
+
+    def test_durable_cache_manifest_rejects_invalid_paths_identities_and_digest(self):
+        self.generated_cache()
+        _, manifest = self.generated()
+        from retirement_git import check_generated_manifest
+
+        check_generated_manifest(manifest, self.job["id"], self.candidate)
+        cases = (
+            {**manifest, "digest": "0" * 64},
+            {**manifest, "entries": list(reversed(manifest["entries"]))},
+            {**manifest, "entries": [manifest["entries"][0], {**manifest["entries"][1], "path": "../outside"}]},
+            {**manifest, "entries": [manifest["entries"][0], {**manifest["entries"][1], "identity": [True] * 9}]},
+        )
+        for index, tampered in enumerate(cases):
+            with self.subTest(index=index), self.assertRaises(FactoryError):
+                if index:
+                    unsigned = {key: value for key, value in tampered.items() if key != "digest"}
+                    raw = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+                    tampered["digest"] = hashlib.sha256(raw).hexdigest()
+                check_generated_manifest(tampered, self.job["id"], self.candidate)
 
     def test_unavailable_extended_attribute_inventory_is_refused_without_private_errors(self):
         with patch("retirement_git._attribute_names", side_effect=OSError("private provider error")):

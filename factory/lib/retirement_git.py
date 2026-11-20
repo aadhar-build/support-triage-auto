@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import ctypes
 import hashlib
+import json
 import os
 import re
+import selectors
 import stat
 import subprocess
 import sys
+import time
 from contextlib import ExitStack
 from datetime import datetime
 from functools import lru_cache
@@ -32,6 +35,13 @@ _REFLOG_IDENTITY = re.compile(rb"[^\x00\r\n]* <[^<>\x00\r\n]*> [0-9]+ [+-][0-9]{
 _FILE_MODES = {b"100644", b"100755", b"120000"}
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _FILE_FLAGS = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+_CACHE_DIRECTORY = "__pycache__"
+_MAX_GENERATED_ENTRIES = 256
+_MAX_GENERATED_BYTES = 64 * 1024 * 1024
+_MAX_GENERATED_SECONDS = 15
+_MAX_TRACKED_ENTRIES = 8192
+_MAX_TRACKED_LIST_BYTES = 4 * 1024 * 1024
+_MAX_TRACKED_BYTES = 256 * 1024 * 1024
 _DARWIN = sys.platform == "darwin"
 _XATTR_SHOWCOMPRESSION = 0x0020  # Darwin exposes otherwise hidden compression attributes.
 _PR_FIELDS = (
@@ -48,12 +58,16 @@ def git_environment() -> dict[str, str]:
                 GIT_OPTIONAL_LOCKS="0", GIT_PROTOCOL_FROM_USER="0", GIT_TERMINAL_PROMPT="0")
 
 
-def _git_result(directory: Path, *args: str, stdin: bytes | None = None) -> subprocess.CompletedProcess:
+def _git_command(args: tuple[str, ...]) -> list[str]:
+    return ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never", *args]
+
+
+def _git_result(directory: Path, *args: str, stdin: bytes | None = None,
+                timeout: float = 8) -> subprocess.CompletedProcess:
     try:
         return subprocess.run(
-            ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
-             "-c", "protocol.allow=never", *args], cwd=directory, env=git_environment(),
-            input=stdin, capture_output=True, timeout=8,
+            _git_command(args), cwd=directory, env=git_environment(),
+            input=stdin, capture_output=True, timeout=timeout,
         )
     except (OSError, subprocess.TimeoutExpired):
         raise F.FactoryError("local Git verification is unavailable") from None
@@ -64,6 +78,40 @@ def _git(directory: Path, *args: str, stdin: bytes | None = None) -> bytes:
     if result.returncode:
         raise F.FactoryError("local Git could not verify the checkout or refs")
     return result.stdout
+
+
+def _remaining(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise F.FactoryError("generated cache inspection exceeded its time limit")
+    return remaining
+
+
+def _bounded_git_inventory(directory: Path, deadline: float, *args: str) -> bytes:
+    deadline = min(deadline, time.monotonic() + 8)
+    output = bytearray()
+    with subprocess.Popen(_git_command(args), cwd=directory, env=git_environment(), stdin=subprocess.DEVNULL,
+                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL) as process:
+        try:
+            with selectors.DefaultSelector() as reader:
+                reader.register(process.stdout, selectors.EVENT_READ)
+                while reader.select(_remaining(deadline)):
+                    block = os.read(process.stdout.fileno(), min(65536, _MAX_TRACKED_LIST_BYTES + 1 - len(output)))
+                    if not block:
+                        break
+                    output.extend(block)
+                    if len(output) > _MAX_TRACKED_LIST_BYTES:
+                        raise F.FactoryError("tracked Git inventory exceeds output limits")
+                else:
+                    raise F.FactoryError("generated cache inspection exceeded its time limit")
+            if process.wait(timeout=_remaining(deadline)) or output.count(b"\0") > _MAX_TRACKED_ENTRIES:
+                raise F.FactoryError("could not verify the bounded tracked Git inventory")
+        except subprocess.TimeoutExpired:
+            raise F.FactoryError("generated cache inspection exceeded its time limit") from None
+        finally:
+            if process.poll() is None:
+                process.kill()
+    return bytes(output)
 
 
 def _sha(value):
@@ -323,16 +371,24 @@ def _retained_admin(root: Path, admin: Path, candidate: str) -> None:
         raise F.FactoryError("linked checkout contains an unverified draft commit message")
 
 
-def _inventory(checkout: Path, candidate: str) -> dict[bytes, tuple[bytes, bytes]]:
+def _inventory(checkout: Path, candidate: str, deadline: float | None = None) -> dict[bytes, tuple[bytes, bytes]]:
+    tree_args = ("ls-tree", "-r", "-z", "--full-tree", candidate)
+    index_args = ("ls-files", "--stage", "-v", "-z")
+    if deadline is None:
+        tree_records = _git(checkout, *tree_args)
+        index_records = _git(checkout, *index_args)
+    else:
+        tree_records = _bounded_git_inventory(checkout, deadline, *tree_args)
+        index_records = _bounded_git_inventory(checkout, deadline, *index_args)
     tree = {}
-    for line in _git(checkout, "ls-tree", "-r", "-z", "--full-tree", candidate).split(b"\0")[:-1]:
+    for line in tree_records.split(b"\0")[:-1]:
         metadata, path = line.split(b"\t", 1)
         mode, kind, object_id = metadata.split(b" ")
         if mode not in _FILE_MODES or kind != b"blob":
             raise F.FactoryError("checkout has a submodule or an unsupported tracked entry")
         tree[path] = mode, object_id
     index = {}
-    for line in _git(checkout, "ls-files", "--stage", "-v", "-z").split(b"\0")[:-1]:
+    for line in index_records.split(b"\0")[:-1]:
         metadata, path = line.split(b"\t", 1)
         flag, mode, object_id, stage = metadata.split(b" ")
         if flag != b"H" or stage != b"0" or path in index:
@@ -361,8 +417,11 @@ def _reject_external_filters(checkout: Path, paths: dict) -> None:
         raise F.FactoryError("checkout uses an external Git clean or process filter")
 
 
-def _blob(parent: int, name: bytes, mode: bytes, algorithm: str) -> bytes:
+def _blob(parent: int, name: bytes, mode: bytes, algorithm: str, *, bounded_info: os.stat_result | None = None,
+          deadline: float | None = None) -> bytes:
     before = os.stat(name, dir_fd=parent, follow_symlinks=False)
+    if bounded_info is not None and _file_identity(before) != _file_identity(bounded_info):
+        raise F.FactoryError("checkout changed while verifying tracked contents")
     if mode == b"120000" and stat.S_ISLNK(before.st_mode):
         if _DARWIN:
             descriptor = os.open(name, os.O_RDONLY | os.O_SYMLINK, dir_fd=parent)
@@ -382,7 +441,13 @@ def _blob(parent: int, name: bytes, mode: bytes, algorithm: str) -> bytes:
             if _file_identity(os.fstat(stream.fileno())) != _file_identity(before):
                 raise F.FactoryError("checkout changed while verifying tracked contents")
             _require_no_attributes(stream.fileno())
+            size_remaining = before.st_size
             while chunk := stream.read(1024 * 1024):
+                if deadline is not None:
+                    _remaining(deadline)
+                    size_remaining -= len(chunk)
+                    if size_remaining < 0:
+                        raise F.FactoryError("checkout changed while verifying tracked contents")
                 digest.update(chunk)
             if _file_identity(os.fstat(stream.fileno())) != _file_identity(before):
                 raise F.FactoryError("checkout changed while verifying tracked contents")
@@ -393,55 +458,260 @@ def _blob(parent: int, name: bytes, mode: bytes, algorithm: str) -> bytes:
     return digest.hexdigest().encode("ascii")
 
 
-def _scan(directory: int, tree: dict, directories: set, algorithm: str, prefix: bytes = b"") -> None:
+def _generated_identity(info: os.stat_result) -> list[int]:
+    return [info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid, info.st_nlink,
+            info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+
+
+def _generated_mode(mode: int, *, directory: bool) -> bool:
+    permissions = stat.S_IMODE(mode)
+    if directory:
+        return stat.S_ISDIR(mode) and permissions & 0o500 == 0o500 and permissions & ~0o755 == 0
+    return stat.S_ISREG(mode) and bool(permissions & 0o400) and permissions & ~0o644 == 0
+
+
+def _manifest_digest(unsigned: dict) -> str:
+    encoded = json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _valid_entry_fields(entry: dict, directory: bool) -> bool:
+    fields = {"path", "kind", "identity"} if directory else {"path", "kind", "identity", "size", "sha256"}
+    if set(entry) != fields or entry["kind"] != ("directory" if directory else "file"):
+        return False
+    identity = entry["identity"]
+    if (not isinstance(identity, list) or len(identity) != 9
+            or any(type(number) is not int or not 0 <= number < 2**64 for number in identity)
+            or identity[1] == 0 or identity[2] > 0o177777 or identity[5] == 0
+            or not _generated_mode(identity[2], directory=directory)):
+        return False
+    if directory:
+        return True
+    return (identity[5] == 1 and type(entry["size"]) is int and entry["size"] == identity[6] > 16
+            and isinstance(entry["sha256"], str) and bool(re.fullmatch(r"[a-f0-9]{64}", entry["sha256"])))
+
+
+def check_generated_manifest(manifest: dict, job_id: str, candidate_sha: str) -> None:
+    """Check the structure and digest of a generated inventory offline."""
+    from retirement_bytecode import MAX_PYC_BYTES
+
+    if (not isinstance(manifest, dict) or set(manifest) != {"schema_version", "job_id", "candidate_sha", "entries", "digest"}
+            or type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1
+            or not isinstance(job_id, str) or not re.fullmatch(r"[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*", job_id)
+            or manifest["job_id"] != job_id or not _sha(candidate_sha) or manifest["candidate_sha"] != candidate_sha
+            or not isinstance(manifest["entries"], list) or len(manifest["entries"]) > _MAX_GENERATED_ENTRIES):
+        raise F.FactoryError("invalid generated cache manifest")
+    last = ""
+    directories = set()
+    file_parents = set()
+    inodes = set()
+    total = 0
+    for entry in manifest["entries"]:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise F.FactoryError("invalid generated cache manifest entry")
+        path = entry["path"]
+        parts = path.split("/")
+        if (path <= last or len(path) > 4096 or any(part in {"", ".", "..", ".git"} for part in parts)
+                or any(ord(char) < 32 or 0xD800 <= ord(char) <= 0xDFFF for char in path)
+                or parts.count(_CACHE_DIRECTORY) != 1):
+            raise F.FactoryError("invalid generated cache manifest path")
+        last = path
+        directory = parts[-1] == _CACHE_DIRECTORY
+        if not _valid_entry_fields(entry, directory):
+            raise F.FactoryError("invalid generated cache manifest metadata")
+        inode = tuple(entry["identity"][:2])
+        if inode in inodes:
+            raise F.FactoryError("duplicate generated cache manifest identity")
+        inodes.add(inode)
+        if directory:
+            directories.add(path)
+        else:
+            if len(parts) < 2 or parts[-2] != _CACHE_DIRECTORY or not parts[-1].endswith(".pyc"):
+                raise F.FactoryError("invalid generated bytecode manifest path")
+            parent = "/".join(parts[:-1])
+            file_parents.add(parent)
+            total += entry["size"]
+            if entry["size"] > MAX_PYC_BYTES or total > _MAX_GENERATED_BYTES:
+                raise F.FactoryError("generated cache manifest exceeds inventory limits")
+    if directories != file_parents:
+        raise F.FactoryError("generated cache manifest has unaccounted directories")
+    unsigned = {key: value for key, value in manifest.items() if key != "digest"}
+    if manifest["digest"] != _manifest_digest(unsigned):
+        raise F.FactoryError("generated cache manifest digest does not match its inventory")
+
+
+class _GeneratedInventory:
+    def __init__(self, checkout: Path, original: Path, tree: dict, info: os.stat_result, algorithm: str, deadline: float):
+        self.checkout = checkout
+        self.original = original
+        self.tree = tree.copy()
+        self.algorithm = algorithm
+        self.ownership = info.st_uid, info.st_gid
+        self.device = info.st_dev
+        self.deadline = deadline
+        self.total_bytes = 0
+        self.tracked_bytes = 0
+        self.entries = []
+        self.files = []
+
+    def remaining(self) -> float:
+        return _remaining(self.deadline)
+
+    def track_file(self, info: os.stat_result) -> None:
+        self.tracked_bytes += info.st_size
+        if self.tracked_bytes > _MAX_TRACKED_BYTES:
+            raise F.FactoryError("tracked checkout contents exceed generated inventory limits")
+
+    def reserve(self, info: os.stat_result, *, directory: bool) -> None:
+        self.remaining()
+        if len(self.entries) >= _MAX_GENERATED_ENTRIES:
+            raise F.FactoryError("generated cache has too many entries")
+        if (info.st_dev != self.device or (info.st_uid, info.st_gid) != self.ownership
+                or getattr(info, "st_flags", 0) or not _generated_mode(info.st_mode, directory=directory)
+                or (not directory and info.st_nlink != 1)):
+            raise F.FactoryError("generated cache has unsafe filesystem metadata")
+
+    def directory(self, parent: int, name: bytes, path: bytes, info: os.stat_result) -> None:
+        from retirement_bytecode import MAX_PYC_BYTES, inspect_bytecode
+
+        self.reserve(info, directory=True)
+        identity = _generated_identity(info)
+        directory = os.open(name, _DIR_FLAGS, dir_fd=parent)
+        try:
+            if _generated_identity(os.fstat(directory)) != identity:
+                raise F.FactoryError("generated cache directory changed during verification")
+            _require_no_attributes(directory)
+            self.entries.append({"kind": "directory", "path": path.decode("utf-8"), "identity": identity})
+            with os.scandir(directory) as children:
+                first = len(self.files)
+                for child in children:
+                    file_info = child.stat(follow_symlinks=False)
+                    self.reserve(file_info, directory=False)
+                    self.total_bytes += file_info.st_size
+                    if not 16 < file_info.st_size <= MAX_PYC_BYTES or self.total_bytes > _MAX_GENERATED_BYTES:
+                        raise F.FactoryError("generated cache exceeds byte inventory limits")
+                    child_name = os.fsencode(child.name)
+                    relative = path + b"/" + child_name
+                    file = inspect_bytecode(directory, child_name, relative, self.checkout, self.original,
+                                            self.tree, self.algorithm)
+                    self.remaining()
+                    if file["identity"] != _generated_identity(file_info):
+                        raise F.FactoryError("generated cache file changed during verification")
+                    self.files.append(relative)
+                    self.entries.append({"kind": "file", "path": relative.decode("utf-8"), **file})
+            if len(self.files) == first:
+                raise F.FactoryError("generated cache directory has no reproducible files")
+            if (_generated_identity(os.fstat(directory)) != identity
+                    or _generated_identity(os.stat(name, dir_fd=parent, follow_symlinks=False)) != identity):
+                raise F.FactoryError("generated cache directory changed during verification")
+        finally:
+            os.close(directory)
+
+    def verify_snapshot(self, checkout_fd: int) -> None:
+        directories = {}
+        for entry in self.entries:
+            path = entry["path"].encode("utf-8")
+            cache = path if entry["kind"] == "directory" else path.rsplit(b"/", 1)[0]
+            directories.setdefault(cache, []).append(entry)
+        for path, entries in directories.items():
+            with ExitStack() as descriptors:
+                directory = checkout_fd
+                for name in path.split(b"/"):
+                    self.remaining()
+                    directory = os.open(name, _DIR_FLAGS, dir_fd=directory)
+                    descriptors.callback(os.close, directory)
+                expected_dir = entries[0]["identity"]
+                for entry in entries[1:]:
+                    self.remaining()
+                    name = entry["path"].encode("utf-8").rsplit(b"/", 1)[-1]
+                    info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+                    if _generated_identity(info) != entry["identity"]:
+                        raise F.FactoryError("generated cache file changed during verification")
+                if _generated_identity(os.fstat(directory)) != expected_dir:
+                    raise F.FactoryError("generated cache directory changed during verification")
+
+    def manifest(self, checkout_fd: int, job_id: str, candidate: str) -> dict:
+        if self.files:
+            result = _git_result(self.checkout, "check-ignore", "-z", "--stdin", stdin=b"\0".join(self.files) + b"\0",
+                                 timeout=min(8, self.remaining()))
+            if result.returncode or set(result.stdout.split(b"\0")[:-1]) != set(self.files):
+                raise F.FactoryError("a generated cache file is not ignored by Git")
+        unsigned = {"schema_version": 1, "job_id": job_id, "candidate_sha": candidate,
+                    "entries": sorted(self.entries, key=lambda entry: entry["path"])}
+        manifest = {**unsigned, "digest": _manifest_digest(unsigned)}
+        check_generated_manifest(manifest, job_id, candidate)
+        self.verify_snapshot(checkout_fd)
+        self.remaining()
+        return manifest
+
+
+def _scan(directory: int, tree: dict, directories: set, algorithm: str, prefix: bytes = b"", *,
+          generated: _GeneratedInventory | None = None) -> None:
     before = os.fstat(directory)
     _require_no_attributes(directory)
     with os.scandir(directory) as entries:
         for entry in entries:
+            if generated is not None:
+                generated.remaining()
             name = os.fsencode(entry.name)
             path = prefix + name
             if path == b".git":
                 continue
-            if entry.stat(follow_symlinks=False).st_dev != before.st_dev:
+            info = entry.stat(follow_symlinks=False)
+            if info.st_dev != before.st_dev:
                 raise F.FactoryError("retirement refuses mounted checkout paths")
             if path in directories:
                 child = os.open(name, _DIR_FLAGS, dir_fd=directory)
                 try:
-                    _scan(child, tree, directories, algorithm, path + b"/")
+                    _scan(child, tree, directories, algorithm, path + b"/", generated=generated)
                 finally:
                     os.close(child)
             elif path in tree:
                 mode, object_id = tree.pop(path)
-                if _blob(directory, name, mode, algorithm) != object_id:
+                if generated is not None:
+                    generated.track_file(info)
+                if _blob(directory, name, mode, algorithm, bounded_info=info if generated else None,
+                         deadline=generated.deadline if generated else None) != object_id:
                     raise F.FactoryError("checkout has modified tracked contents")
+            elif generated is not None and name == b"__pycache__":
+                generated.directory(directory, name, path, info)
             else:
                 raise F.FactoryError("checkout contains untracked or ignored contents")
     if _file_identity(os.fstat(directory)) != _file_identity(before):
         raise F.FactoryError("checkout changed while verifying its contents")
 
 
-def _verify_contents(checkout: Path, info: os.stat_result, candidate: str) -> None:
-    tree = _inventory(checkout, candidate)
+def _verify_contents(checkout: Path, info: os.stat_result, candidate: str, job_id: str,
+                     original: Path | None = None) -> dict | None:
+    deadline = time.monotonic() + _MAX_GENERATED_SECONDS if original is not None else None
+    tree = _inventory(checkout, candidate, deadline)
     _reject_external_filters(checkout, tree)
+    algorithm = "sha1" if len(candidate) == 40 else "sha256"
+    generated = (_GeneratedInventory(checkout, original, tree, info, algorithm, deadline)
+                 if original is not None else None)
     directories = set()
     for path in tree:
         while b"/" in path:
             path = path.rsplit(b"/", 1)[0]
             directories.add(path)
+            if generated is not None and len(tree) + len(directories) > _MAX_TRACKED_ENTRIES:
+                raise F.FactoryError("tracked checkout paths exceed generated inventory limits")
     # Hash raw files directly. Git status can run external filters or omit
     # files due to index flags, excludes, normalization, or stat shortcuts.
     directory = os.open(checkout, _DIR_FLAGS)
     try:
         if not os.path.samestat(os.fstat(directory), info):
             raise F.FactoryError("checkout directory identity changed during verification")
-        _scan(directory, tree, directories, "sha1" if len(candidate) == 40 else "sha256")
+        _scan(directory, tree, directories, algorithm, generated=generated)
+        if tree:
+            raise F.FactoryError("checkout has missing tracked contents")
+        return generated.manifest(directory, job_id, candidate) if generated is not None else None
     finally:
         os.close(directory)
-    if tree:
-        raise F.FactoryError("checkout has missing tracked contents")
 
 
-def _validate(root: Path, folder: Path, job: dict, cfg: dict, parked: Path | None) -> dict:
+def _validate(root: Path, folder: Path, job: dict, cfg: dict, parked: Path | None, *,
+              allow_generated: bool = False) -> tuple[dict, dict | None]:
     job_id = job.get("id")
     if not isinstance(job_id, str) or not re.fullmatch(r"[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*", job_id):
         raise F.FactoryError("invalid retirement job identity")
@@ -485,36 +755,50 @@ def _validate(root: Path, folder: Path, job: dict, cfg: dict, parked: Path | Non
     base_sha = _commit(root, base_ref)
     _registration(root, checkout, branch, candidate)
     _retained_admin(root, admin, candidate)
-    _verify_contents(checkout, checkout_info, candidate)
+    generated = _verify_contents(checkout, checkout_info, candidate, job_id, original if allow_generated else None)
     _check_mounts(checkout, admin)
     if (not os.path.samestat(_job_directory(root, job_path), job_info)
             or not os.path.samestat(_directory(checkout), checkout_info) or not os.path.samestat(_directory(admin), admin_info)
             or _check_admin(root, admin, branch, base_ref) != admin_files or _admin(root, checkout) != admin
             or _commit(root, branch) != candidate or _commit(root, base_ref) != base_sha or _origin(root) != repository):
         raise F.FactoryError("checkout, origin, or refs changed during verification")
-    return {"candidate_sha": candidate, "base_sha": base_sha, "repository": repository, "admin": str(admin),
-            "worktree": str(checkout), "branch": job["branch"], "base_ref": base_ref,
-            "worktree_identity": [checkout_info.st_dev, checkout_info.st_ino],
-            "admin_identity": [admin_info.st_dev, admin_info.st_ino], "index_identity": dict(admin_files)["index"],
-            "admin_files": admin_files}
+    local = {"candidate_sha": candidate, "base_sha": base_sha, "repository": repository, "admin": str(admin),
+             "worktree": str(checkout), "branch": job["branch"], "base_ref": base_ref,
+             "worktree_identity": [checkout_info.st_dev, checkout_info.st_ino],
+             "admin_identity": [admin_info.st_dev, admin_info.st_ino], "index_identity": dict(admin_files)["index"],
+             "admin_files": admin_files}
+    return local, generated
 
 
 def validate(root: Path, folder: Path, job: dict, cfg: dict) -> dict:
     """Return stable, JSON-safe identities for the assigned, strictly clean checkout."""
     try:
-        return _validate(root, folder, job, cfg, None)
+        return _validate(root, folder, job, cfg, None)[0]
     except (OSError, ValueError, RecursionError):
         raise F.FactoryError("could not safely inspect the checkout and Git administration") from None
 
 
-def validate_parked(root: Path, folder: Path, job: dict, cfg: dict, original: dict, path: Path) -> None:
+def inspect_generated(root: Path, folder: Path, job: dict, cfg: dict) -> tuple[dict, dict]:
+    """Inspect the checkout with an opt-in inventory for reproducible Python caches."""
+    try:
+        return _validate(root, folder, job, cfg, None, allow_generated=True)
+    except (OSError, ValueError, RecursionError):
+        raise F.FactoryError("could not safely inspect generated checkout contents") from None
+
+
+def validate_parked(root: Path, folder: Path, job: dict, cfg: dict, original: dict, path: Path, *,
+                    expected_generated: dict | None = None) -> None:
     """Recheck the same registered checkout after moving it to private parking."""
     try:
-        current = _validate(root, folder, job, cfg, path)
+        if expected_generated is not None:
+            check_generated_manifest(expected_generated, job["id"], original["candidate_sha"])
+        current, generated = _validate(root, folder, job, cfg, path, allow_generated=expected_generated is not None)
     except (OSError, ValueError, RecursionError):
         raise F.FactoryError("could not safely inspect the parked checkout and Git administration") from None
     if current != {**original, "worktree": str(path)}:
         raise F.FactoryError("parked checkout identity changed during retirement")
+    if generated != expected_generated:
+        raise F.FactoryError("generated cache inventory changed during retirement")
 
 
 def _ancestor(root: Path, older: str, newer: str) -> bool:

@@ -301,6 +301,8 @@ def read_retirement(root, job_id):
     _require(isinstance(record, dict), "invalid retirement record")
     fields = {"schema_version", "job_id", "status", "candidate_sha", "evidence", "local", "merge",
               "prepared_at", "parked", "owner_confirmed_pr"}
+    if "discard_generated" in record:
+        fields.add("discard_generated")
     if record.get("status") == "retired":
         fields.add("retired_at")
     _require(fields == set(record) and type(record["schema_version"]) is int and
@@ -312,6 +314,9 @@ def read_retirement(root, job_id):
              isinstance(sha, str) and re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", sha) and
              all(isinstance(record.get(key), dict) and record[key].get("candidate_sha") == sha
                  for key in ("merge", "local", "evidence")), "invalid retirement record")
+    if "discard_generated" in record:
+        retirement_git.check_generated_manifest(record["discard_generated"], job_id, sha)
+        _require(record["discard_generated"]["entries"], "empty approved generated inventory")
     local, merge = record["local"], record["merge"]
     local_fields = {"candidate_sha", "base_sha", "repository", "admin", "worktree", "branch", "base_ref",
                     "worktree_identity", "admin_identity", "index_identity", "admin_files"}
@@ -409,6 +414,7 @@ def _complete(root, path, job, record):
 
 
 PREVIEW_SECONDS = 5
+INVENTORY_SECONDS = 30
 
 
 def _preview_git(directory, *args):
@@ -491,12 +497,56 @@ def _preview(root, job_id):
         return {**result, "status": "inconclusive", "reason": reason}
 
 
-def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
+def _inventory_generated(root, job_id):
+    # Advisory inspection is lock-free. Never use this result as a retained
+    # checkout proof: apply regenerates the inventory in its maintenance window.
+    deadline = time.monotonic() + INVENTORY_SECONDS
+    initial = _preview_snapshot(root, job_id)
+    if initial[1]["status"] != "screened locally":
+        return {"job_id": job_id, "assessment": "eligibility not evaluated", **initial[1]}
+    _require(time.monotonic() < deadline, "generated inventory exceeded its time budget")
+    folder = F.jobs_dir(root) / job_id
+    state = read_job_artifact(folder, "job.json", max_bytes=64 * 1024)
+    _require(state is not None, "cannot read bounded job state for generated inventory")
+    job = F.validate_reporting_job(json.loads(state, object_pairs_hook=_unique_fields, parse_constant=_reject_constant), job_id)
+    config = read_job_artifact(root / "factory", "config.json", max_bytes=64 * 1024)
+    _require(config is not None, "factory configuration exceeds the inventory limit or cannot be read")
+    cfg = json.loads(config, object_pairs_hook=_unique_fields, parse_constant=_reject_constant)
+    _require(isinstance(cfg, dict), "invalid factory configuration")
+    local, manifest = retirement_git.inspect_generated(root, folder, job, cfg)
+    retirement_git.check_generated_manifest(manifest, job_id, local["candidate_sha"])
+    _require(initial[1]["candidate_sha"] == local["candidate_sha"] and initial == _preview_snapshot(root, job_id)
+             and config == read_job_artifact(root / "factory", "config.json", max_bytes=64 * 1024),
+             "local state changed during generated inventory")
+    _require(time.monotonic() < deadline, "generated inventory exceeded its time budget")
+    if not manifest["entries"]:
+        return {"job_id": job_id, "status": "no generated files", "file_count": 0, "assessment": "eligibility not evaluated"}
+    return {"job_id": job_id, "status": "generated inventory", "manifest": manifest, "assessment": "eligibility not evaluated"}
+
+
+def _inspect_checkout(root, folder, job, cfg, approved_digest):
+    if approved_digest is None:
+        return retirement_git.validate(root, folder, job, cfg), None
+    local, manifest = retirement_git.inspect_generated(root, folder, job, cfg)
+    retirement_git.check_generated_manifest(manifest, job["id"], local["candidate_sha"])
+    _require(manifest["entries"] and manifest["digest"] == approved_digest,
+             "generated inventory differs from the confirmed digest or contains no bytecode")
+    return local, manifest
+
+
+def run(root, job_id, *, apply=False, recover=False, confirm_pr=None,
+        inventory_generated=False, discard_generated=None):
     """Preview by default. Recovery can finalize a completed removal, never replay one."""
     _require(F.valid_reporting_job_id(job_id), "invalid job ID")
-    _require(not (apply and recover), "apply and recovery are separate operations")
+    _require(sum(bool(mode) for mode in (apply, recover, inventory_generated)) <= 1,
+             "apply, recovery and generated inventory are separate operations")
+    _require(discard_generated is None or apply and isinstance(discard_generated, str)
+             and re.fullmatch(r"[0-9a-f]{64}", discard_generated),
+             "generated discard requires --apply and the complete inventory SHA-256")
     _require(confirm_pr is None or apply, "PR confirmation is only valid with --apply")
     _require(root.is_absolute() and root.resolve() == root, "expected canonical repository root")
+    if inventory_generated:
+        return _inventory_generated(root, job_id)
     if not apply and not recover:
         return _preview(root, job_id)
     with _locked_jobs(root, job_id) as inodes:
@@ -506,6 +556,10 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
         _worker_markers(folder)
         record = read_retirement(root, job_id)
         if record is not None:
+            approved = record.get("discard_generated")
+            if discard_generated is not None:
+                _require(approved and approved["digest"] == discard_generated,
+                         "discard digest does not match the existing retirement")
             if record["status"] == "retired":
                 _detached(root, job, record)
                 return {"job_id": job_id, "status": "already retired", "candidate_sha": record["candidate_sha"]}
@@ -519,7 +573,7 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
                     cfg = F.load_config(root)
                     _require(retired_evidence.matches_snapshot(root, folder, job, record["evidence"]),
                              "job evidence changed during retirement")
-                    retirement_git.validate_parked(root, folder, job, cfg, record["local"], parked)
+                    retirement_git.validate_parked(root, folder, job, cfg, record["local"], parked, expected_generated=approved)
                     _idle_processes(root, job, record["local"], parked=parked)
                     _git(root, "worktree", "move", "--", str(parked), str(wt))
                     F._sync_directory(wt.parent)
@@ -529,7 +583,9 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
                 # altering the tree. A partial or changed checkout stays blocked.
                 with _directory_lock(wt) as held:
                     _require(list(held) == record["local"]["worktree_identity"], "checkout identity changed")
-                    local = retirement_git.validate(root, folder, job, F.load_config(root))
+                    digest = approved["digest"] if approved else None
+                    local, restored = _inspect_checkout(root, folder, job, F.load_config(root), digest)
+                    _require(restored == approved, "generated inventory changed after retirement was prepared")
                     _require(local == record["local"] and retired_evidence.capture(root, folder, job) == record["evidence"],
                              "checkout or evidence changed after retirement was prepared")
                     _idle_processes(root, job, local)
@@ -542,7 +598,7 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
         cfg = F.load_config(root)
         wt = root / job["worktree"]
         with _directory_lock(wt) as held:
-            local = retirement_git.validate(root, folder, job, cfg)
+            local, generated = _inspect_checkout(root, folder, job, cfg, discard_generated)
             _require(tuple(local["worktree_identity"]) == held, "checkout changed after locking")
             _idle_processes(root, job, local)
             evidence = retired_evidence.capture(root, folder, job)
@@ -553,7 +609,8 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
                      "factory state changed during retirement checks")
             _worker_markers(folder)
             _require(evidence == retired_evidence.capture(root, folder, job), "job evidence changed")
-            _require(local == retirement_git.validate(root, folder, job, cfg), "Git state changed")
+            _require((local, generated) == _inspect_checkout(root, folder, job, cfg, discard_generated),
+                     "Git state or generated inventory changed")
             _idle_processes(root, job, local)
             association = merge.get("job_pr_association")
             _require(association in ("verified", "local_only"), "unknown job-to-PR association")
@@ -572,6 +629,8 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
             record = dict(schema_version=1, status="prepared", prepared_at=F.now(), job_id=job_id, parked=parked.name,
                           candidate_sha=local["candidate_sha"], local=local, merge=merge, evidence=evidence,
                           owner_confirmed_pr=confirm_pr if reasons else None)
+            if generated is not None:
+                record["discard_generated"] = generated
             _write(path, record)
             _require(read_retirement(root, job_id) == record, "prepared retirement record failed read-back")
             # Move first, without force. New writes at the public job path can
@@ -586,6 +645,6 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
             _require(inodes == _inventory(root) and job == _job_states(root, job_id) and cfg == F.load_config(root),
                      "factory changed while parking checkout; inspect prepared retirement")
             _worker_markers(folder)
-            retirement_git.validate_parked(root, folder, job, cfg, local, parked)
+            retirement_git.validate_parked(root, folder, job, cfg, local, parked, expected_generated=generated)
             _git(root, "worktree", "remove", "--", str(parked))
             return _complete(root, path, job, record)
