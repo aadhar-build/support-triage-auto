@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,10 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 import factory as F
 import worktree_retirement as retirement
+
+
+def _preview_timeout(signum, frame):
+    raise TimeoutError("local preview exceeded its time budget")
 
 
 def main():
@@ -28,14 +33,23 @@ def main():
         if key.startswith("GIT_"):
             del os.environ[key]
     os.environ.update(git_env)
+    advisory = not (args.apply or args.recover)
+    if advisory:
+        signal.signal(signal.SIGALRM, _preview_timeout)
+        signal.setitimer(signal.ITIMER_REAL, retirement.PREVIEW_SECONDS)
     try:
-        result = retirement.run(F.repo_root(), args.job, apply=args.apply, recover=args.recover,
+        root = retirement.preview_root() if advisory else F.repo_root()
+        result = retirement.run(root, args.job, apply=args.apply, recover=args.recover,
                                 confirm_pr=args.confirm_pr)
     except (F.FactoryError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
-        print(json.dumps({"job_id": args.job, "status": "blocked", "reason": str(error)}))
-        return 1
+        result = {"job_id": args.job, "status": "inconclusive" if advisory else "blocked", "reason": str(error)}
+        if advisory:
+            result["assessment"] = "eligibility not evaluated"
+    finally:
+        if advisory:
+            signal.setitimer(signal.ITIMER_REAL, 0)
     print(json.dumps(result, sort_keys=True))
-    return 0
+    return int(result["status"] in ("blocked", "inconclusive"))
 
 
 if __name__ == "__main__":

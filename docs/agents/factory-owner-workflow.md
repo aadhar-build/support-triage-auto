@@ -141,19 +141,23 @@ Open the private `index.html` in Chrome after the export succeeds. The directory
 
 ## Retire a merged job checkout
 
-Run the following preview for one job from the controller's main checkout, using the same local account as the factory. Run in the Linux host’s initial PID and user namespaces and its init mount namespace. The command requires a local filesystem, operator-controlled directories and a process mount that exposes every task. It checks extended attributes on the checkout and its Git administration files. Linux can hide protected attribute names, so the controller also needs existing visibility into the trusted attribute namespace. Reserve a maintenance window in which the controller owns all writers to this checkout, including editors, test processes and users on shared mounts. The process scans observe activity at the instant of inspection. An independent writer can start afterward. Leave the checkout in place when you cannot ensure exclusive access. Preview briefly acquires factory directory locks and reads the GitHub repository, base ref and pull request.
+Run a local preview for one job from the controller checkout. It reads that job’s state, local branch tip, linked checkout registration and a few named operation markers. It acquires zero factory locks. Active jobs can continue through admission and publication.
 
 ```bash
 factory/bin/retire-worktree "$JOB_ID"
 ```
 
-An eligible result includes the exact candidate SHA and PR number. The factory checks the assigned branch and both Git registration pointers, hashes tracked file contents, checks for ignored and untracked files, and inspects active processes, operation markers and stacked dependencies. The GitHub merge result must agree with the exact candidate and its integration into the configured base. Retain a checkout if its current verification needs the physical directory.
+A `screened locally` result shows the PR number from the job record and the local branch SHA. Eligibility is still open. A local blocker produces `blocked`. Missing, changing, oversized or ambiguous state produces `inconclusive`. Preview checks the observations twice with a 64 KiB job-state limit, a 4 KiB limit per Git registration file and a five-second screening budget.
+
+**Apply requires a factory-wide maintenance window.** Finish active workers, pause new admissions, and ensure the operator controls every writer that can reach the checkout, including editors, tests and shared mounts. Apply takes exclusive locks on the jobs directory, all registered jobs and the target checkout. The locks remain held through GitHub verification and physical checkout inspection. The process scans observe activity at each inspection. A writer outside the controller can still start afterward.
 
 ```bash
 factory/bin/retire-worktree "$JOB_ID" --apply
 ```
 
-Older jobs can lack a historical receipt linking the job to its PR. A squash or rebase can also leave equivalent changes in the merge result while dropping the original commit identity. Preview then returns `owner confirmation required` and a `confirm_pr` value. Read each reason. Check that the displayed PR belongs to this job and that its merged changes match the candidate. To accept the stated uncertainty, pass its exact `PR@SHA` value with `--apply --confirm-pr`. All other checks still apply.
+Apply rereads the job, checks stacked dependencies, retained evidence, GitHub merge provenance and the physical checkout and its Git administration. It checks for active processes, local files and extended attributes. Run it in the Linux host’s initial PID and user namespaces and its init mount namespace, with a supported local filesystem, operator-controlled directories and visibility into every process and the protected attribute namespace.
+
+For a legacy job-to-PR association or a content-equivalent rewritten merge, the first apply stops before creating a retirement journal or moving the checkout. It prints the uncertainty and the required `PR@SHA` confirmation. Review the PR, original candidate and merge result. To accept the stated uncertainty during the maintenance window, run the same apply with `--confirm-pr PR@SHA`. A confirmed apply repeats every check.
 
 Apply parks the linked checkout under a private random name in `.git/factory-retirements`, inspects it again, then asks Git to remove that single checkout. The job directory, receipts, local branch and remote refs remain available. The controller's journal records the observed merge and evidence bindings. Reporting labels these records as local history. A changed record, candidate or evidence file can invalidate that history.
 

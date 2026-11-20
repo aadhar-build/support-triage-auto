@@ -8,12 +8,14 @@ import re
 import secrets
 import stat
 import subprocess
+import time
 from contextlib import ExitStack, contextmanager
 from datetime import datetime
 from pathlib import Path
 
 import factory as F
 from evidence_adapter import _reject_constant, _unique_fields, read_reporting_job
+from guardrails import read_job_artifact
 import retired_evidence
 import retirement_git
 
@@ -406,12 +408,97 @@ def _complete(root, path, job, record):
     return {"job_id": job["id"], "status": "retired", "candidate_sha": record["candidate_sha"]}
 
 
+PREVIEW_SECONDS = 5
+
+
+def _preview_git(directory, *args):
+    result = subprocess.run(
+        ["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+         "-c", "protocol.allow=never", *args],
+        cwd=directory, env=retirement_git.git_environment(), stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        timeout=2, check=True,
+    )
+    return result.stdout.removesuffix(b"\n")
+
+
+def preview_root():
+    common = _preview_git(Path.cwd(), "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(os.fsdecode(common)).parent
+
+
+def _preview_head(root, branch):
+    raw = _preview_git(root, "rev-parse", "--verify", "--end-of-options", f"refs/heads/{branch}^{{commit}}")
+    _require(re.fullmatch(rb"(?:[a-f0-9]{40}|[a-f0-9]{64})", raw), "local candidate ref is unavailable")
+    return raw.decode("ascii")
+
+
+def _preview_snapshot(root, job_id):
+    """Observe a fixed set of small files for one job without acquiring any lock."""
+    folder = F.jobs_dir(root) / job_id
+    folder_id = _identity(folder)
+    raw = read_job_artifact(folder, "job.json", max_bytes=64 * 1024)
+    _require(raw is not None, "job state is inaccessible, unsafe, or exceeds the 64 KiB preview limit")
+    job = F.validate_reporting_job(json.loads(raw, object_pairs_hook=_unique_fields, parse_constant=_reject_constant), job_id)
+    _require(job.get("stage") in F.TRANSITIONS, "job stage is unknown")
+    if job["stage"] != "merged":
+        return (folder_id, raw), {"status": "blocked", "reason": f"job stage is {job['stage']}"}
+    branch = f"factory/{job_id}"
+    _require(job.get("branch") == branch and job.get("worktree") == f".worktrees/{job_id}",
+             "local job assignment is ambiguous")
+    _require(type(job.get("pr")) is int and job["pr"] > 0, "job lacks a valid PR")
+    if job.get("origin") == "controlled":
+        return (folder_id, raw), {"status": "blocked", "reason": "controlled job requires separate handling"}
+    if _present(_store(root) / (job_id + ".json")):
+        return (folder_id, raw), {"status": "inconclusive", "reason": "existing retirement journal requires inspection"}
+    if any(_present(folder / name) for name in (F.OPERATION, F.GATE_PENDING)):
+        return (folder_id, raw), {"status": "blocked", "reason": "job operation is active or interrupted"}
+
+    wt = root / job["worktree"]
+    wt_id = _identity(wt)
+    pointer = read_job_artifact(wt, ".git", max_bytes=4096)
+    _require(pointer and pointer.startswith(b"gitdir: "), "linked checkout pointer is unavailable")
+    admin = retirement_git._pointer(pointer.removesuffix(b"\n")[8:], wt)
+    _require(admin.parent == root / ".git/worktrees", "checkout points outside the expected Git administration")
+    _identity(admin.parent)
+    admin_id = _identity(admin)
+    back = read_job_artifact(admin, "gitdir", max_bytes=4096)
+    common = read_job_artifact(admin, "commondir", max_bytes=4096)
+    head = read_job_artifact(admin, "HEAD", max_bytes=4096)
+    _require(back and retirement_git._pointer(back.removesuffix(b"\n"), admin) == wt / ".git" and
+             common and retirement_git._pointer(common.removesuffix(b"\n"), admin) == root / ".git" and
+             head == f"ref: refs/heads/{branch}\n".encode("ascii"), "local checkout registration is ambiguous")
+    if any(_present(admin / name) for name in ("locked", "index.lock")):
+        return (folder_id, raw, wt_id, admin_id), {"status": "blocked", "reason": "local checkout has a Git lock marker"}
+    candidate = _preview_head(root, branch)
+    return (folder_id, raw, wt_id, admin_id, pointer, back, common, head), {
+        "status": "screened locally", "pr": job["pr"], "candidate_sha": candidate,
+    }
+
+
+def _preview(root, job_id):
+    result = {"job_id": job_id, "assessment": "eligibility not evaluated",
+              "deferred_checks": ["GitHub merge", "checkout contents", "evidence", "dependencies", "active processes and locks"]}
+    deadline = time.monotonic() + PREVIEW_SECONDS
+    try:
+        first = _preview_snapshot(root, job_id)
+        _require(time.monotonic() < deadline, "local preview exceeded its time budget")
+        second = _preview_snapshot(root, job_id)
+        _require(first == second, "local state changed during preview")
+        _require(time.monotonic() < deadline, "local preview exceeded its time budget")
+        return {**result, **second[1]}
+    except (F.FactoryError, OSError, ValueError, KeyError, TypeError, RecursionError, subprocess.SubprocessError) as error:
+        reason = str(error) if isinstance(error, (F.FactoryError, TimeoutError)) else "local state is unavailable or changed during preview"
+        return {**result, "status": "inconclusive", "reason": reason}
+
+
 def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
     """Preview by default. Recovery can finalize a completed removal, never replay one."""
     _require(F.valid_reporting_job_id(job_id), "invalid job ID")
     _require(not (apply and recover), "apply and recovery are separate operations")
     _require(confirm_pr is None or apply, "PR confirmation is only valid with --apply")
     _require(root.is_absolute() and root.resolve() == root, "expected canonical repository root")
+    if not apply and not recover:
+        return _preview(root, job_id)
     with _locked_jobs(root, job_id) as inodes:
         path = _store(root) / (job_id + ".json")
         folder = F.jobs_dir(root) / job_id
@@ -474,13 +561,6 @@ def run(root, job_id, *, apply=False, recover=False, confirm_pr=None):
             _require(identity in ("exact", "content_equivalent"), "unknown candidate merge identity")
             reasons = _confirmation_reasons(merge)
             expected = f"{job['pr']}@{local['candidate_sha']}"
-            if not apply:
-                result = {"job_id": job_id, "status": "eligible", "pr": job["pr"], "candidate_sha": local["candidate_sha"],
-                          "job_pr_association": association, "candidate_merge_identity": identity,
-                          "merge_commit_sha": merge["merge_commit_sha"]}
-                if reasons:
-                    result.update(status="owner confirmation required", confirmation_reasons=reasons, confirm_pr=expected)
-                return result
             if reasons:
                 _require(confirm_pr == expected, ". ".join(reasons) + f". Confirm this job with --confirm-pr {expected}")
             elif confirm_pr is not None:

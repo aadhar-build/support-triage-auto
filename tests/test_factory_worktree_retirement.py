@@ -53,7 +53,7 @@ class RetirementTransaction(FactoryCLI, unittest.TestCase):
     def test_preview_then_apply_then_retry_preserves_evidence_and_all_refs(self):
         before = self.state.read_bytes()
         refs = self.git("show-ref").stdout
-        self.assertEqual(self.retire()["status"], "eligible")
+        self.assertEqual(self.retire()["status"], "screened locally")
         self.assertFalse(self.record.parent.exists())
         self.assertTrue(self.wt.is_dir())
         self.assertEqual(self.retire(apply=True)["status"], "retired")
@@ -65,7 +65,7 @@ class RetirementTransaction(FactoryCLI, unittest.TestCase):
 
     def test_legacy_requires_exact_second_confirmation(self):
         self.merge.side_effect = lambda *args: {**self.proof(*args), "job_pr_association": "local_only"}
-        self.assertEqual(self.retire()["confirm_pr"], "2@" + self.sha)
+        self.assertNotIn("confirm_pr", self.retire())
         for token in (None, "3@" + self.sha, "2@" + self.sha[:8]):
             with self.assertRaisesRegex(R.F.FactoryError, "historical"):
                 self.retire(apply=True, confirm_pr=token)
@@ -75,11 +75,12 @@ class RetirementTransaction(FactoryCLI, unittest.TestCase):
     def test_rewritten_merge_requires_confirmation_even_with_verified_association(self):
         self.merge.side_effect = lambda *args: {**self.proof(*args), "candidate_merge_identity": "content_equivalent"}
         preview = self.retire()
-        self.assertEqual(preview["status"], "owner confirmation required")
-        self.assertIn("equivalent changes", preview["confirmation_reasons"][0])
+        self.assertEqual(preview["status"], "screened locally")
+        self.assertNotIn("confirm_pr", preview)
+        self.merge.assert_not_called()
         with self.assertRaisesRegex(R.F.FactoryError, "equivalent changes"):
             self.retire(apply=True)
-        self.assertEqual(self.retire(apply=True, confirm_pr=preview["confirm_pr"])["status"], "retired")
+        self.assertEqual(self.retire(apply=True, confirm_pr="2@" + self.sha)["status"], "retired")
 
     def test_command_line_refuses_active_job_with_foreign_git_environment(self):
         self.write_job(stage="build")
@@ -87,8 +88,25 @@ class RetirementTransaction(FactoryCLI, unittest.TestCase):
             result = self.cli("retire-worktree", *args, success=False,
                               env={**os.environ, "GIT_DIR": "/absent/foreign-repo.git"})
             self.assertEqual(result.returncode, 1)
-            self.assertEqual(json.loads(result.stdout), {"status": "blocked", "job_id": JOB_ID, "reason": "job stage is build"})
+            reply = json.loads(result.stdout)
+            self.assertEqual((reply["status"], reply["job_id"], reply["reason"]), ("blocked", JOB_ID, "job stage is build"))
         self.assertTrue(self.wt.is_dir())
+        self.assertFalse(self.record.parent.exists())
+
+    def test_command_line_previews_have_a_deadline_during_repository_discovery(self):
+        import subprocess
+        import time
+        tools = self.root / "slow-git"
+        tools.mkdir()
+        fake = tools / "git"
+        fake.write_text("#!/bin/sh\nexec sleep 60\n")
+        fake.chmod(0o700)
+        before = time.monotonic()
+        result = subprocess.run([self.factory / "bin/retire-worktree", JOB_ID], cwd=self.root, capture_output=True,
+                                env={**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"]}, timeout=8)
+        self.assertLess(time.monotonic() - before, 7)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stdout)["status"], "inconclusive")
         self.assertFalse(self.record.parent.exists())
 
     def test_dependency_and_in_progress_jobs_are_retained(self):
@@ -104,19 +122,19 @@ class RetirementTransaction(FactoryCLI, unittest.TestCase):
         self.assertTrue(self.wt.is_dir())
         self.merge.assert_not_called()
 
-    def test_worker_marker_and_contending_checkout_lock_block_preview(self):
+    def test_worker_marker_and_contending_checkout_lock_block_apply(self):
         review = self.job_dir / "round-1"
         review.mkdir()
         lock = review / "worker-reviewer-code.json.replacing"
         lock.touch()
         with self.assertRaisesRegex(R.F.FactoryError, "interrupted"):
-            self.retire()
+            self.retire(apply=True)
         lock.unlink()
         fd = os.open(self.wt, os.O_DIRECTORY)
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
             with self.assertRaises(R.F.FactoryBusy):
-                self.retire()
+                self.retire(apply=True)
         finally:
             os.close(fd)
         self.merge.assert_not_called()
