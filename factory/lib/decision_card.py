@@ -193,23 +193,29 @@ def _date(value):
     return parsed if parsed.tzinfo else None
 
 
-def _elapsed(job, events):
+def _elapsed(job, events, *, cutoff=None):
+    def visible_date(value):
+        parsed = _date(value)
+        return parsed if parsed is None or cutoff is None or parsed <= cutoff else None
+
     history = job.get("history", [])
+    if cutoff is not None:
+        history = [item for item in history if (at := _date(item.get("at"))) is None or at <= cutoff]
     context = [event["data"] for event in events if event["kind"] == "task_context"]
-    started = _date(job.get("created_at")) or next((
-        at for item in history if item.get("stage") == "intake" and (at := _date(item.get("at")))
+    started = visible_date(job.get("created_at")) or next((
+        at for item in history if item.get("stage") == "intake" and (at := visible_date(item.get("at")))
     ), None)
     start_label = "intake"
     if started is None:
         start_label = "the recorded start"
-        started = next((at for item in context if (at := _date(item.get("started_at")))), None)
+        started = next((at for item in context if (at := visible_date(item.get("started_at")))), None)
     if started is None:
         return "unknown"
 
-    ended = next((at for item in reversed(context) if (at := _date(item.get("ended_at")))), None)
+    ended = next((at for item in reversed(context) if (at := visible_date(item.get("ended_at")))), None)
     boundary = "recorded end"
     if ended is None and history and (len(history) > 1 or history[-1].get("stage") != "intake"):
-        ended = _date(history[-1].get("at"))
+        ended = visible_date(history[-1].get("at"))
         boundary = "the last recorded stage"
     if ended is None or ended < started:
         return "unknown"
@@ -234,11 +240,11 @@ def _owner_minutes(job, events, incomplete):
         and data.get("window_start") is None and data.get("window_end") is None
         for data in coverage_records
     )
+    if not effort and _valid_minutes(legacy):
+        return f"{legacy:g} minutes (legacy aggregate)"
     if measured or (complete and not effort):
         coverage = "complete coverage" if complete and len(effort) == len(measured) else "partial coverage"
         return f"{sum(measured):g} minutes recorded ({coverage})"
-    if not effort and _valid_minutes(legacy):
-        return f"{legacy:g} minutes (legacy aggregate)"
     return "unknown"
 
 
@@ -246,12 +252,27 @@ def _valid_minutes(value):
     return type(value) in {int, float} and value >= 0 and math.isfinite(value)
 
 
-def _decisions(job, events, candidate, current_round, links, incomplete):
-    owner_events = [
+def _reported_owner_decisions(events):
+    return [
         event for event in events if event["kind"] == "owner_decision"
         and event.get("source", {}).get("kind") == "owner"
         and event["data"].get("disposition") in {"accepted", "rejected", "abandoned"}
     ]
+
+
+def _technical_status(stage):
+    return {
+        "approve": "pending approver decision",
+        "merging": "controller recorded approval at the merging stage",
+        "merged": "merged in the controller history",
+        "rejected": "job rejected in the controller history",
+        "needs-human": "pending human action",
+        "recovery": "pending recovery",
+    }.get(stage, "pending")
+
+
+def _decisions(job, events, candidate, current_round, links, incomplete):
+    owner_events = _reported_owner_decisions(events)
     current = [event for event in owner_events if not event.get("candidate_sha") or (
         _candidate_status(event, candidate, current_round) is None
     )]
@@ -277,26 +298,19 @@ def _decisions(job, events, candidate, current_round, links, incomplete):
             f" for {markdown_code(event['candidate_sha'])}", event.get("evidence", []), links,
         )
 
-    stage = job.get("stage")
-    technical = {
-        "approve": "pending approver decision",
-        "merging": "controller recorded approval at the merging stage",
-        "merged": "merged in the controller history",
-        "rejected": "job rejected in the controller history",
-        "needs-human": "pending human action",
-        "recovery": "pending recovery",
-    }.get(stage, "pending")
+    technical = _technical_status(job.get("stage"))
     return [owner, f"- **Technical decision** — {technical}"], disposition
 
 
-def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_criteria, has_checks):
+def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_criteria, has_checks,
+               *, text=markdown_text, code=markdown_code):
     if stage in {"merged", "rejected"} or disposition in {"rejected", "abandoned"}:
         return "Review the recorded outcome before starting follow-up work."
     if recovery.get("owner_question"):
-        return markdown_text(recovery["owner_question"])
+        return text(recovery["owner_question"])
     for recommendation in recovery.get("recommendations", []):
         if recommendation.get("advice"):
-            return markdown_text(recommendation["advice"])
+            return text(recommendation["advice"])
     if stage in {"needs-info", "needs-input"}:
         return "Answer the outstanding intake or product question."
     if not candidate:
@@ -304,8 +318,8 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
     if blockers:
         identifier, status = next((row for row in blockers if row[1] == "fail"), blockers[0])
         if status == "fail":
-            return f"Resolve failed evidence for {markdown_code(identifier)}."
-        return f"Obtain verified current-candidate evidence for {markdown_code(identifier)}."
+            return f"Resolve failed evidence for {code(identifier)}."
+        return f"Obtain verified current-candidate evidence for {code(identifier)}."
     if not (has_criteria and has_checks):
         return "Record the agreed criteria and applicable checks for this job."
     if not has_demo:
