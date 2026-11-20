@@ -468,13 +468,14 @@ def collect_local_guardrails(root, cfg, folder, job, state, spec, events, diagno
     """Evaluate an as-of snapshot with the existing offline independent receipt adapter."""
     receipt_events, first_gate = [], None
     verifier = _installed_validator() if clean else None
-    unstable = False
+    unstable = bindings_unstable = False
     if verifier is not None:
         snapshot = _receipt_rows(verifier, folder, job, candidate, cutoff)
         repeated = _receipt_rows(verifier, folder, job, candidate, cutoff)
-        unstable = (snapshot != repeated or state != read_job_artifact(folder, "job.json")
-                    or spec != read_job_artifact(folder, "spec.md")
-                    or (candidate, clean) != _bindings(root, cfg, job, spec))
+        final_candidate, final_clean = _bindings(root, cfg, job, spec)
+        bindings_unstable = (candidate != final_candidate or state != read_job_artifact(folder, "job.json")
+                             or spec != read_job_artifact(folder, "spec.md"))
+        unstable = bindings_unstable or snapshot != repeated or clean != final_clean
         if not unstable:
             receipt_events, first_gate = repeated
     verified = {event["event_id"]: event for event in receipt_events
@@ -493,7 +494,7 @@ def collect_local_guardrails(root, cfg, folder, job, state, spec, events, diagno
 
     guardrails = evaluate_guardrails(folder, job, [*events, *receipt_events], required,
                                      {**candidate, "as_of": cutoff, "diagnostics": diagnostics, "unstable": unstable,
-                                      "verify_evidence": verify})
+                                      "bindings_unstable": bindings_unstable, "verify_evidence": verify})
     if first_gate and not any(row["id"] == _CHECKS and row["status"] == first_gate["status"]
                               for row in guardrails["requirements"]):
         first_gate = None
@@ -524,4 +525,5 @@ def reporting_record(root: Path, cfg: dict, folder: Path, *, as_of: datetime | N
     worker_receipts, worker_diagnostics = read_worker_receipts(folder, job, as_of=cutoff)
     return {"job": job, "events": events, "worker_receipts": worker_receipts,
             "worker_receipt_diagnostics": worker_diagnostics, "guardrails": guardrails, "diagnostics": guardrails["diagnostics"],
-            "url": source, "candidate_url": commit_link, "first_gate": first_gate}
+            "observation_diagnostics": diagnostics, "url": source, "candidate_url": commit_link,
+            "first_gate": first_gate}

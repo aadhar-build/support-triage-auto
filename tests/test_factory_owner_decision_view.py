@@ -79,7 +79,7 @@ class OwnerDecisionViewTests(FactoryCLI, unittest.TestCase):
         self.assertIn('href="receipt-001.json"', alpha)
         self.assertIn("(alpha)", alpha)
         self.assertIn("(zed)", zed)
-        self.assertIn('data-label="Independent verification">unknown</td>', alpha)
+        self.assertIn('data-label="Local receipt validation">unknown</td>', alpha)
         self.assertIn('href="receipt-003.json"', page)
         self.assertIn('href="gate-round-1.json"', page)
         self.assertIn("synthetic-known-limitation", page)
@@ -89,7 +89,7 @@ class OwnerDecisionViewTests(FactoryCLI, unittest.TestCase):
         self.assertIn(self.candidate, page)
         self.assertIn("Owner reported accepted", page)
         self.assertIn("Technical decision", page)
-        self.assertIn("Independent verification", page)
+        self.assertIn("<th>Local receipt validation</th>", page)
         self.assertIn("Private owner view", page)
         self.assertEqual(page.count("<h2>Next owner action</h2>"), 1)
         self.assertRegex(page, r"<h2>Next owner action</h2>\n<p>[^<]*\(zed\)")
@@ -145,7 +145,7 @@ class OwnerDecisionViewTests(FactoryCLI, unittest.TestCase):
         unmatched, = [row for row in rows if "current wording association unknown" in row]
         self.assertIn('href="receipt-002.json"', match)
         self.assertIn("spec matched", match)
-        self.assertIn('data-label="Independent verification">unknown</td>', match)
+        self.assertIn('data-label="Local receipt validation">unknown</td>', match)
         self.assertNotIn('href="receipt-001.json"', match)
         self.assertNotIn('href="receipt-003.json"', match)
         self.assertIn("spec unrecorded", unmatched)
@@ -237,20 +237,169 @@ class OwnerDecisionViewTests(FactoryCLI, unittest.TestCase):
         self.assertIn("outside a Git checkout", result.stderr)
         self.assertFalse(self.out.exists())
 
-    def test_owner_decision_follows_occurrence_and_withholds_undated_conflicts(self):
-        self.observe("owner_decision", {"disposition": "accepted"}, source="owner",
-                     occurred_at="2026-11-19T07:30:00Z")
+    def submitted_job(self):
+        def history(minute, stage):
+            return {"at": f"2026-11-19T07:{minute:02d}:00Z", "stage": stage, "note": ""}
+
+        self.write_job(stage="needs-human", origin="real", history=[
+            history(0, "intake"), history(10, "approve"), history(15, "needs-human"),
+        ])
+
+    def assert_owner_decisions(self, *, card_status, private_status, outcome, next_step=None):
+        with self.subTest(surface="Markdown card"):
+            card = self.cli("job", "card", JOB_ID).stdout
+            self.assertIn(f"**Owner decision** — {card_status}", card)
+            self.assertIn("**Technical decision** — pending human action", card)
+            self.assertNotIn("Review the recorded outcome before starting follow-up work.", card)
+            if next_step:
+                self.assertEqual(card.partition("## Next step\n\n")[2].strip(), next_step)
+        with self.subTest(surface="private HTML"):
+            self.run_private()
+            page = self.page()
+            self.assertIn(f"<dt>Owner decision</dt><dd>{private_status}", page)
+            self.assertIn("<dt>Technical decision</dt><dd>pending human action", page)
+            self.assertNotIn("Review the recorded outcome before starting follow-up work.", page)
+            if next_step:
+                self.assertIn(f"<h2>Next owner action</h2>\n<p>{next_step}</p>", page)
+        with self.subTest(surface="weekly scorecard"):
+            result = self.cli("scorecard", "--weekly", "2026-11-16", "--timezone", "UTC", "--json")
+            scorecard = json.loads(result.stdout)
+            accepted = int(outcome == "accepted")
+            self.assertEqual(scorecard["acceptance"]["rate"], {
+                "numerator": accepted, "eligible": 1, "covered": accepted, "unknown": 1 - accepted,
+                "percent": 100 if accepted else None,
+            })
+            self.assertEqual(scorecard["outcomes"], {outcome: 1})
+            if outcome == "unknown":
+                self.assertEqual(scorecard["acceptance"]["unobserved"], 1)
+
+    def test_owner_decisions_use_occurrence_and_leave_undated_reports_unresolved_until_corrected(self):
+        self.submitted_job()
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                     source="owner", occurred_at="2026-11-19T07:30:00Z")
         self.observe("owner_decision", {"disposition": "rejected"}, source="owner",
                      occurred_at="2026-11-19T07:25:00Z")
-        self.run_private()
-        self.assertIn("Owner reported accepted", self.page())
-        self.assertNotIn("Owner reported rejected", self.page())
-        self.observe("owner_decision", {"disposition": "rejected"}, source="owner")
+        self.observe("owner_decision", {"disposition": "rejected"}, source="owner", round=2)
+        self.assert_owner_decisions(card_status="accepted", private_status="Owner reported accepted",
+                                    outcome="accepted")
+
+        undated = self.observe("owner_decision", {"disposition": "rejected"}, source="owner")
         self.out = self.out.with_name("undated")
-        self.run_private()
-        self.assertIn("Current owner decision unknown · owner report dates incomplete", self.page())
-        self.assertNotIn("Owner reported accepted", self.page())
-        self.assertNotIn("Owner reported rejected", self.page())
+        self.assert_owner_decisions(card_status="current status unknown · owner report dates incomplete",
+                                    private_status="Current owner decision unknown · owner report dates incomplete",
+                                    outcome="unknown")
+
+        self.observe("owner_decision", {"disposition": "rejected"}, source="owner",
+                     occurred_at="2026-11-19T07:20:00Z", supersedes_event_id=undated["event_id"])
+        self.out = self.out.with_name("corrected")
+        self.assert_owner_decisions(card_status="accepted", private_status="Owner reported accepted",
+                                    outcome="accepted")
+
+    def test_unbound_owner_decision_cannot_decide_a_code_candidate(self):
+        self.submitted_job()
+        self.observe("owner_decision", {"disposition": "rejected"}, source="owner",
+                     occurred_at="2026-11-19T07:30:00Z", candidate_sha=None, round=None)
+        self.assert_owner_decisions(card_status="current status unknown",
+                                    private_status="Current owner decision unknown", outcome="needs-human")
+
+    def test_unreadable_correction_withholds_readable_acceptance_from_all_reports(self):
+        self.submitted_job()
+        accepted = self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                                source="owner", occurred_at="2026-11-19T07:30:00Z")
+        correction = self.observe("owner_decision", {"disposition": "rejected"},
+                                  source="owner", occurred_at="2026-11-19T07:30:00Z",
+                                  supersedes_event_id=accepted["event_id"])
+        damaged = self.job_dir / "observations" / f"{correction['event_id']}.json"
+        damaged.write_bytes(b"{")
+
+        card = self.cli("job", "card", JOB_ID).stdout
+        self.assertIn("**Owner decision** — current status unknown", card)
+        self.assertIn("Resolve the evidence collection diagnostics", card)
+        private = self.run_private(success=False)
+        self.assertNotEqual(private.returncode, 0)
+        self.assertIn("Observation coverage is incomplete", private.stderr)
+        self.assertFalse(self.out.exists())
+
+        weekly = self.cli("scorecard", "--weekly", "2026-11-16", "--timezone", "UTC", "--json")
+        scorecard = json.loads(weekly.stdout)
+        self.assertTrue(any(damaged.name in message for message in scorecard["diagnostics"][JOB_ID]))
+        self.assertEqual(scorecard["outcomes"], {"unknown": 1})
+        self.assertEqual(scorecard["acceptance"]["unobserved"], 1)
+        self.assertEqual(scorecard["acceptance"]["rate"], {
+            "numerator": 0, "eligible": 1, "covered": 0, "unknown": 1, "percent": None,
+        })
+
+    def test_job_level_owner_decision_applies_to_a_direct_non_code_job(self):
+        self.submitted_job()
+        self.git("update-ref", "-d", f"refs/heads/factory/{JOB_ID}")
+        self.observe("task_context", {"task_type": "planning", "workflow_mode": "direct"},
+                     occurred_at="2026-11-19T07:00:00Z", candidate_sha=None, round=None)
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                     source="owner", occurred_at="2026-11-19T07:30:00Z", candidate_sha=None, round=None)
+        self.assert_owner_decisions(card_status="accepted", private_status="Owner reported accepted",
+                                    outcome="accepted", next_step="Review the recorded owner acceptance and any material follow-up.")
+
+    def test_owner_decisions_outside_the_review_window_are_ineligible(self):
+        self.submitted_job()
+        for name, occurred_at in (("future", "2099-11-19T07:30:00Z"),
+                                  ("pre-submission", "2026-11-19T07:10:00Z")):
+            with self.subTest(name=name):
+                self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                             source="owner", occurred_at=occurred_at)
+                self.out = self.out.with_name(name)
+                self.assert_owner_decisions(card_status="unrecorded", private_status="Owner decision unrecorded",
+                                            outcome="needs-human")
+
+    def test_installed_merge_handoff_sets_the_review_boundary_for_all_reports(self):
+        self.write_job(stage="needs-human", origin="real", history=[
+            {"at": "2026-11-19T07:00:00Z", "stage": "intake", "note": ""},
+            {"at": "2026-11-19T07:10:00Z", "stage": "merging", "note": ""},
+            {"at": "2026-11-19T07:15:00Z", "stage": "needs-human",
+             "note": "merge requires human verification of the PR head and base"},
+        ])
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                     source="owner", occurred_at="2026-11-19T07:14:00Z")
+        self.assert_owner_decisions(card_status="unrecorded", private_status="Owner decision unrecorded",
+                                    outcome="needs-human")
+
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                     source="owner", occurred_at="2026-11-19T07:15:00Z")
+        self.out = self.out.with_name("handoff")
+        self.assert_owner_decisions(card_status="accepted", private_status="Owner reported accepted",
+                                    outcome="accepted")
+
+    def test_mismatched_spec_or_nested_candidate_cannot_establish_owner_acceptance(self):
+        self.submitted_job()
+        self.spec.write_text("## Acceptance criteria\n1. Current wording\n")
+        for name, binding in (
+            ("spec", {"spec_digest": "b" * 64}),
+            ("reference", {"evidence": [{"url": "https://example.invalid/proof", "candidate_sha": "b" * 40}]}),
+        ):
+            with self.subTest(name=name):
+                self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                             source="owner", occurred_at="2026-11-19T07:30:00Z", **binding)
+                self.out = self.out.with_name(name)
+                self.assert_owner_decisions(card_status="current status unknown",
+                                            private_status="Current owner decision unknown", outcome="needs-human")
+
+    def test_newer_unknown_owner_decision_withholds_prior_acceptance(self):
+        self.submitted_job()
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                     source="owner", occurred_at="2026-11-19T07:30:00Z")
+        self.observe("owner_decision", {}, source="owner", occurred_at="2026-11-19T07:40:00Z")
+        self.assert_owner_decisions(card_status="current status unknown",
+                                    private_status="Current owner decision unknown", outcome="unknown")
+
+    def test_direct_coding_job_still_requires_a_bound_candidate(self):
+        self.submitted_job()
+        self.git("update-ref", "-d", f"refs/heads/factory/{JOB_ID}")
+        self.observe("task_context", {"task_type": "coding", "workflow_mode": "direct"},
+                     occurred_at="2026-11-19T07:00:00Z", candidate_sha=None, round=None)
+        self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False},
+                     source="owner", occurred_at="2026-11-19T07:30:00Z", candidate_sha=None, round=None)
+        self.assert_owner_decisions(card_status="current status unknown",
+                                    private_status="Current owner decision unknown", outcome="needs-human",
+                                    next_step="Capture the exact candidate for evidence review.")
 
     def test_coverage_without_typed_effort_preserves_the_legacy_total(self):
         self.write_job(stage="needs-human", origin="real", owner_minutes=75)
@@ -269,6 +418,28 @@ class OwnerDecisionViewTests(FactoryCLI, unittest.TestCase):
         self.assertIn('href="receipt-001.json"', gate)
         self.assertIn("Native report available locally · unselected", gate)
         self.assertNotIn('href="gate-round-1.json"', gate)
+
+    def test_locally_validated_gate_pass_leaves_independent_verification_unknown(self):
+        self.write_job(stage="review", origin="real", reviewers={})
+        self.git("worktree", "add", "-q", str(self.root / ".worktrees" / JOB_ID), f"factory/{JOB_ID}")
+        spec = b"## Acceptance criteria\n1. Fixture criterion\n"
+        self.spec.write_bytes(spec)
+        gate = self.selected_gate(content=(
+            f"GATE: PASS\nCANDIDATE: {self.candidate}\nBASE: {self.candidate}\n"
+            f"SPEC-DIGEST: {hashlib.sha256(spec).hexdigest()}\n\n## Summary\nsynthetic private gate log\n"
+        ).encode("ascii"))
+
+        self.run_private("--gate", gate)
+
+        page = self.page()
+        gate_row, = [row for row in re.findall(r"<tr>(.*?)</tr>", page, re.S) if ">Round gate<" in row]
+        self.assertIn('href="gate-round-1.json"', gate_row)
+        self.assertIn('data-label="Local receipt validation">pass</td>', gate_row)
+        self.assertIn("Independent verification is unknown", page)
+        self.assertNotIn('data-label="Independent verification"', gate_row)
+        self.assertNotIn("synthetic private gate log", page)
+        manifest = json.loads((self.out / "manifest.json").read_text())
+        self.assertEqual(manifest["rows"][0]["claim_verification"], "unverified")
 
     def test_private_snapshot_revalidation_removes_output_when_spec_or_state_changes(self):
         original_spec = b"## Acceptance criteria\n1. [a] Fixture A\n"

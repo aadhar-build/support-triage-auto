@@ -6,9 +6,16 @@ import os
 import runpy
 import shutil
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from unittest.mock import patch
 
+from tests.test_factory_evidence_bundle import bundle
 from tests.test_factory_observation_integration import FactoryCLI, JOB_ID
+
+import evidence_adapter as adapter
+from decision_card import render_decision_card
+from owner_decision_view import render_owner_view
+from scorecard_report import weekly_report
 
 
 class EvidenceAdapterIntegration(FactoryCLI, unittest.TestCase):
@@ -224,6 +231,80 @@ os.execv({shutil.which('git')!r}, ['git', *sys.argv[1:]])
         unpublished = self.cli("job", "card", JOB_ID).stdout
         self.assertIn(head, unpublished)
         self.assertNotIn("/commit/", unpublished)
+
+    def test_owner_views_distinguish_changed_identity_from_receipt_churn(self):
+        self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit",
+                 "--allow-empty", "-qm", "Candidate")
+        head = self.git("rev-parse", "HEAD").stdout.strip()
+        self.git("update-ref", "refs/remotes/origin/main", head)
+        self.git("worktree", "add", "-qb", f"factory/{JOB_ID}", f".worktrees/{JOB_ID}", head)
+        history = [dict(at=f"2026-11-19T07:{index:02d}:00Z", stage=stage,
+                        note="gate passed" if stage == "review" else "")
+                   for index, stage in enumerate(("intake", "build", "gate", "review", "approve", "needs-human"))]
+        self.write_job(stage="needs-human", history=history, reviewers={})
+        spec = self.job_dir / "spec.md"
+        original = b"## Acceptance criteria\n1. Original criterion\n"
+        digest = hashlib.sha256(original).hexdigest()
+        checks = self.job_dir / "round-1" / "checks.md"
+        checks.parent.mkdir()
+        receipt = f"GATE: PASS\nCANDIDATE: {head}\nBASE: {head}\nSPEC-DIGEST: {digest}\n\n".encode()
+        self.cli("job", "observe", JOB_ID, "-", input=json.dumps(self.effort(
+            kind="owner_decision", candidate_sha=head, round=1, spec_digest=digest,
+            data={"disposition": "accepted", "material_follow_up": False},
+        )))
+        root = self.root.resolve()
+        config = adapter.F.load_config(root)
+        cutoff = datetime(2099, 11, 27, 10, tzinfo=timezone.utc)
+        read = adapter.read_job_artifact
+
+        for path, replacement, diagnostic, covered in (
+            (spec, b"## Acceptance criteria\n1. Changed criterion\n", "Candidate bindings changed", 0),
+            (checks, receipt + b"Rewritten technical receipt\n", "Technical receipt evidence changed", 1),
+        ):
+            with self.subTest(path=path.name):
+                spec.write_bytes(original)
+                checks.write_bytes(receipt)
+                mutated = False
+
+                def change_during_read(folder, name):
+                    nonlocal mutated
+                    data = read(folder, name)
+                    if name == "round-1/checks.md" and not mutated:
+                        path.write_bytes(replacement)
+                        mutated = True
+                    return data
+
+                with patch.object(adapter, "read_job_artifact", side_effect=change_during_read):
+                    record = adapter.reporting_record(root, config, self.job_dir, as_of=cutoff)
+                    self.assertTrue(mutated)
+                    spec.write_bytes(original)
+                    checks.write_bytes(receipt)
+                    mutated = False
+                    with bundle._directory(self.job_dir.resolve()) as job_fd:
+                        _, job, events, bindings, context = bundle._snapshot(
+                            root, job_fd, JOB_ID, cutoff, True, private_owner_view=True,
+                        )
+
+                self.assertTrue(mutated)
+                with self.subTest(surface="weekly scorecard"):
+                    report = weekly_report([record], date(2026, 11, 19), cutoff, "UTC", None)
+                    self.assertEqual(report["acceptance"]["rate"], {
+                        "numerator": covered, "eligible": 1, "covered": covered, "unknown": 1 - covered,
+                        "percent": 100 if covered else None,
+                    })
+                    self.assertEqual(report["outcomes"], {"accepted" if covered else "unknown": 1})
+                    self.assertTrue(any(diagnostic in message for message in report["diagnostics"][JOB_ID]))
+                with self.subTest(surface="Markdown card"):
+                    card = render_decision_card(record["job"], record["events"], record["guardrails"], {}, as_of=cutoff)
+                    verdict = "accepted" if covered else "current status unknown"
+                    self.assertIn(f"**Owner decision** — {verdict}", card)
+                    self.assertIn("Resolve the evidence collection diagnostics", card)
+                with self.subTest(surface="private HTML"):
+                    page = render_owner_view(job, list(events.values()), bindings, context, [], cutoff,
+                                             bundle.page_header("Private owner view"), bundle._binding_status).decode()
+                    verdict = "Owner reported accepted" if covered else "Current owner decision unknown"
+                    self.assertIn(f"<dt>Owner decision</dt><dd>{verdict}", page)
+                    self.assertIn("Resolve the evidence collection diagnostics", page)
 
     def test_merge_requires_separate_final_check_evidence(self):
         self.write_job(stage="merged")

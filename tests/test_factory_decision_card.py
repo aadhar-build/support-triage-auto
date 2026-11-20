@@ -141,7 +141,8 @@ class TestDecisionCard(unittest.TestCase):
         events = [
             event("demo", {"demo_id": "export-demo", "criterion_id": "export", "verdict": "pass"}, evidence=[DEMO]),
             event("limitation", {"code": "csv-only"}, evidence=[REPORT]),
-            event("owner_decision", {"disposition": "accepted", "material_follow_up": False}),
+            dict(event("owner_decision", {"disposition": "accepted", "material_follow_up": False}),
+                 occurred_at="2026-11-19T07:15:00Z"),
         ]
         card = render_decision_card(
             {"id": "012-card", "stage": "review", "owner_changes": False}, events, guardrails(), {},

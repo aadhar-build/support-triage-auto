@@ -315,8 +315,12 @@ def evaluate_guardrails(job_dir, job, events, required, candidate):
                   key=lambda e: e["event_id"])
     verifier = candidate.get("verify_evidence")
     diagnostics = list(candidate.get("diagnostics", ()))
-    if candidate.get("unstable"):
+    observation_ledger_incomplete = bool(diagnostics)
+    bindings_unstable = bool(candidate.get("bindings_unstable", candidate.get("unstable")))
+    if bindings_unstable:
         diagnostics.append("Candidate bindings changed during extraction.")
+    elif candidate.get("unstable"):
+        diagnostics.append("Technical receipt evidence changed during extraction.")
     rows = _requirements(job_dir, real, required, candidate)
     eligible = sum(r["required"] for r in rows)
     covered = sum(r["status"] in ("pass", "fail") for r in rows)
@@ -328,7 +332,8 @@ def evaluate_guardrails(job_dir, job, events, required, candidate):
                  "confirmed_effective_observed": sum(r["verified"] and r["disposition"] == "effective" for r in records),
                  "suspected": sum(r["status"] == "suspected" for r in records),
                  "effective_total": None if diagnostics else _effective_total(window, windows, records)}
-    return {"candidate": {k: candidate.get(k) for k in _BINDINGS}, "requirements": rows,
+    return {"candidate": {k: candidate.get(k) for k in _BINDINGS}, "candidate_bindings_unstable": bindings_unstable,
+            "observation_ledger_incomplete": observation_ledger_incomplete, "requirements": rows,
             "coverage": {"eligible": eligible, "covered": covered, "proven": sum(r["status"] == "pass" for r in rows),
                          "jobs_eligible": int(eligible > 0), "jobs_covered": int(eligible > 0 and covered == eligible and not diagnostics)},
             "incidents": incidents, "diagnostics": diagnostics,

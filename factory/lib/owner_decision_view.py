@@ -4,9 +4,12 @@ import re
 from collections import defaultdict
 from html import escape
 
-from decision_card import _elapsed, _next_step, _owner_minutes, _reported_owner_decisions, _technical_status
+from decision_card import _elapsed, _next_step, _owner_minutes, _technical_status
 from factory_recovery import report_recovery_summary
-from scorecard_report import instant
+from scorecard_report import (
+    latest_owner_decision, owner_decision_evidence_incomplete, owner_decision_matches, owner_decision_reports,
+    owner_disposition, submission_times, task_context,
+)
 
 
 _RECEIPT_NAME = re.compile(
@@ -57,7 +60,7 @@ def _reported(rows, native_available=None):
     return "<ul>" + "".join(dict.fromkeys(entries)) + "</ul>"
 
 
-def _independent(requirement, incomplete):
+def _local_receipt_status(requirement, incomplete):
     if incomplete or not requirement:
         return "unknown"
     results = {claim["verdict"] for claim in requirement.get("observations", ())
@@ -100,11 +103,11 @@ def _native_availability(requirement, selected):
 def _table(title, rows):
     lines = [f"<h2>{escape(title)}</h2>",
              "<table><thead><tr><th>Requirement</th><th>Source reports</th>"
-             "<th>Independent verification</th></tr></thead><tbody>"]
-    for label, reported, independent in rows:
+             "<th>Local receipt validation</th></tr></thead><tbody>"]
+    for label, reported, local_status in rows:
         lines.append(f'<tr><td data-label="Requirement">{escape(label)}</td>'
                      f'<td data-label="Source reports">{reported}</td>'
-                     f'<td data-label="Independent verification">{escape(independent)}</td></tr>')
+                     f'<td data-label="Local receipt validation">{escape(local_status)}</td></tr>')
     lines.append("</tbody></table>")
     return lines
 
@@ -118,19 +121,24 @@ def _event_binding(event, bindings, binding_status):
     return "current binding"
 
 
-def _owner_decision(events, bindings, binding_status):
-    reports = _reported_owner_decisions(events)
+def _owner_decision(job, events, bindings, cutoff, incomplete):
+    if incomplete:
+        return "Current owner decision unknown · evidence collection incomplete", None
+    context = task_context(events, cutoff)
+    submitted_at, _ = submission_times(job, context, cutoff)
+    reports = owner_decision_reports(events, cutoff, submitted_at)
     if not reports:
         return "Owner decision unrecorded", None
-    current = [event for event in reports if _event_binding(event, bindings, binding_status) == "current binding"]
+    current = [event for event in reports if owner_decision_matches(event, bindings, context)]
     if not current:
-        verdict = reports[-1]["data"]["disposition"]
+        verdict = owner_disposition(reports[-1]) or "unknown"
         return f"Current owner decision unknown · most recently received report {verdict}", None
-    if any(instant(event["occurred_at"]) is None for event in current):
+    event = latest_owner_decision(current)
+    if event is None:
         return "Current owner decision unknown · owner report dates incomplete", None
-    event = max(current, key=lambda item: (instant(item["occurred_at"]), instant(item["recorded_at"]),
-                                           item["event_id"]))
-    verdict = event["data"]["disposition"]
+    verdict = owner_disposition(event)
+    if verdict is None:
+        return "Current owner decision unknown · owner disposition unrecorded", None
     follow_up = {True: "material follow-up recorded", False: "no material follow-up"}
     summary = f"Owner reported {verdict}"
     if verdict == "accepted":
@@ -169,7 +177,8 @@ def _metric_lines(job, events, cutoff):
 def render_owner_view(job, events, bindings, context, projected_rows, cutoff, header, binding_status):
     """Render only escaped text and links to explicitly materialized receipt names."""
     guardrails = context["guardrails"]
-    incomplete = bool(guardrails.get("diagnostics"))
+    owner_incomplete = owner_decision_evidence_incomplete(guardrails)
+    incomplete = bool(guardrails.get("diagnostics")) or owner_incomplete
     verified_rows = {row["id"]: row for row in guardrails["requirements"]}
     typed = defaultdict(list)
     native = {}
@@ -185,7 +194,7 @@ def render_owner_view(job, events, bindings, context, projected_rows, cutoff, he
         label = _requirement_label(requirement)
         required = requirement.get("required", True)
         status_row = verified_rows.get(identifier)
-        independent = _independent(status_row, incomplete)
+        local_status = _local_receipt_status(status_row, incomplete)
         key = ("requirement", identifier)
         source_rows = typed.pop(key, [])
         is_criterion = identifier.startswith("criterion:")
@@ -199,9 +208,10 @@ def render_owner_view(job, events, bindings, context, projected_rows, cutoff, he
             source_rows = linked
         native_rows = [native.pop(path) for path in requirement.get("legacy_paths", ()) if path in native]
         reported = _reported(source_rows + native_rows, _native_availability(status_row, native_rows))
-        (criteria if is_criterion else checks).append((label if required else f"{label} · Optional", reported, independent))
-        if required and independent != "pass":
-            (criteria_blockers if is_criterion else checks_blockers).append((label, independent))
+        row_label = label if required else f"{label} · Optional"
+        (criteria if is_criterion else checks).append((row_label, reported, local_status))
+        if required and local_status != "pass":
+            (criteria_blockers if is_criterion else checks_blockers).append((label, local_status))
 
     for event in events:
         if event["kind"] != "demo":
@@ -224,7 +234,7 @@ def render_owner_view(job, events, bindings, context, projected_rows, cutoff, he
     additional.extend((path, _reported([row]), "unknown") for path, row in native.items())
     limitations = [(event["data"]["code"], _event_binding(event, bindings, binding_status))
                    for event in events if event["kind"] == "limitation"]
-    owner, disposition = _owner_decision(events, bindings, binding_status)
+    owner, disposition = _owner_decision(job, events, bindings, cutoff, owner_incomplete)
     recovery = report_recovery_summary({"job": job, "events": events, "guardrails": guardrails})
     stage = job.get("stage") or "unknown"
     action = ("Resolve the evidence collection diagnostics and regenerate this view before acting on the decision."
@@ -238,7 +248,9 @@ def render_owner_view(job, events, bindings, context, projected_rows, cutoff, he
              f" · Round {escape(str(bindings['round'] or 'unknown'))}<br>"
              f"Local candidate <code>{escape(bindings['candidate_sha'] or 'unknown')}</code><br>"
              f"Observation cutoff <time>{escape(cutoff.isoformat())}</time></p>",
-             "<h2>Next owner action</h2>", f"<p>{escape(action)}</p>"]
+             "<h2>Next owner action</h2>", f"<p>{escape(action)}</p>",
+             "<p>Local receipt validation uses factory-host records for the current candidate. "
+             "Independent verification is unknown because this view uses only factory-host evidence.</p>"]
     if criteria:
         lines.extend(_table("Acceptance criteria", criteria))
     else:

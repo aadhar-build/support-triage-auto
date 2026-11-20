@@ -51,7 +51,8 @@ class WeeklyScorecard(unittest.TestCase):
     def test_acceptance_uses_submissions_and_explicit_owner_decisions(self):
         accepted = record("a", events=[event("owner_decision", 1, 10, disposition="accepted",
                                              material_follow_up=False)])
-        accepted["events"][0]["candidate_sha"] = "a" * 40
+        accepted["events"][0].update(candidate_sha="a" * 40, round=1)
+        accepted["merged_round"] = 1
         pending = record("p", history=[(1, "intake"), (4, "approve"), (4, "needs-human")])
         merged = record("m", owner_changes=False)
         failed = record("f", history=[(3, "intake"), (4, "failed")])
@@ -133,12 +134,13 @@ class WeeklyScorecard(unittest.TestCase):
     def test_cohort_metrics_use_each_outcomes_eligible_population(self):
         context = event("task_context", 1, task_type="docs", task_size="small")
         accepted = event("owner_decision", 2, disposition="accepted", material_follow_up=False)
-        accepted["candidate_sha"] = "a" * 40
+        accepted.update(candidate_sha="a" * 40, round=1)
         charge = event("usage_cost", 5, cost_type="incremental_charge", unit="currency",
                        currency="USD", amount="0.00", billing_item="shared-invoice")
         known = record("known", events=[context, accepted, charge,
                        event("owner_effort", 3, activity="correction", minutes=5, rework=True),
                        event("owner_effort_coverage", 4, day=6, scope="job", complete=True)])
+        known["merged_round"] = 1
         known["guardrails"] = dict(coverage=dict(eligible=2, covered=1, proven=0), requirements=[
             dict(id="test", required=True, status="fail"), dict(id="review", required=True, status="unverified")])
         others = [record(f"other-{i}", events=[context]) for i in range(7)]
@@ -439,6 +441,23 @@ class WeeklyScorecard(unittest.TestCase):
         self.assertIsNone(report(item)["acceptance"]["rate"]["percent"])
         item["merged_round"] = 2
         self.assertEqual(report(item)["acceptance"]["rate"]["percent"], 100)
+
+    def test_merged_sha_without_a_corroborated_round_does_not_establish_owner_acceptance(self):
+        owner = event("owner_decision", 1, 6, disposition="accepted", material_follow_up=False)
+        owner["candidate_sha"] = "a" * 40
+        item = record(events=[owner])
+        self.assertEqual(report(item)["acceptance"]["rate"], dict(numerator=0, eligible=1, covered=0,
+                                                                 unknown=1, percent=None))
+
+    def test_owner_acceptance_uses_observation_diagnostics_separately_from_guard_diagnostics(self):
+        owner = event("owner_decision", 1, 6, disposition="accepted", material_follow_up=False)
+        owner.update(candidate_sha="a" * 40, round=1)
+        item = dict(record(events=[owner]), merged_round=1, observation_diagnostics=[],
+                    diagnostics=["technical receipt unavailable"],
+                    guardrails={"diagnostics": ["technical receipt unavailable"]})
+        self.assertEqual(report(item)["acceptance"]["rate"]["percent"], 100)
+        item["observation_diagnostics"].append("unreadable observation file")
+        self.assertIsNone(report(item)["acceptance"]["rate"]["percent"])
 
     def test_merge_refusal_submits_for_review_while_merge_conflict_is_a_blocker(self):
         item = record(history=[(1, "intake"), (3, "merging"), (4, "needs-human")])
