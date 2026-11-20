@@ -102,7 +102,12 @@ func chatGPTLogin(out, stderr []byte) bool {
 	return found
 }
 
-func execute(ctx context.Context, bin string, chosen selection, s snapshot, prompt string, r role) ([]byte, error) {
+type workerOutput struct {
+	artifact      []byte
+	nativeDenials *nativeDenialSummary
+}
+
+func executeWorker(ctx context.Context, bin string, chosen selection, s snapshot, prompt string, r role) (*workerOutput, error) {
 	reviewing := r.stage == "review" || r.stage == "approve"
 	tmp := filepath.Join(s.temp, "scratch")
 	if err := os.Mkdir(tmp, 0700); err != nil {
@@ -160,7 +165,11 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 		args = append(args, "-")
 	}
 	if reviewing {
-		return executeReview(ctx, bin, chosen.Harness, s, args, prompt, tmp)
+		artifact, err := executeReview(ctx, bin, chosen.Harness, s, args, prompt, tmp)
+		if err != nil {
+			return nil, err
+		}
+		return &workerOutput{artifact: artifact}, nil
 	}
 	out, _, err := runNative(ctx, bin, s.checkout, workerEnv(tmp), args, prompt)
 	var result struct {
@@ -181,13 +190,17 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 		if err != nil {
 			return nil, err
 		}
-		return content, nil
+		return &workerOutput{artifact: content}, nil
 	}
 	if decodeErr != nil || result.Type != "result" ||
 		result.Subtype != "success" || result.IsError == nil || *result.IsError {
 		return nil, fmt.Errorf("Claude did not report a successful completed result")
 	}
-	return []byte(result.Result), nil
+	completed := &workerOutput{artifact: []byte(result.Result)}
+	if r.stage == "build" {
+		completed.nativeDenials = claudeNativeDenials(out)
+	}
+	return completed, nil
 }
 
 func executeReview(ctx context.Context, bin, harness string, s snapshot, args []string, prompt, tmp string) ([]byte, error) {
