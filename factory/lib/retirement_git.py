@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import os
 import re
@@ -10,6 +11,7 @@ import subprocess
 import sys
 from contextlib import ExitStack
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
@@ -30,6 +32,8 @@ _REFLOG_IDENTITY = re.compile(rb"[^\x00\r\n]* <[^<>\x00\r\n]*> [0-9]+ [+-][0-9]{
 _FILE_MODES = {b"100644", b"100755", b"120000"}
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _FILE_FLAGS = os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW
+_DARWIN = sys.platform == "darwin"
+_XATTR_SHOWCOMPRESSION = 0x0020  # Darwin exposes otherwise hidden compression attributes.
 _PR_FIELDS = (
     "{id,number,url,html_url,state,merged,merged_at,merge_commit_sha,"
     "head:(.head|{sha,ref,repo:(.repo|{id,full_name,url})}),"
@@ -137,11 +141,71 @@ def _file_identity(info: os.stat_result) -> list[int]:
     return [info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
 
 
+@lru_cache(maxsize=1)
+def _darwin_listxattr():
+    function = ctypes.CDLL(None, use_errno=True).flistxattr
+    function.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_int]
+    function.restype = ctypes.c_ssize_t
+    return function
+
+
+def _attribute_names(descriptor: int) -> set[str]:
+    if hasattr(os, "listxattr"):
+        return set(os.listxattr(descriptor))
+    if not _DARWIN:
+        raise OSError
+    list_attributes = _darwin_listxattr()
+    size = list_attributes(descriptor, None, 0, _XATTR_SHOWCOMPRESSION)
+    if not 0 <= size <= 1024 * 1024:
+        raise OSError
+    if size == 0:
+        return set()
+    buffer = ctypes.create_string_buffer(size)
+    count = list_attributes(descriptor, buffer, size, _XATTR_SHOWCOMPRESSION)
+    raw = buffer.raw[:count]
+    if count != size or not raw.endswith(b"\0") or b"\0\0" in raw:
+        raise OSError
+    return {os.fsdecode(name) for name in raw[:-1].split(b"\0")}
+
+
+def _require_no_attributes(descriptor: int, symlink: bytes | None = None) -> None:
+    try:
+        if symlink is not None and not _DARWIN:
+            # Linux cannot list xattrs on an O_PATH symlink fd. Anchor the
+            # no-follow request to the already-open physical parent instead.
+            path = os.fsencode(f"/proc/self/fd/{descriptor}/") + symlink
+            names = set(os.listxattr(path, follow_symlinks=False))
+        else:
+            names = _attribute_names(descriptor)
+    except (OSError, AttributeError):
+        raise F.FactoryError("extended attribute inventory is unavailable") from None
+    if _DARWIN:
+        # The macOS kernel generates and protects this origin label. All
+        # other names, including arbitrary Apple-prefixed names, block removal.
+        names.discard("com.apple.provenance")
+    if names:
+        raise F.FactoryError("checkout or Git administration has local extended attributes")
+
+
+def _check_path_attributes(path: Path, flags: int, info: os.stat_result) -> None:
+    descriptor = os.open(path, flags)
+    try:
+        identity = _file_identity(info)
+        if _file_identity(os.fstat(descriptor)) != identity:
+            raise F.FactoryError("Git administration changed while checking local metadata")
+        _require_no_attributes(descriptor)
+        if _file_identity(os.fstat(descriptor)) != identity:
+            raise F.FactoryError("Git administration changed while checking local metadata")
+    finally:
+        os.close(descriptor)
+
+
 def _metadata(path: Path, limit: int = 4096) -> bytes:
     with os.fdopen(os.open(path, _FILE_FLAGS), "rb") as stream:
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > limit:
             raise F.FactoryError("unsafe linked checkout metadata")
+        _require_no_attributes(stream.fileno())
         data = stream.read(limit + 1)
         if len(data) != before.st_size or _file_identity(path.lstat()) != _file_identity(before):
             raise F.FactoryError("linked checkout metadata changed during verification")
@@ -193,12 +257,16 @@ def _check_admin(root: Path, admin: Path, branch: str, base_ref: str) -> list[in
             or any(os.path.lexists(common / name) for name in ("info/grafts", branch + ".lock", base_ref + ".lock"))):
         raise F.FactoryError("repository refs are locked or have rewritten ancestry")
     snapshot = []
-    admin_device = _directory(admin).st_dev
+    admin_info = _directory(admin)
+    admin_device = admin_info.st_dev
+    _check_path_attributes(admin, _DIR_FLAGS, admin_info)
     for name in sorted(entries):
         item = admin / name
         if name in {"refs", "logs"}:
-            if _directory(item).st_dev != admin_device:
+            directory_info = _directory(item)
+            if directory_info.st_dev != admin_device:
                 raise F.FactoryError("retirement refuses mounted Git administration paths")
+            _check_path_attributes(item, _DIR_FLAGS, directory_info)
             children = {child.name for child in item.iterdir()}
             if children - ({"HEAD"} if name == "logs" else set()):
                 raise F.FactoryError("linked checkout has additional Git administration data")
@@ -208,6 +276,7 @@ def _check_admin(root: Path, admin: Path, branch: str, base_ref: str) -> list[in
         info = item.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_dev != admin_device:
             raise F.FactoryError("linked checkout administration contains an unsafe file")
+        _check_path_attributes(item, _FILE_FLAGS, info)
         # Move legitimately rewrites the backlink, so keep its identity out
         # of the stable snapshot and verify its live contents separately.
         if name != "gitdir":
@@ -295,6 +364,16 @@ def _reject_external_filters(checkout: Path, paths: dict) -> None:
 def _blob(parent: int, name: bytes, mode: bytes, algorithm: str) -> bytes:
     before = os.stat(name, dir_fd=parent, follow_symlinks=False)
     if mode == b"120000" and stat.S_ISLNK(before.st_mode):
+        if _DARWIN:
+            descriptor = os.open(name, os.O_RDONLY | os.O_SYMLINK, dir_fd=parent)
+            try:
+                if _file_identity(os.fstat(descriptor)) != _file_identity(before):
+                    raise F.FactoryError("checkout changed while verifying tracked contents")
+                _require_no_attributes(descriptor)
+            finally:
+                os.close(descriptor)
+        else:
+            _require_no_attributes(parent, name)
         target = os.readlink(name, dir_fd=parent)
         digest = hashlib.new(algorithm, b"blob " + str(len(target)).encode("ascii") + b"\0" + target)
     elif stat.S_ISREG(before.st_mode) and mode == (b"100755" if before.st_mode & stat.S_IXUSR else b"100644"):
@@ -302,6 +381,7 @@ def _blob(parent: int, name: bytes, mode: bytes, algorithm: str) -> bytes:
         with os.fdopen(os.open(name, _FILE_FLAGS, dir_fd=parent), "rb") as stream:
             if _file_identity(os.fstat(stream.fileno())) != _file_identity(before):
                 raise F.FactoryError("checkout changed while verifying tracked contents")
+            _require_no_attributes(stream.fileno())
             while chunk := stream.read(1024 * 1024):
                 digest.update(chunk)
             if _file_identity(os.fstat(stream.fileno())) != _file_identity(before):
@@ -315,6 +395,7 @@ def _blob(parent: int, name: bytes, mode: bytes, algorithm: str) -> bytes:
 
 def _scan(directory: int, tree: dict, directories: set, algorithm: str, prefix: bytes = b"") -> None:
     before = os.fstat(directory)
+    _require_no_attributes(directory)
     with os.scandir(directory) as entries:
         for entry in entries:
             name = os.fsencode(entry.name)

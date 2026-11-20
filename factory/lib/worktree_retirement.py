@@ -205,6 +205,11 @@ def _idle_processes(root, target, local, proc=Path("/proc"), parked=None):
         for name, identity in (("pid", "pid:[4026531836]"), ("user", "user:[4026531837]")):
             _require(os.readlink(proc / process / "ns" / name) == identity,
                      "initial Linux PID and user namespaces required")
+    capabilities = re.search(rb"^CapEff:\s+([0-9a-fA-F]+)$", (proc / "self/status").read_bytes(), re.M)
+    # Linux removes trusted.* names from listxattr results without CAP_SYS_ADMIN.
+    # An apparently empty list is insufficient when that namespace is hidden.
+    _require(capabilities and int(capabilities[1], 16) & (1 << 21),
+             "cannot inventory restricted Linux extended attributes")
     _require(os.readlink(proc / "self/ns/mnt") == os.readlink(proc / "1/ns/mnt"),
              "controller must use the host init mount namespace")
     mounts = (proc / "self/mountinfo").read_bytes().splitlines()

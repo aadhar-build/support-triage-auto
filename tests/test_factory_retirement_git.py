@@ -88,6 +88,20 @@ print(json.dumps(json.loads(Path('responses.json').read_text())[args[-1]]))
     def local(self):
         return self.validate(self.root, self.folder, self.job, self.config)
 
+    def put_xattr(self, path, name, *, follow=True):
+        if hasattr(os, "setxattr"):
+            os.setxattr(path, name, b"private fixture attribute", follow_symlinks=follow)
+        else:
+            flags = [] if follow else ["-s"]
+            subprocess.run(["/usr/bin/xattr", *flags, "-w", name, "private fixture attribute", str(path)],
+                           check=True, capture_output=True)
+
+    def clear_xattr(self, path, name):
+        if hasattr(os, "removexattr"):
+            os.removexattr(path, name)
+        else:
+            subprocess.run(["/usr/bin/xattr", "-d", name, str(path)], check=True, capture_output=True)
+
     def pull(self, merged_sha, **changes):
         return {"id": 9, "number": 4, "url": self.api + "/pulls/4", "html_url": self.web + "/pull/4",
                 "state": "closed", "merged": True, "merged_at": "2026-01-01T12:00:00Z",
@@ -146,6 +160,56 @@ print(json.dumps(json.loads(Path('responses.json').read_text())[args[-1]]))
         (parked / "private-cache").mkdir()
         with self.assertRaises(FactoryError):
             self.validate_parked(self.root, self.folder, self.job, self.config, original, parked)
+
+    def test_extended_attributes_block_removal_of_clean_tracked_and_admin_paths(self):
+        (self.worktree / "nested").mkdir()
+        self.change(self.worktree, "nested/file.txt", "nested clean content")
+        self.candidate = self.git("rev-parse", "HEAD", cwd=self.worktree)
+        paths = (self.worktree, self.worktree / "code.txt", self.worktree / "nested", self.worktree / ".git",
+                 self.admin, self.admin / "index", self.admin / "logs", self.admin / "logs/HEAD")
+        for path in paths:
+            with self.subTest(path=path):
+                name = "user.retirement.private"
+                self.put_xattr(path, name)
+                try:
+                    with self.assertRaises(FactoryError) as refused:
+                        self.local()
+                    self.assertNotIn(name, str(refused.exception))
+                    self.assertNotIn("private fixture attribute", str(refused.exception))
+                finally:
+                    self.clear_xattr(path, name)
+
+    def test_symlink_metadata_is_read_without_following_the_target(self):
+        external = self.root / "external.txt"
+        external.write_text("outside checkout")
+        self.put_xattr(external, "user.retirement.unrelated")
+        link = self.worktree / "link"
+        link.symlink_to(external)
+        self.git("add", "link", cwd=self.worktree)
+        self.git("commit", "-qm", "Add tracked link", cwd=self.worktree)
+        self.candidate = self.git("rev-parse", "HEAD", cwd=self.worktree)
+        self.assertEqual(self.local()["candidate_sha"], self.candidate)
+        # Linux does not allow user.* on symlinks. Darwin supports them and
+        # must refuse even when the target itself has no effect on validation.
+        if sys.platform == "darwin":
+            self.put_xattr(link, "com.apple.quarantine", follow=False)
+            with self.assertRaises(FactoryError):
+                self.local()
+
+    def test_a_parked_checkout_with_new_extended_attributes_is_refused(self):
+        original = self.local()
+        parked = self.root / ".git/factory-retirements/fixture.checkout"
+        parked.parent.mkdir()
+        self.git("worktree", "move", str(self.worktree), str(parked))
+        self.put_xattr(parked / "code.txt", "user.retirement.after-parking")
+        with self.assertRaises(FactoryError):
+            self.validate_parked(self.root, self.folder, self.job, self.config, original, parked)
+
+    def test_unavailable_extended_attribute_inventory_is_refused_without_private_errors(self):
+        with patch("retirement_git._attribute_names", side_effect=OSError("private provider error")):
+            with self.assertRaisesRegex(FactoryError, "attribute inventory is unavailable") as refused:
+                self.local()
+        self.assertNotIn("private provider error", str(refused.exception))
 
     def test_filter_cannot_hide_modified_tracked_bytes_or_execute(self):
         self.git("config", "filter.hide.clean", "touch ../filter-executed; printf 'candidate\\n'")

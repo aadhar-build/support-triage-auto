@@ -206,7 +206,7 @@ class RetirementProcessVisibility(unittest.TestCase):
             proc = root / "proc"
             ours = proc / str(os.getpid())
             ours.mkdir(parents=True)
-            (ours / "status").write_text("PPid:\t0\n")
+            (ours / "status").write_text("PPid:\t0\nCapEff:\t00200000\n")
             (ours / "mountinfo").write_bytes(b"2 0 8:1 / / rw - ext4 root rw\n1 0 0:1 / /proc rw,relatime - proc proc rw\n")
             (proc / "self").symlink_to(ours)
             init = proc / "1"
@@ -258,6 +258,10 @@ class RetirementProcessVisibility(unittest.TestCase):
             with self.assertRaisesRegex(R.F.FactoryError, "hides"):
                 scan()
             (ours / "mountinfo").write_bytes(b"2 0 8:1 / / rw - ext4 root rw\n1 0 0:1 / /proc rw - proc proc rw\n")
+            (ours / "status").write_text("PPid:\t0\nCapEff:\t00000000\n")
+            with self.assertRaisesRegex(R.F.FactoryError, "restricted Linux extended attributes"):
+                scan()
+            (ours / "status").write_text("PPid:\t0\nCapEff:\t00200000\n")
             (ours / "ns/pid").unlink()
             (ours / "ns/pid").symlink_to("pid:[4026599999]")
             with self.assertRaisesRegex(R.F.FactoryError, "namespace"):
