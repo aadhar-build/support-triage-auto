@@ -1,0 +1,60 @@
+case ok_same
+args --conformance --brand same --rules tests/fixtures/brand_rules/rules.json --brands-dir tests/fixtures/brand_rules/brands
+exit 0
+stdout conformance: ok brand=same
+end
+case differ_version
+args --conformance --brand same --rules tests/fixtures/brand_rules/rules_other_version.json --brands-dir tests/fixtures/brand_rules/brands
+exit 1
+stdout conformance: differ brand=same keys=version
+end
+case broken
+args --conformance --brand broken --rules tests/fixtures/brand_rules/rules.json --brands-dir tests/fixtures/brand_rules/brands
+exit 2
+stderr error: <repo>/tests/fixtures/brand_rules/brands/broken/guidelines.md: rules block is not valid JSON (line 1 of the block: Expecting property name enclosed in double quotes)
+end
+case bad_name
+args --conformance --brand Bad --rules tests/fixtures/brand_rules/rules.json --brands-dir testdata/brand_rules/no-such-brands-dir
+exit 2
+stderr error: bad brand name 'Bad'; expected [a-z0-9][a-z0-9_-]{0,63}
+end
+case not_found
+args --conformance --brand gamma --rules tests/fixtures/brand_rules/rules.json --brands-dir tests/fixtures/brands
+exit 2
+stderr error: brand 'gamma' not found under <repo>/tests/fixtures/brands
+end
+case missing_rules
+args --conformance --brand same --rules testdata/brand_rules/no-such-rules.json --brands-dir tests/fixtures/brand_rules/brands
+exit 2
+stderr error: testdata/brand_rules/no-such-rules.json: cannot read rules file ([Errno 2] No such file or directory: 'testdata/brand_rules/no-such-rules.json')
+end
+case alpha_vs_pair
+args --conformance --brand alpha --rules tests/fixtures/brand_rules/rules.json --brands-dir tests/fixtures/brands
+exit 1
+stdout conformance: differ brand=alpha keys=escalate_always,public_reply_rules,repeat_contact,version
+end
+case badrule
+args --conformance --brand badrule --rules testdata/brand_rules/numeq_rules.json --brands-dir testdata/brand_rules/brands
+exit 2
+stderr error: badrule: 'public_reply_rules' is empty; at least one rule is required
+end
+case badrepeat
+args --conformance --brand badrepeat --rules testdata/brand_rules/numeq_rules.json --brands-dir testdata/brand_rules/brands
+exit 2
+stderr error: repeat_contact rule in badrepeat: 'min_conversations' must be an int of at least 2
+end
+case numeq
+args --conformance --brand numeq --rules testdata/brand_rules/numeq_rules.json --brands-dir testdata/brand_rules/brands
+exit 0
+stdout conformance: ok brand=numeq
+end
+case numdiff
+args --conformance --brand numdiff --rules testdata/brand_rules/numdiff_rules.json --brands-dir testdata/brand_rules/brands
+exit 1
+stdout conformance: differ brand=numdiff keys=meta,x
+end
+case defaults
+args --conformance
+exit 0
+stdout conformance: ok brand=amazonhelp
+end
