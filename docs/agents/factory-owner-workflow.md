@@ -138,3 +138,62 @@ Source reports show their candidate, round, base and spec bindings. A matching d
 Owner reports follow their occurrence time. If a current report has no occurrence date, the current owner decision remains unknown. A demonstration receipt records a report about the working software. Use the normal approval workflow to inspect the demonstration itself and record the owner decision.
 
 Open the private `index.html` in Chrome after the export succeeds. The directory and files use owner-only permissions. Criterion text and decision details appear in the private HTML. The manifest still contains the limited row and digest fields. Keep the whole directory local and use the sanitized export when you need outputs without the private labels.
+
+## Retire a merged job checkout
+
+Run a local preview for one job from the controller checkout. It reads that job’s state, local branch tip, linked checkout registration and a few named operation markers. It acquires zero factory locks. Active jobs can continue through admission and publication.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID"
+```
+
+A `screened locally` result shows the PR number from the job record and the local branch SHA. Eligibility is still open. A local blocker produces `blocked`. Missing, changing, oversized or ambiguous state produces `inconclusive`. Preview checks the observations twice with a 64 KiB job-state limit, a 4 KiB limit per Git registration file and a five-second screening budget.
+
+To see which local conditions warrant inspection, request a bounded explanation for that job.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --explain
+```
+
+The explanation counts observed dependency directories, build output, bytecode cache directories, other unclassified entries, and mismatches between tracked entry types and the checkout. An unclassified directory counts once. Its contents stay outside the inspection scope. The command reads the current and final gate-header slots before and after inspecting the checkout. A change between those reads produces an inconclusive result. A matching header can require checkout-dependent verification. Only the maintenance verifier can establish which technical receipts require retention.
+
+Read each count with its coverage. Truncation, unreadable paths, or changes can leave observations partial or unresolved. A zero count under incomplete coverage gives no assurance of absence. Even complete coverage applies only to the directory and header checks described here. The explanation uses no factory locks and makes no GitHub request. It reports aggregate counts, omits private filenames and receipt bodies, and has an eight-second command budget.
+
+**Apply requires a factory-wide maintenance window.** Finish active workers, pause new admissions, and ensure the operator controls every writer that can reach the checkout, including editors, tests and shared mounts. Apply takes exclusive locks on the jobs directory, all registered jobs and the target checkout. The locks remain held through GitHub verification and physical checkout inspection. The process scans observe activity at each inspection. A writer outside the controller can still start afterward.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --apply
+```
+
+Apply rereads the job, checks stacked dependencies, retained evidence, GitHub merge provenance and the physical checkout and its Git administration. It checks for active processes, local files and extended attributes. Run it in the Linux host’s initial PID and user namespaces and its init mount namespace, with a supported local filesystem, operator-controlled directories and visibility into every process and the protected attribute namespace.
+
+For a legacy job-to-PR association or a content-equivalent rewritten merge, the first apply stops before creating a retirement journal or moving the checkout. It prints the uncertainty and the required `PR@SHA` confirmation. Review the PR, original candidate and merge result. To accept the stated uncertainty during the maintenance window, run the same apply with `--confirm-pr PR@SHA`. A confirmed apply repeats every check.
+
+Apply parks the linked checkout under a private random name in `.git/factory-retirements`, inspects it again, then asks Git to remove that single checkout. The job directory, receipts, local branch and remote refs remain available. The controller's journal records the observed merge and evidence bindings. Reporting labels these records as local history. A changed record, candidate or evidence file can invalidate that history.
+
+After an interruption, inspect the job's private journal in `.git/factory-retirements` and the paths it names. Use the following command to reconcile one job.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --recover
+```
+
+Recovery restores an intact parked checkout and records cancellation, or finalizes a removal Git already completed. A partial checkout, new files, changed evidence or ambiguous registration leaves the journal available for inspection. If any process outside the controller is writing to the repository, finish that work before retirement. Each command addresses exactly one job.
+
+
+### Discard reproducible Python bytecode for one job
+
+Default retirement retains checkouts with ignored files. If a merged checkout contains CPython bytecode, run a separate local inventory. This scans one candidate and has a 30-second command budget. It leaves factory admission available while it runs.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --inventory-generated
+```
+
+Inspect the manifest before applying. It identifies the job, candidate, directories, files and SHA-256 digest. Each cache must be ignored by Git. At inspection time, the controller reproduces its complete bytes using the exact tracked source, the original filename and a compatible interpreter. For timestamp-mode caches it also checks the source checkout’s modification time. Future reproduction of those bytes also requires that filesystem timestamp. The verifier compiles source in isolation. It rejects unsupported cache formats, missing source, unsafe file metadata and extra contents. Dependency installations, distribution directories and other ignored files keep the checkout in place. A clean checkout with zero caches reports `no generated files` and supplies no discard digest. A failed or incomplete inventory supplies no approval.
+
+To authorize discarding exactly the listed bytecode in the maintenance window, use the complete digest from the reviewed manifest.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --apply --discard-generated "$MANIFEST_SHA256"
+```
+
+The discard approval is separate from any required `--confirm-pr` confirmation. Apply repeats the inventory before parking and at the private parking path immediately before removal. A changed file or directory blocks disposal. The retirement journal retains the approved manifest. Recovery can restore a fully validated parked checkout with its caches or finalize an already completed removal.

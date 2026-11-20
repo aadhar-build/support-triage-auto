@@ -126,26 +126,35 @@ def github_repo(root: Path) -> str | None:
     return public_repo(remote)
 
 
+def _base_ref(cfg: dict, job: dict) -> str | None:
+    if stacked := job.get("stacked_on_branch"):
+        return f"refs/heads/{stacked}"
+    if base := cfg.get("base_branch"):
+        return f"refs/remotes/origin/{base}"
+    return None
+
+
 def _bindings(root: Path, cfg: dict, job: dict, spec: bytes | None) -> tuple[dict, bool]:
     branch = f"factory/{job['id']}"
     sha = _commit(root, f"refs/heads/{branch}") if job.get("branch") == branch else None
-    stacked = job.get("stacked_on_branch")
-    base_branch = cfg.get("base_branch")
-    base_ref = f"refs/heads/{stacked}" if stacked else f"refs/remotes/origin/{base_branch}"
-    base = _commit(root, base_ref) if sha and (stacked or base_branch) else None
+    base_ref = _base_ref(cfg, job)
+    base = _commit(root, base_ref) if sha and base_ref else None
     round_number = job.get("round")
     bindings = dict(candidate_sha=sha, base_sha=base, spec_digest=_digest(spec) if spec is not None else None,
                     round=round_number if type(round_number) is int and round_number > 0 else None)
     # A local branch tip can be shown without its checkout. The installed receipt
     # verifier additionally requires the assigned, clean checkout at that tip.
+    return bindings, bool(all(bindings.values()) and _clean_checkout(root, job, sha))
+
+
+def _clean_checkout(root: Path, job: dict, sha: str | None) -> bool:
     worktree = root / ".worktrees" / job["id"]
-    clean = (all(bindings.values()) and job.get("worktree") == str(worktree.relative_to(root))
-             and worktree.is_dir() and not worktree.is_symlink() and not worktree.parent.is_symlink()
-             and _git(worktree, "rev-parse", "--show-toplevel") == str(worktree.resolve())
-             and _git(worktree, "symbolic-ref", "--quiet", "HEAD") == f"refs/heads/{branch}"
-             and _commit(worktree, "HEAD") == sha
-             and _git(worktree, "status", "--porcelain", "-z", "--untracked-files=all") == "")
-    return bindings, bool(clean)
+    return bool(sha and job.get("worktree") == str(worktree.relative_to(root))
+                and worktree.is_dir() and not worktree.is_symlink() and not worktree.parent.is_symlink()
+                and _git(worktree, "rev-parse", "--show-toplevel") == str(worktree.resolve())
+                and _git(worktree, "symbolic-ref", "--quiet", "HEAD") == f"refs/heads/factory/{job['id']}"
+                and _commit(worktree, "HEAD") == sha
+                and _git(worktree, "status", "--porcelain", "-z", "--untracked-files=all") == "")
 
 
 def _required(cfg: dict, job: dict, spec: bytes | None, number: int | None, cutoff: datetime, *,
@@ -495,6 +504,10 @@ def collect_local_guardrails(root, cfg, folder, job, state, spec, events, diagno
     guardrails = evaluate_guardrails(folder, job, [*events, *receipt_events], required,
                                      {**candidate, "as_of": cutoff, "diagnostics": diagnostics, "unstable": unstable,
                                       "bindings_unstable": bindings_unstable, "verify_evidence": verify})
+    from retired_evidence import reporting_history
+    retirement = reporting_history(root, folder, job, cutoff)
+    if retirement is not None:
+        guardrails["retirement"] = retirement
     if first_gate and not any(row["id"] == _CHECKS and row["status"] == first_gate["status"]
                               for row in guardrails["requirements"]):
         first_gate = None

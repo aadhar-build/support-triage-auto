@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Preview or retire one verified merged factory worktree."""
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import factory as F
+import worktree_retirement as retirement
+
+
+def _preview_timeout(signum, frame):
+    raise TimeoutError("local inspection exceeded its time budget")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("job", help="one factory job ID")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="confirm exclusive access during maintenance and remove the verified clean linked checkout")
+    mode.add_argument("--recover", action="store_true", help="reconcile an interrupted retirement without replaying removal")
+    mode.add_argument("--explain", action="store_true", help="show bounded counts of observed local blockers and unknowns")
+    mode.add_argument("--inventory-generated", action="store_true", help="inspect one checkout for reproducible Python caches")
+    parser.add_argument("--discard-generated", metavar="SHA256", help="with --apply, confirm the exact generated-file inventory")
+    parser.add_argument("--confirm-pr", metavar="PR@SHA", help="confirm the reported job-to-PR or rewritten-merge uncertainty")
+    args = parser.parse_args()
+    # Reporting helpers and repository discovery also use Git subprocesses.
+    # Pin their environment to the same local repository as the Git validator.
+    git_env = retirement.retirement_git.git_environment()
+    for key in list(os.environ):
+        if key.startswith("GIT_"):
+            del os.environ[key]
+    os.environ.update(git_env)
+    advisory = not (args.apply or args.recover)
+    if args.discard_generated is not None and not args.apply:
+        parser.error("--discard-generated requires --apply")
+    if advisory:
+        signal.signal(signal.SIGALRM, _preview_timeout)
+        timeout = retirement.PREVIEW_SECONDS
+        if args.explain:
+            timeout = retirement.EXPLAIN_SECONDS
+        if args.inventory_generated:
+            timeout = retirement.INVENTORY_SECONDS
+        signal.setitimer(signal.ITIMER_REAL, timeout)
+    try:
+        root = retirement.preview_root() if advisory else F.repo_root()
+        result = retirement.run(root, args.job, apply=args.apply, recover=args.recover,
+                                confirm_pr=args.confirm_pr, inventory_generated=args.inventory_generated,
+                                discard_generated=args.discard_generated, explain=args.explain)
+    except (F.FactoryError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        result = {"job_id": args.job, "status": "inconclusive" if advisory else "blocked", "reason": str(error)}
+        if args.explain:
+            result.update(coverage="unresolved", reason="the local advisory could not be completed")
+        if advisory:
+            result["assessment"] = "eligibility not evaluated"
+    finally:
+        if advisory:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+    print(json.dumps(result, sort_keys=True))
+    return int(result["status"] in ("blocked", "inconclusive"))
+
+
+if __name__ == "__main__":
+    sys.exit(main())
