@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Preview or retire one verified merged factory worktree."""
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+import factory as F
+import worktree_retirement as retirement
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("job", help="one factory job ID")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="confirm exclusive access during maintenance and remove the verified clean linked checkout")
+    mode.add_argument("--recover", action="store_true", help="reconcile an interrupted retirement without replaying removal")
+    parser.add_argument("--confirm-pr", metavar="PR@SHA", help="confirm the reported job-to-PR or rewritten-merge uncertainty")
+    args = parser.parse_args()
+    # Reporting helpers and repository discovery also use Git subprocesses.
+    # Pin their environment to the same local repository as the Git validator.
+    git_env = retirement.retirement_git.git_environment()
+    for key in list(os.environ):
+        if key.startswith("GIT_"):
+            del os.environ[key]
+    os.environ.update(git_env)
+    try:
+        result = retirement.run(F.repo_root(), args.job, apply=args.apply, recover=args.recover,
+                                confirm_pr=args.confirm_pr)
+    except (F.FactoryError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        print(json.dumps({"job_id": args.job, "status": "blocked", "reason": str(error)}))
+        return 1
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

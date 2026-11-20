@@ -138,3 +138,29 @@ Source reports show their candidate, round, base and spec bindings. A matching d
 Owner reports follow their occurrence time. If a current report has no occurrence date, the current owner decision remains unknown. A demonstration receipt records a report about the working software. Use the normal approval workflow to inspect the demonstration itself and record the owner decision.
 
 Open the private `index.html` in Chrome after the export succeeds. The directory and files use owner-only permissions. Criterion text and decision details appear in the private HTML. The manifest still contains the limited row and digest fields. Keep the whole directory local and use the sanitized export when you need outputs without the private labels.
+
+## Retire a merged job checkout
+
+Run the following preview for one job from the controller's main checkout, using the same local account as the factory. Run in the Linux host’s initial PID and user namespaces and its init mount namespace. The command requires a local filesystem, operator-controlled directories and a process mount that exposes every task. Reserve a maintenance window in which the controller owns all writers to this checkout, including editors, test processes and users on shared mounts. The process scans observe activity at the instant of inspection. An independent writer can start afterward. Leave the checkout in place when you cannot ensure exclusive access. Preview briefly acquires factory directory locks and reads the GitHub repository, base ref and pull request.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID"
+```
+
+An eligible result includes the exact candidate SHA and PR number. The factory checks the assigned branch and both Git registration pointers, hashes tracked file contents, checks for ignored and untracked files, and inspects active processes, operation markers and stacked dependencies. The GitHub merge result must agree with the exact candidate and its integration into the configured base. Retain a checkout if its current verification needs the physical directory.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --apply
+```
+
+Older jobs can lack a historical receipt linking the job to its PR. A squash or rebase can also leave equivalent changes in the merge result while dropping the original commit identity. Preview then returns `owner confirmation required` and a `confirm_pr` value. Read each reason. Check that the displayed PR belongs to this job and that its merged changes match the candidate. To accept the stated uncertainty, pass its exact `PR@SHA` value with `--apply --confirm-pr`. All other checks still apply.
+
+Apply parks the linked checkout under a private random name in `.git/factory-retirements`, inspects it again, then asks Git to remove that single checkout. The job directory, receipts, local branch and remote refs remain available. The controller's journal records the observed merge and evidence bindings. Reporting labels these records as local history. A changed record, candidate or evidence file can invalidate that history.
+
+After an interruption, inspect the job's private journal in `.git/factory-retirements` and the paths it names. Use the following command to reconcile one job.
+
+```bash
+factory/bin/retire-worktree "$JOB_ID" --recover
+```
+
+Recovery restores an intact parked checkout and records cancellation, or finalizes a removal Git already completed. A partial checkout, new files, changed evidence or ambiguous registration leaves the journal available for inspection. If any process outside the controller is writing to the repository, finish that work before retirement. Each command addresses exactly one job.
