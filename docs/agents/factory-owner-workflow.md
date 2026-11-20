@@ -73,7 +73,7 @@ Append `--json` for structured output. Use `--as-of` with the same UTC cutoff to
 
 ## Open weekly evidence offline
 
-Use the same week, time zone, UTC cutoff and escaped-defect window for the private scorecard and the sanitized bundle. The bundle requires an explicit cutoff. A missing time zone leaves the cohort unknown. A missing defect window leaves the escaped-defect rate unknown.
+Use the same week, time zone, UTC cutoff and escaped-defect window for the private scorecard and the sanitized bundle. Set `DEFECT_WINDOW_DAYS=7` for seven days of follow-up after each recorded delivery. The bundle requires an explicit cutoff. A missing time zone leaves the cohort unknown. A missing defect window leaves the escaped-defect rate unknown.
 
 ```bash
 factory/bin/evidence-bundle --weekly "$WEEK_START" --timezone "$REPORT_TIMEZONE" \
@@ -81,7 +81,9 @@ factory/bin/evidence-bundle --weekly "$WEEK_START" --timezone "$REPORT_TIMEZONE"
   --output "$NEW_DIRECTORY"
 ```
 
-Choose an unused physical path under an existing owner-controlled parent. Open `index.html` in Chrome after the command succeeds. The bundle includes the UTC boundaries, denominators and coverage, known owner effort and rework, cost categories, evidence gaps and the historical baseline. It uses local recorded deliveries. GitHub merge verification is unavailable offline. Controlled jobs and controlled observations are excluded from weekly measures. Unreadable and undated jobs remain visible as counts. Job aliases follow the private scorecard JSON's `active_jobs` order starting from 1. A recorded delivery missing from that list receives the next alias and flags incomplete active-job coverage. Task label groups and cost unit groups also use local numbers. Use the private scorecard with the same settings to inspect individual jobs, task labels, cost units, source records and evidence paths.
+Choose an unused physical path under an existing owner-controlled parent. Open `index.html` in Chrome after the command succeeds. The dashboard leads with recorded deliveries, owner acceptance, known owner time and escaped defects, followed by submission outcome and evidence coverage charts. An unavailable rate can still have recorded counts. Deliveries still within the follow-up window are shown separately from those that have reached its end. Expand **Report details** sections for UTC boundaries, rework, cost categories, evidence gaps and the historical baseline.
+
+The dashboard uses local recorded deliveries. GitHub merge verification is unavailable offline. Controlled jobs and controlled observations are excluded from weekly measures. Unreadable and undated jobs remain visible as counts. Job aliases follow the private scorecard JSON's `active_jobs` order starting from 1. A recorded delivery missing from that list receives the next alias and flags incomplete active-job coverage. Task label groups and cost unit groups also use local numbers. Use the private scorecard with the same settings to inspect individual jobs, task labels, cost units, source records and evidence paths.
 
 To follow particular evidence offline, add `--weekly-evidence "$JOB_ID:round-2/checks.md@$EXPECTED_SHA256"` to the command. Repeat for up to 32 supported native artifacts from active jobs in that week. A projected link opens a finite JSON verdict and its exported SHA-256 appears in the manifest. Missing, stale and withheld artifacts get a status. The bundle keeps the job ID, original path, original digest and report body in the source checkout. Selected receipts project the current local artifacts. Their presence during the reporting week or by the cutoff is unverified. A recorded delivery or evidence gap can link to a relevant selected receipt, and selection can cover only part of the week's evidence. Review job and source associations in the private scorecard.
 
