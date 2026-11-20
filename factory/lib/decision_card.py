@@ -2,12 +2,16 @@
 
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 
 from evidence_adapter import evidence_reference, has_evidence_reference, local_reference, tracker_url
 from factory import markdown_code, markdown_text
 from observations import OBSERVATION_DIRECTORY
+from scorecard_report import (
+    latest_owner_decision, owner_decision_evidence_incomplete, owner_decision_matches, owner_decision_reports,
+    owner_disposition, submission_times, task_context,
+)
 
 
 _STATUSES = {"pass", "fail", "pending", "missing", "stale", "unverified", "not_required"}
@@ -252,14 +256,6 @@ def _valid_minutes(value):
     return type(value) in {int, float} and value >= 0 and math.isfinite(value)
 
 
-def _reported_owner_decisions(events):
-    return [
-        event for event in events if event["kind"] == "owner_decision"
-        and event.get("source", {}).get("kind") == "owner"
-        and event["data"].get("disposition") in {"accepted", "rejected", "abandoned"}
-    ]
-
-
 def _technical_status(stage):
     return {
         "approve": "pending approver decision",
@@ -271,35 +267,44 @@ def _technical_status(stage):
     }.get(stage, "pending")
 
 
-def _decisions(job, events, candidate, current_round, links, incomplete):
-    owner_events = _reported_owner_decisions(events)
-    current = [event for event in owner_events if not event.get("candidate_sha") or (
-        _candidate_status(event, candidate, current_round) is None
-    )]
-    owner = "- **Owner decision** — " + ("current status unknown" if incomplete else "unrecorded")
+def _decisions(job, events, bindings, links, incomplete, as_of):
+    context = task_context(events, as_of)
+    submitted_at, _ = submission_times(job, context, as_of)
+    owner_events = owner_decision_reports(events, as_of, submitted_at)
+    current = [event for event in owner_events if owner_decision_matches(event, bindings, context)]
+    event = latest_owner_decision(current)
+    verdict = owner_disposition(event)
+    owner = "current status unknown" if incomplete else "unrecorded"
     disposition = None
-    if current:
-        event = current[-1]
-        disposition = event["data"]["disposition"]
-        if incomplete:
-            owner += f" · last readable record reported {disposition}"
-        else:
-            owner = f"- **Owner decision** — {disposition}"
-        if disposition == "accepted" and not incomplete:
+    if incomplete and current:
+        readable = current[-1]
+        if reported := owner_disposition(readable):
+            owner += f" · last readable record reported {reported}"
+        owner = _with_links(owner, readable.get("evidence", []), links)
+    elif verdict:
+        disposition = verdict
+        owner = disposition
+        if disposition == "accepted":
             follow_up = {True: "material follow-up recorded", False: "no material follow-up"}
             owner += " · " + follow_up.get(event["data"].get("material_follow_up"), "follow-up unknown")
             if not event.get("candidate_sha"):
                 owner += " · candidate unrecorded"
         owner = _with_links(owner, event.get("evidence", []), links)
+    elif current:
+        reason = "owner disposition unrecorded" if event else "owner report dates incomplete"
+        owner = f"current status unknown · {reason}"
     elif owner_events:
         event = owner_events[-1]
-        owner = _with_links(
-            owner + f" for the current candidate · older decision {event['data']['disposition']}"
-            f" for {markdown_code(event['candidate_sha'])}", event.get("evidence", []), links,
-        )
+        reported = owner_disposition(event) or "unknown"
+        owner = "current status unknown"
+        if _candidate_status(event, bindings.get("candidate_sha"), bindings.get("round")) == "stale":
+            owner += f" · older decision {reported} for {markdown_code(event['candidate_sha'])}"
+        else:
+            owner += f" · most recently received report {reported} has stale or unknown bindings"
+        owner = _with_links(owner, event.get("evidence", []), links)
 
     technical = _technical_status(job.get("stage"))
-    return [owner, f"- **Technical decision** — {technical}"], disposition
+    return [f"- **Owner decision** — {owner}", f"- **Technical decision** — {technical}"], disposition
 
 
 def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_criteria, has_checks,
@@ -314,6 +319,8 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
     if stage in {"needs-info", "needs-input"}:
         return "Answer the outstanding intake or product question."
     if not candidate:
+        if disposition == "accepted":
+            return "Review the recorded owner acceptance and any material follow-up."
         return "Capture the exact candidate for evidence review."
     if blockers:
         identifier, status = next((row for row in blockers if row[1] == "fail"), blockers[0])
@@ -330,8 +337,10 @@ def _next_step(stage, disposition, candidate, blockers, recovery, has_demo, has_
 
 
 def render_decision_card(job: dict, events: list[dict], guardrails: dict, recovery: dict, *,
-                         verified_source_url: str | None = None, verified_candidate_url: str | None = None) -> str:
+                         verified_source_url: str | None = None, verified_candidate_url: str | None = None,
+                         as_of: datetime | None = None) -> str:
     """Return a Markdown card using current observations and read-only guardrail results."""
+    cutoff = as_of or datetime.now(timezone.utc)
     events = sorted(
         (event for event in events if event.get("origin") == "real"),
         key=lambda event: event.get("recorded_at") or "",
@@ -361,7 +370,8 @@ def render_decision_card(job: dict, events: list[dict], guardrails: dict, recove
     if current_round is not None:
         details.append(f"- **Round** — {current_round}")
     diagnostics = guardrails.get("diagnostics", [])
-    incomplete = bool(diagnostics)
+    owner_incomplete = owner_decision_evidence_incomplete(guardrails, diagnostics)
+    incomplete = bool(diagnostics) or owner_incomplete
     if incomplete:
         details.append("- **Evidence collection incomplete** — The latest observations and evidence may be unavailable.")
         details.extend(f"  - {markdown_text(diagnostic)}" for diagnostic in diagnostics)
@@ -372,7 +382,8 @@ def render_decision_card(job: dict, events: list[dict], guardrails: dict, recove
     criterion_rows, criteria_blocked = _criterion_rows(criteria, events, candidate, current_round, links)
     check_rows, checks_blocked = _check_rows(checks, candidate, links)
     demo_rows, has_demo = _demo_rows(events, candidate, current_round, links, incomplete)
-    decision_rows, disposition = _decisions(job, events, candidate, current_round, links, incomplete)
+    bindings = {**(guardrails.get("candidate") or {}), "candidate_sha": candidate}
+    decision_rows, disposition = _decisions(job, events, bindings, links, owner_incomplete, cutoff)
     ledger_path = local_reference(job_id, OBSERVATION_DIRECTORY)
     metrics = "observation ledger unavailable"
     if ledger_path and events:

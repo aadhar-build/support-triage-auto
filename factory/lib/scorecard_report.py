@@ -21,6 +21,8 @@ COST_TYPES = ("subscription_usage", "subscription_charge", "incremental_charge",
 BASELINE = ("Historical v1 baseline, frozen 18 Nov 2026. Four support-triage jobs merged. "
             "Owner minutes and cost were unmeasured. The owner-reported “1 day” has unresolved "
             "unit and scope.")
+NON_CODE_TASK_TYPES = {"analysis", "design", "docs", "documentation", "non-code", "planning", "research"}
+OWNER_DISPOSITIONS = {"accepted", "rejected", "abandoned"}
 
 
 def instant(value):
@@ -55,6 +57,11 @@ def duration(start, end, unit):
     return None
 
 
+def _event_order(event):
+    recorded = instant(event.get("recorded_at")) or datetime.min.replace(tzinfo=tz.utc)
+    return instant(event.get("occurred_at")) or recorded, recorded, event.get("event_id") or ""
+
+
 def current_events(events, as_of):
     visible = {}
     for e in events:
@@ -64,8 +71,83 @@ def current_events(events, as_of):
     superseded = {e.get("supersedes_event_id") for e in visible.values()}
     return sorted((e for key, e in visible.items() if key not in superseded
                    and (instant(e.get("occurred_at")) or as_of) <= as_of),
-                  key=lambda e: (instant(e.get("occurred_at")) or instant(e["recorded_at"]),
-                                 instant(e["recorded_at"]), e["event_id"]))
+                  key=_event_order)
+
+
+def task_context(events, as_of):
+    context = {}
+    for event in sorted((e for e in events if e["kind"] == "task_context"
+                         and _visible_dates(e, as_of)), key=_event_order):
+        context.update({key: value for key, value in event["data"].items() if value is not None})
+    return context
+
+
+def _visible_dates(event, as_of):
+    return all((instant(event.get(field)) or as_of) <= as_of for field in ("occurred_at", "recorded_at"))
+
+
+def submission_times(job, context, as_of):
+    """Return the observed owner submission and the controller's ready time."""
+    submitted = instant(context.get("submitted_at"))
+    if submitted and submitted > as_of:
+        submitted = None
+    history = sorted(((when, row) for row in job.get("history", [])
+                      if (when := instant(row.get("at"))) and when <= as_of), key=lambda entry: entry[0])
+    for (_, prior), (when, row) in zip(history, history[1:]):
+        previous, stage = prior.get("stage"), row.get("stage")
+        note = str(row.get("note", ""))
+        merge_handoff = previous == "merging" and (note.startswith("auto-merge refused:")
+                                                  or note == "merge requires human verification of the PR head and base")
+        if stage == "needs-human" and (previous == "approve" or merge_handoff):
+            return submitted or when, when
+        if stage == "merged" and previous == "merging":
+            return submitted, when
+    return submitted, submitted
+
+
+def owner_decision_reports(events, as_of, submitted_at):
+    reports = []
+    for event in events:
+        if event["kind"] != "owner_decision" or event.get("source", {}).get("kind") != "owner":
+            continue
+        occurred = instant(event.get("occurred_at"))
+        if _visible_dates(event, as_of) and (occurred is None or submitted_at is None or occurred >= submitted_at):
+            reports.append(event)
+    return reports
+
+
+def owner_decision_matches(event, bindings, context):
+    """Require exact revision bindings, including any claims recorded on evidence references."""
+    candidate, round_number = bindings.get("candidate_sha"), bindings.get("round")
+    if candidate:
+        if (type(round_number) is not int or round_number < 1
+                or event.get("candidate_sha") != candidate or event.get("round") != round_number):
+            return False
+    elif context.get("workflow_mode") == "direct" and (context.get("task_type") or "").casefold() in NON_CODE_TASK_TYPES:
+        bindings = {**bindings, "round": None}
+    else:
+        return False
+    return all(record.get(key) is None or record[key] == bindings.get(key)
+               for record in (event, event["data"], *event.get("evidence", ()))
+               for key in ("candidate_sha", "round", "base_sha", "spec_digest"))
+
+
+def owner_disposition(event):
+    disposition = event["data"].get("disposition") if event else None
+    return disposition if disposition in OWNER_DISPOSITIONS else None
+
+
+def owner_decision_evidence_incomplete(guardrails, legacy_observation_diagnostics=()):
+    """Decisions depend on the observation ledger and candidate identity."""
+    return bool(guardrails.get("observation_ledger_incomplete", legacy_observation_diagnostics)
+                or guardrails.get("candidate_bindings_unstable"))
+
+
+def latest_owner_decision(reports):
+    """Select among current, eligible reports. An undated report cannot be ordered."""
+    if any(instant(event.get("occurred_at")) is None for event in reports):
+        return None
+    return max(reports, key=_event_order, default=None)
 
 
 def covers(intervals, start, end):
@@ -102,15 +184,10 @@ class Job:
         self.by_kind = defaultdict(list)
         for event in self.events:
             self.by_kind[event["kind"]].append(event)
-        self.context = {}
-        for event in self.by_kind["task_context"]:
-            self.context.update({k: v for k, v in event["data"].items() if v is not None})
+        self.context = task_context(self.by_kind["task_context"], as_of)
         history = [(instant(row.get("at")), row.get("stage")) for row in self.raw.get("history", [])]
         self.history = sorted(((when, stage) for when, stage in history if when and when <= as_of),
                               key=lambda item: item[0])
-        submission_notes = {(instant(row.get("at")), row.get("stage")) for row in self.raw.get("history", [])
-                            if str(row.get("note", "")).startswith("auto-merge refused:")
-                            or row.get("note") == "merge requires human verification of the PR head and base"}
         self.future = bool(history and all(when and when > as_of for when, _ in history))
         self.status = self.history[-1][1] if self.history else self.raw.get("stage")
         boundary = self._boundary("ended_at", as_of)
@@ -134,20 +211,11 @@ class Job:
         self.ended = self.merged or self.first(*(TERMINAL - {"merged"}))
         if self.ended is None and authoritative_merge is None:
             self.ended = boundary
-        self.submitted = self._boundary("submitted_at", as_of)
-        self.ready = None
-        for i, (when, stage) in enumerate(self.history):
-            previous = self.history[i-1][1] if i else None
-            if stage == "needs-human" and (previous == "approve" or
-                                           (previous == "merging" and (when, stage) in submission_notes)):
-                self.submitted = self.submitted or when
-                self.ready = when
-                break
-            if stage == "merged" and previous == "merging":
-                self.ready = when
-                break
-        self.ready = self.ready or self.submitted
+        self.submitted, self.ready = submission_times(self.raw, self.context, as_of)
         self.guard = record.get("guardrails") or {}
+        self.owner_decision_incomplete = owner_decision_evidence_incomplete(
+            self.guard, record.get("observation_diagnostics", self.diagnostics),
+        )
         self.guard_diagnostics = self.diagnostics + list(self.guard.get("diagnostics", []))
 
     def first(self, *stages):
@@ -282,8 +350,6 @@ def outcomes(active, p):
     states = Counter()
     eligible = known = 0
     for j in active:
-        decisions = [e for e in j.by_kind["owner_decision"] if e["source"]["kind"] == "owner"
-                     and instant(e.get("occurred_at")) and (not j.submitted or instant(e["occurred_at"]) >= j.submitted)]
         # An explicit owner verdict concerns the reviewed revision. Direct, non-code
         # tasks can have a job-level owner decision with no candidate bindings.
         candidate = j.guard.get("candidate") or {}
@@ -293,12 +359,21 @@ def outcomes(active, p):
         else:
             expected_sha = j.record.get("submitted_candidate_sha") or candidate.get("candidate_sha")
             expected_round = j.record.get("submitted_round") or candidate.get("round") or j.raw.get("round")
-        direct = j.context.get("workflow_mode") == "direct"
-        decisions = [e for e in decisions
-                     if ((expected_sha and e.get("candidate_sha") == expected_sha and expected_round == e.get("round"))
-                         or (direct and not expected_sha and e.get("candidate_sha") is None and e.get("round") is None))]
-        decision = decisions[-1]["data"] if decisions else {}
-        state = decision.get("disposition") or j.status or "unknown"
+        current_sha = candidate.get("candidate_sha")
+        current_revision = expected_sha == current_sha and (not expected_sha or expected_round == candidate.get("round"))
+        base = (j.record.get("merge_evidence") or {}).get("base_sha") if j.merged else None
+        bindings = dict(candidate_sha=expected_sha, round=expected_round,
+                        base_sha=base or (candidate.get("base_sha") if current_revision else None),
+                        spec_digest=candidate.get("spec_digest") if current_revision else None)
+        # A surviving code candidate rules out using an unbound job-level report for a missing delivery identity.
+        context = {} if current_sha and not expected_sha else j.context
+        decisions = [event for event in owner_decision_reports(j.by_kind["owner_decision"], p.as_of, j.submitted)
+                     if owner_decision_matches(event, bindings, context)]
+        selected = None if j.owner_decision_incomplete else latest_owner_decision(decisions)
+        disposition = owner_disposition(selected)
+        unresolved = j.owner_decision_incomplete or (bool(decisions) and disposition is None)
+        decision = selected["data"] if selected else {}
+        state = "unknown" if unresolved else disposition or j.status or "unknown"
         states[state] += 1
         if not j.submitted:
             if j.status in {"failed", "abandoned", "rejected"} and j.ended:
@@ -308,8 +383,9 @@ def outcomes(active, p):
         if not p.contains(j.submitted):
             continue
         eligible += 1
-        disposition = decision.get("disposition")
-        if disposition == "accepted" and isinstance(decision.get("material_follow_up"), bool):
+        if unresolved:
+            counts["unobserved"] += 1
+        elif disposition == "accepted" and isinstance(decision.get("material_follow_up"), bool):
             counts["accepted_with_follow_up" if decision["material_follow_up"] else "accepted_as_built"] += 1
             known += 1
         elif disposition in {"rejected", "abandoned"} or j.status in {"rejected", "abandoned", "failed"}:

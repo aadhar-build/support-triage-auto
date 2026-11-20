@@ -65,7 +65,7 @@ class WeeklyEvidenceTests(FactoryCLI, unittest.TestCase):
         pending_job = json.loads(self.state.read_bytes())
         pending_job.update(id=pending.name, issue=2)
         (pending / "job.json").write_text(json.dumps(pending_job))
-        context = {"submitted_at": "2026-11-19T07:30:00Z", "workflow_mode": "direct"}
+        context = {"submitted_at": "2026-11-19T07:30:00Z", "workflow_mode": "direct", "task_type": "planning"}
         self.observe("task_context", context)
         self.observe("task_context", context, job=pending.name)
         self.observe("owner_decision", {"disposition": "accepted", "material_follow_up": False})
