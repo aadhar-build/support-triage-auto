@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"debug/buildinfo"
 	"encoding/json"
 	"fmt"
+	"go/version"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -102,6 +105,60 @@ func chatGPTLogin(out, stderr []byte) bool {
 	return found
 }
 
+func pathWithin(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && filepath.IsLocal(rel)
+}
+
+func codexBuilderGoRoot(s snapshot) (string, error) {
+	hasModule := false
+	for _, name := range []string{"go.mod", filepath.Join("backend", "go.mod")} {
+		if info, err := os.Lstat(filepath.Join(s.checkout, name)); err == nil && info.Mode().IsRegular() {
+			hasModule = true
+			break
+		}
+	}
+	if !hasModule {
+		return "", nil
+	}
+
+	installError := fmt.Errorf("Codex builder requires a standalone Go installation (Go 1.26 or later) on the operator's PATH")
+	goPath, err := exec.LookPath("go")
+	if err != nil || !filepath.IsAbs(goPath) {
+		return "", installError
+	}
+	goPath, err = filepath.EvalSymlinks(goPath)
+	goBin := filepath.Dir(goPath)
+	goRoot := filepath.Dir(goBin)
+	if err != nil || filepath.Base(goPath) != "go" || filepath.Base(goBin) != "bin" ||
+		goRoot == filepath.Dir(goRoot) || strings.ContainsAny(goRoot, "*?[]") {
+		return "", installError
+	}
+	home := os.Getenv("HOME")
+	if physical, err := filepath.EvalSymlinks(home); err == nil {
+		home = physical
+	}
+	if pathWithin(goRoot, home) || pathWithin(goRoot, s.source) || pathWithin(s.source, goRoot) ||
+		pathWithin(goRoot, s.temp) || pathWithin(s.temp, goRoot) {
+		return "", installError
+	}
+	// A launcher in a shared bin directory must not grant access to its parent.
+	versionFile, err := os.Lstat(filepath.Join(goRoot, "VERSION"))
+	if err != nil || !versionFile.Mode().IsRegular() {
+		return "", installError
+	}
+	compiler, err := os.Lstat(filepath.Join(goRoot, "pkg", "tool", runtime.GOOS+"_"+runtime.GOARCH, "compile"))
+	if err != nil || !compiler.Mode().IsRegular() || compiler.Mode().Perm()&0111 == 0 {
+		return "", installError
+	}
+	// Inspect the selected executable without launching a host process from PATH.
+	info, err := buildinfo.ReadFile(goPath)
+	if err != nil || version.Compare(info.GoVersion, "go1.26.0") < 0 {
+		return "", fmt.Errorf("Codex builder requires Go 1.26 or later from the selected Go executable")
+	}
+	return goRoot, nil
+}
+
 func execute(ctx context.Context, bin string, chosen selection, s snapshot, prompt string, r role) ([]byte, error) {
 	reviewing := r.stage == "review" || r.stage == "approve"
 	tmp := filepath.Join(s.temp, "scratch")
@@ -109,6 +166,7 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 		return nil, err
 	}
 	var args []string
+	env := workerEnv(tmp)
 	output := filepath.Join(s.temp, "response.md")
 	if chosen.Harness == "codex" {
 		access := "read"
@@ -120,15 +178,28 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 		if r.stage == "build" {
 			fs += "," + strconv.Quote(tmp) + `="write",` +
 				strconv.Quote(filepath.Join(s.checkout, ".git")) + `="read"`
+			goRoot, err := codexBuilderGoRoot(s)
+			if err != nil {
+				return nil, err
+			}
+			if goRoot != "" {
+				fs += "," + strconv.Quote(goRoot) + `="read"`
+				// The original PATH may reach Go through a symlink outside the profile.
+				path := filepath.Join(goRoot, "bin") + string(os.PathListSeparator) + os.Getenv("PATH")
+				env = append(env, "PATH="+path, "GOTOOLCHAIN=local")
+			}
 		}
 		args = []string{"-a", "never", "exec", "--ignore-user-config", "--ephemeral",
 			"--model", chosen.Model, "--color", "never",
 			"-c", `model_provider="openai"`, "-c", `web_search="disabled"`,
 			"-c", `default_permissions="factory_worker"`, "-c", fs + "}",
 			"-c", "permissions.factory_worker.network.enabled=false"}
+		if r.stage == "build" || reviewing {
+			// Login startup and its saved environment can both replace the worker's PATH.
+			args = append(args, "-c", "allow_login_shell=false", "-c", "features.shell_snapshot=false")
+		}
 		if reviewing {
-			args = append(args, "--json", "-c", "allow_login_shell=false", "-c", "features.shell_snapshot=false",
-				"-c", `shell_environment_policy.inherit="none"`)
+			args = append(args, "--json", "-c", `shell_environment_policy.inherit="none"`)
 		} else {
 			args = append(args, "--output-last-message", output)
 		}
@@ -162,7 +233,7 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 	if reviewing {
 		return executeReview(ctx, bin, chosen.Harness, s, args, prompt, tmp)
 	}
-	out, _, err := runNative(ctx, bin, s.checkout, workerEnv(tmp), args, prompt)
+	out, _, err := runNative(ctx, bin, s.checkout, env, args, prompt)
 	var result struct {
 		Type    string `json:"type"`
 		Subtype string `json:"subtype"`
