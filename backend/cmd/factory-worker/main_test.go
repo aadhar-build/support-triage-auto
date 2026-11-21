@@ -310,6 +310,46 @@ func TestBuilderRejectsProtectedAndOutOfScopeChanges(t *testing.T) {
 	}
 }
 
+func TestNativeBuilderPromptAllowsHonestFocusedCheckHandoff(t *testing.T) {
+	root, job, worktree := buildFixture(t)
+	brief := filepath.Join(".claude", "agents", "builder.md")
+	write(t, filepath.Join(root, brief), read(t, filepath.Join("..", "..", "..", brief)))
+	statePath := filepath.Join(job, "job.json")
+	state := strings.Replace(read(t, statePath), `"round":1`, `"round":2`, 1)
+	write(t, statePath, state)
+	promptPath := filepath.Join(t.TempDir(), "prompt")
+	report := "## Summary\n- Changed approved.txt.\n\n## Acceptance criteria\n1. Fixture: unverified.\n\n## Commands run\n- Focused test: interrupted.\n- Full repository checks: not run.\n"
+	fakeCodexResponse(t, "cat > '"+promptPath+"'\nprintf 'candidate\\n' > approved.txt", report)
+
+	if err := run(root, []string{"001-fixture", "builder"}, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	prompt := read(t, promptPath)
+	for _, required := range []string{
+		"earlier checks and reviews if they exist",
+		"Run focused checks",
+		"wait for a terminal result",
+		"passed, failed, interrupted, or not run",
+		"Keep completed in-scope edits if only verification is blocked",
+		"The independent factory gate runs the full repository checks and must pass before promotion",
+		"Do not run git add or commit",
+		"Return the complete Markdown body of build.md",
+	} {
+		if !strings.Contains(prompt, required) {
+			t.Errorf("builder prompt is missing %q", required)
+		}
+	}
+	for _, conflicting := range []string{"bash <main checkout>/factory/checks.sh", "Commit with clear messages", "Reply with one line", "write one file in the job folder"} {
+		if strings.Contains(prompt, conflicting) {
+			t.Errorf("builder prompt still includes %q", conflicting)
+		}
+	}
+	wantFile(t, filepath.Join(worktree, "approved.txt"), "candidate\n")
+	wantFile(t, filepath.Join(job, "build.md"), report)
+	wantFile(t, statePath, state)
+	noFile(t, filepath.Join(job, "round-2", "checks.md"))
+}
+
 func TestBuilderNoChangesRecordsBoundedFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name, reasonLines, reportedReason string
