@@ -120,9 +120,21 @@ Default paths (`policies/rules.json`, `evals/thresholds.json`, `web/dist`) are
 relative to the working directory, so run from the repo root or pass `--rules`,
 `--thresholds` and `--web` explicitly. Ctrl-C stops it.
 
-The Go console has the Overview, Runs and per-run metrics pages only. The
-Python console (above) is still the one with the report, drift and policies
+The Go console has the Overview, Runs, per-run metrics and thread pages only.
+The Python console (above) is still the one with the report, drift and policies
 pages until the later port slices land.
+
+For an ok synthetic run, the console also reads `<run>/trace.jsonl` (a regular
+file only, never a link or FIFO, capped at 32 MiB) and lists its threads at
+`/runs/<name>/threads`. Each thread page opens with a handoff card, headed "Why
+it escalated" or "Routing reasons", that gives each reason code in plain words
+and names what decided: the Rules tier, Model tier or Reply agent (with its
+model id), or the Always-escalate or Repeat-contact policy. When the trace
+doesn't fit one of the router's paths, the card says the decision source could
+not be determined. A trace with any non-`synthetic` record, a malformed line
+or a duplicate thread id is not served. Gold and eval runs have no thread
+pages. The plain-language copy lives in `web/src/reason-copy.json`, and a Go
+test fails if a registry reason code has no copy.
 
 ## Data and attribution
 

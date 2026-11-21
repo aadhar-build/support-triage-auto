@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Proportion } from "./format";
-import { renderOverview, renderRunMetrics, renderRuns, renderNotFound } from "./pages";
+import {
+  renderOverview, renderRunMetrics, renderRuns, renderNotFound, renderThread, renderThreadNotFound, renderThreads,
+  type ThreadData,
+} from "./pages";
 
 const EVIL = `<img src=x onerror=alert(1)>&"'`;
 const EVIL_ESC = "&lt;img src=x onerror=alert(1)&gt;&amp;&quot;&#39;";
@@ -93,6 +96,134 @@ describe("renderRuns", () => {
     expect(html).toContain("<tr><td>run-c</td><td>gold_random</td><td>2026-10-02T00:00:00Z</td><td>no cost recorded</td><td>no (no usable metrics file)</td></tr>");
     expect(html).toContain('<tr><td>run-d</td><td colspan="4">no manifest</td></tr>');
     expect(html).not.toContain('href="/runs/run-c"');
+  });
+
+  it("links an ok synthetic run with no metrics, not a gold one", () => {
+    const html = renderRuns({ runs: [
+      { name: "syn", status: "ok", kind: "synthetic", created_at: "2026-10-03T00:00:00Z",
+        cost: { estimated_usd: null, cost_per_1000_usd: null, prices_are_placeholders: true }, has_metrics: false },
+      { name: "gold", status: "ok", kind: "gold_random", created_at: "2026-10-02T00:00:00Z",
+        cost: { estimated_usd: null, cost_per_1000_usd: null, prices_are_placeholders: true }, has_metrics: false },
+    ] });
+    expect(html).toContain("<tr><th>Run</th><th>Kind</th><th>created_at</th><th>Estimated cost</th><th>Has metrics</th></tr>");
+    expect(html).toContain('<tr><td><a href="/runs/syn">syn</a></td><td>synthetic</td><td>2026-10-03T00:00:00Z</td><td>no cost recorded</td><td>no (no usable metrics file)</td></tr>');
+    expect(html).toContain("<tr><td>gold</td><td>gold_random</td>");
+    expect(html).not.toContain('href="/runs/gold"');
+  });
+});
+
+function thread(over: Partial<ThreadData> = {}): ThreadData {
+  return {
+    name: "syn", thread_id: "7", reason_codes: ["high_risk_to_larger", "repeat_contact"], topic_id: [],
+    final: { intent: "billing", urgency: "high", action: "escalate", confidence: 0.875 },
+    decided_by: { source: "larger", model_id: "fake-larger" },
+    ...over,
+  };
+}
+
+describe("renderRunMetrics threads link", () => {
+  it("adds a Threads link only when threads are available", () => {
+    const off = renderRunMetrics({ name: "run b", status: "ok", metrics });
+    expect(renderRunMetrics({ name: "run b", status: "ok", metrics }, false)).toBe(off);
+    expect(off).not.toContain("Threads");
+    const on = renderRunMetrics({ name: "run b", status: "ok", metrics }, true);
+    expect(on).toContain('<p><a href="/runs/run%20b/threads">Threads</a></p>');
+    expect(renderRunMetrics({ name: "syn", status: "ok", metrics: null }, true))
+      .toContain('<p>syn: metrics not available (no usable metrics file).</p><p><a href="/runs/syn/threads">Threads</a></p>');
+  });
+});
+
+describe("renderThreads", () => {
+  it("unusable and empty traces", () => {
+    expect(renderThreads({ name: "syn", status: "ok", threads: null, reason: "no usable trace file" }))
+      .toContain("<p>Threads not available (no usable trace file).</p>");
+    const empty = renderThreads({ name: "syn", status: "ok", threads: [] });
+    expect(empty).toContain("<p>No threads in this trace.</p>");
+    expect(empty).not.toContain("<table>");
+  });
+
+  it("a table of linked thread ids, final action and reason copy", () => {
+    const html = renderThreads({ name: "run b", status: "ok", threads: [
+      { thread_id: "9007199254740993", action: "route", reason_codes: ["low_confidence_to_larger"] },
+      { thread_id: "2", action: "escalate", reason_codes: ["cheap_confident", "repeat_contact"] },
+    ] });
+    expect(html).toContain("<tr><th>Thread</th><th>Final action</th><th>Reasons</th></tr>");
+    expect(html).toContain('<tr><td><a href="/runs/run%20b/threads/9007199254740993">9007199254740993</a></td>' +
+      "<td>route</td><td>Low confidence sent this case to the model</td></tr>");
+    expect(html).toContain("<td>escalate</td><td>Rules tier was confident; Repeat contacts met the escalation rule</td>");
+  });
+});
+
+describe("renderThread", () => {
+  it("heading follows the final action", () => {
+    expect(renderThread(thread())).toContain('<section class="handoff"><h2>Why it escalated</h2>');
+    const routed = renderThread(thread({ final: { intent: "billing", urgency: "normal", action: "route", confidence: 0.875 } }));
+    expect(routed).toContain("<h2>Routing reasons</h2>");
+    expect(routed).not.toContain("Why it escalated");
+  });
+
+  it("one item of copy per code, and the final labels below the card", () => {
+    const html = renderThread(thread());
+    expect(html).toContain("<ul><li>High risk sent this case to the model</li><li>Repeat contacts met the escalation rule</li></ul>");
+    expect(html).toContain("<li>intent: billing</li><li>urgency: high</li><li>action: escalate</li><li>confidence: 0.875</li>");
+    expect(html.indexOf("Why it escalated")).toBeLessThan(html.indexOf("intent: billing"));
+    expect(renderThread(thread({ reason_codes: ["cheap_confident"] }))).toContain("<li>Rules tier was confident</li>");
+    expect(renderThread(thread({ reason_codes: ["low_confidence_to_larger"] })))
+      .toContain("<li>Low confidence sent this case to the model</li>");
+  });
+
+  it("topic ids next to the always-escalate reason", () => {
+    const html = renderThread(thread({ reason_codes: ["escalate_always", "repeat_contact"], topic_id: ["t-zorblax", "t-florp"],
+      decided_by: { source: "escalate_always", model_id: null } }));
+    expect(html).toContain("<li>Matched an always-escalate topic: t-zorblax, t-florp</li><li>Repeat contacts met the escalation rule</li>");
+  });
+
+  it("an unknown code falls back to the escaped raw code", () => {
+    expect(renderThread(thread({ reason_codes: ["new_code<b>"] }))).toContain("<li>new_code&lt;b&gt;</li>");
+  });
+
+  it("names the decision source, with a model id only for tiers", () => {
+    const by = (source: string, model_id: string | null) => renderThread(thread({ decided_by: { source, model_id } }));
+    expect(by("cheap", "keywords")).toContain("<p>Decided by: Rules tier (model keywords)</p>");
+    expect(by("larger", "fake-larger")).toContain("<p>Decided by: Model tier (model fake-larger)</p>");
+    expect(by("agent", "fake-agent")).toContain("<p>Decided by: Reply agent (model fake-agent)</p>");
+    expect(by("escalate_always", null)).toContain("<p>Decided by: Always-escalate policy</p>");
+    expect(by("repeat_contact", null)).toContain("<p>Decided by: Repeat-contact policy</p>");
+    expect(by("repeat_contact", "sneaky")).not.toContain("sneaky");
+  });
+
+  it("null attribution says it could not be determined", () => {
+    const html = renderThread(thread({ decided_by: null }));
+    expect(html).toContain("<p>Decided by: could not be determined from the trace.</p>");
+  });
+
+  it("404", () => {
+    expect(renderThreadNotFound()).toContain("<p>Thread not found.</p>");
+  });
+});
+
+describe("thread pages escape", () => {
+  const pages = [
+    renderThread({
+      name: EVIL, thread_id: "1", reason_codes: ["escalate_always", EVIL], topic_id: [EVIL],
+      final: { intent: EVIL, urgency: EVIL, action: EVIL, confidence: 0.5 },
+      decided_by: { source: "cheap", model_id: EVIL },
+    }),
+    renderThreads({ name: EVIL, status: "ok", threads: [{ thread_id: EVIL, action: EVIL, reason_codes: [EVIL] }] }),
+    renderThreads({ name: EVIL, status: "ok", threads: null }),
+    renderRunMetrics({ name: EVIL, status: "ok", metrics }, true),
+  ];
+
+  it("escapes run names, model ids, topic ids, labels and codes", () => {
+    for (const html of pages) {
+      expect(html).toContain(EVIL_ESC);
+      expect(html).not.toContain("<img");
+    }
+    const enc = encodeURIComponent(EVIL).replace(/'/g, "&#39;");
+    expect(pages[0]).toContain(`(model ${EVIL_ESC})`);
+    expect(pages[0]).toContain(`Matched an always-escalate topic: ${EVIL_ESC}`);
+    expect(pages[1]).toContain(`href="/runs/${enc}/threads/${enc}"`);
+    expect(pages[3]).toContain(`href="/runs/${enc}/threads"`);
   });
 });
 
