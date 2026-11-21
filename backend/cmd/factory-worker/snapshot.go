@@ -485,13 +485,21 @@ func (s snapshot) prompt(state jobState, cfg config, r role, brief string) strin
 		transport += " If you leave no candidate changes, add one line to the report in the form " + noChangeReasonPrefix + "<code>, using already-satisfied, write-denied, blocked, or unknown."
 	}
 	inputs := ""
+	body := brief + "\n\n" + transport
 	if s.reviewDir != "" {
 		inputs = fmt.Sprintf("Review diff: %s\nReview commits: %s\n",
 			filepath.Join(s.reviewDir, "candidate.diff"), filepath.Join(s.reviewDir, "commits.txt"))
-		transport += " Use the numbered read-only evidence parts listed below for AGENTS.md, the full spec, job evidence, review diff and commits. These parts replace Git commands and reads of those original files. If evidence cannot be inspected in full, report the missing evidence and return CHANGES for review or ESCALATE for approval."
+		transport = "These launcher instructions take precedence over role brief instructions about tools, evidence collection and how to return the artifact. " + transport +
+			" Use the numbered read-only evidence parts listed below for AGENTS.md, the full spec, job evidence, review diff and commits. These parts replace Git commands and reads of those original files."
+		if r.stage == "approve" {
+			transport += " Independently spot-check at least one acceptance criterion using the evidence. If evidence you need is unavailable, return ESCALATE and identify the missing evidence."
+		} else {
+			transport += " If evidence you need is unavailable, return VERDICT: CHANGES and identify the missing evidence."
+		}
+		body = transport + "\n\nUse the following role brief for review criteria and artifact structure:\n\n" + brief
 	}
-	return fmt.Sprintf("Job: %s\nJob folder: %s\nWorktree: %s\nMain checkout: %s\nBranch: %s   Base: %s   Round: %d   PR: %s\nDiff base: %s\n%s\n%s\n\n%s\n",
-		state.ID, s.job, s.checkout, s.checkout, state.Branch, cfg.BaseBranch, state.Round, pr, base, inputs, brief, transport)
+	return fmt.Sprintf("Job: %s\nJob folder: %s\nWorktree: %s\nMain checkout: %s\nBranch: %s   Base: %s   Round: %d   PR: %s\nDiff base: %s\n%s\n%s\n",
+		state.ID, s.job, s.checkout, s.checkout, state.Branch, cfg.BaseBranch, state.Round, pr, base, inputs, body)
 }
 
 func (s snapshot) prepareCandidate(ctx context.Context, root, jobDir string, spec []byte) (string, error) {

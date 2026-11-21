@@ -190,7 +190,12 @@ func reviewReadInstructions(reads []reviewRead, harness string) string {
 	if harness == "codex" {
 		out.WriteString("Run each listed command in its own tool call, with login=false, no TTY, and max_output_tokens at least 4096. For supplemental reads use only /bin/cat -- ABSOLUTE_PATH, one file per call, with max_output_tokens at least 16384.\n")
 	} else {
-		out.WriteString("Call Read with each exact absolute path. Read whole files in one call, starting at line 1 with a limit sufficient for the entire file.\n")
+		out.WriteString("For each required path, call Read with only the file_path argument, for example `{\"file_path\":\"ABSOLUTE_PATH\"}`. " +
+			"Omit offset and limit. Keep track of completed paths and continue with the next unread path in the checklist. " +
+			"Finish the required checklist before any supplemental reads. Reuse results already in the conversation. " +
+			"For any additional context you need, use the same one-call format for a tracked text file that fits in the default Read window. " +
+			"Skip files that would need pagination. Never repeat a Read.\n")
+		fmt.Fprintf(&out, "Required evidence checklist (%d paths)\n", len(reads))
 	}
 	for _, read := range reads {
 		fmt.Fprintln(&out, reviewReadKey(read.path, harness))
