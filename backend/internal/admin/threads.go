@@ -280,7 +280,7 @@ func decidedBy(th thread) any {
 	}
 	last := ss[len(want)-1]
 	switch {
-	case slices.Equal(codes, []string{c, route.RepeatContact]):
+	case slices.Equal(codes, []string{c, route.RepeatContact}):
 		if len(ss) != len(want) || action != "escalate" || urgency != "high" {
 			return nil
 		}

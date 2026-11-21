@@ -66,7 +66,7 @@ func writeSyntheticRun(t *testing.T, runs, name, body string) string {
 func fixtureServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	runs := t.TempDir()
-	writeSyntheticRun(t,runs, "syn", readFixture(t, "trace_synthetic.jsonl"))
+	writeSyntheticRun(t, runs, "syn", readFixture(t, "trace_synthetic.jsonl"))
 	return testServer(t, runsCfg(t, runs))
 }
 
@@ -152,7 +152,7 @@ func TestThreadDecidedByNull(t *testing.T) {
 	runs := t.TempDir()
 	cheap := tierRec("cheap", "keywords", "route")
 	larger := tierRec("larger", "fake-larger", "route")
-	writeSyntheticRun(t,runs, "syn", jsonl(t,
+	writeSyntheticRun(t, runs, "syn", jsonl(t,
 		traceRec(t, 20, nil),
 		traceRec(t, 21, map[string]any{"tiers": []any{tierRec("cheap", "keywords", "answer")}, "final": finalRec("answer", "normal", 0.8)}),
 		traceRec(t, 22, map[string]any{"reason_codes": []any{"low_confidence_to_larger"}, "tiers": []any{cheap, larger}, "final": finalRec("escalate", "normal", 0.8)}),
@@ -178,7 +178,7 @@ func TestThreadDecidedByNull(t *testing.T) {
 func TestThreadsRunEligibility(t *testing.T) {
 	runs := t.TempDir()
 	trace := jsonl(t, traceRec(t, 11, nil))
-	good := writeSyntheticRun(t,runs, "syn", trace)
+	good := writeSyntheticRun(t, runs, "syn", trace)
 	writeFile(t, makeRun(t, runs, "gold", manifest("gold_random", "2026-10-01T00:00:00Z", 0.12, true), nil), "trace.jsonl", trace)
 	writeFile(t, makeRun(t, runs, "broken", "{", nil), "trace.jsonl", trace)
 	writeFile(t, makeRun(t, runs, "bare", nil, nil), "trace.jsonl", trace)
@@ -222,16 +222,16 @@ func TestThreadAbsentVsRunAbsent(t *testing.T) {
 func TestThreadsUnusableTrace(t *testing.T) {
 	runs := t.TempDir()
 	good := jsonl(t, traceRec(t, 11, nil))
-	writeSyntheticRun(t,runs, "empty", "")
+	writeSyntheticRun(t, runs, "empty", "")
 	makeRun(t, runs, "missing", goodManifest(), nil)
-	writeSyntheticRun(t,runs, "malformed", good+"{\"thread_id\": 12\n")
-	writeSyntheticRun(t,runs, "not-object", good+"[1]\n")
-	writeSyntheticRun(t,runs, "blank-line", good+"\n"+jsonl(t, traceRec(t, 12, nil)))
-	writeSyntheticRun(t,runs, "bad-utf8", strings.Replace(good, "fixture-rules-v3", "fixture-\xff", 1))
-	writeSyntheticRun(t,runs, "duplicate", good+good)
-	writeSyntheticRun(t,runs, "string-id", jsonl(t, traceRec(t, "11", nil)))
-	writeSyntheticRun(t,runs, "bad-final", jsonl(t, traceRec(t, 11, map[string]any{"final": finalRec("reply", "normal", 0.8)})))
-	writeSyntheticRun(t,runs, "mixed-split", jsonl(t, traceRec(t, 424242, nil), traceRec(t, 515151, map[string]any{"split": "dev"})))
+	writeSyntheticRun(t, runs, "malformed", good+"{\"thread_id\": 12\n")
+	writeSyntheticRun(t, runs, "not-object", good+"[1]\n")
+	writeSyntheticRun(t, runs, "blank-line", good+"\n"+jsonl(t, traceRec(t, 12, nil)))
+	writeSyntheticRun(t, runs, "bad-utf8", strings.Replace(good, "fixture-rules-v3", "fixture-\xff", 1))
+	writeSyntheticRun(t, runs, "duplicate", good+good)
+	writeSyntheticRun(t, runs, "string-id", jsonl(t, traceRec(t, "11", nil)))
+	writeSyntheticRun(t, runs, "bad-final", jsonl(t, traceRec(t, 11, map[string]any{"final": finalRec("reply", "normal", 0.8)})))
+	writeSyntheticRun(t, runs, "mixed-split", jsonl(t, traceRec(t, 424242, nil), traceRec(t, 515151, map[string]any{"split": "dev"})))
 	elsewhere := writeFile(t, t.TempDir(), "trace.jsonl", good)
 	if err := os.Symlink(elsewhere, filepath.Join(makeRun(t, runs, "symlink", goodManifest(), nil), "trace.jsonl")); err != nil {
 		t.Fatal(err)
@@ -265,8 +265,8 @@ func TestThreadsUnusableTrace(t *testing.T) {
 		t.Cleanup(func() { traceMaxBytes = old })
 		traceMaxBytes = int64(len(good))
 		runs := t.TempDir()
-		writeSyntheticRun(t,runs, "at-cap", good)
-		writeSyntheticRun(t,runs, "over-cap", strings.TrimSuffix(good, "\n")+" \n")
+		writeSyntheticRun(t, runs, "at-cap", good)
+		writeSyntheticRun(t, runs, "over-cap", strings.TrimSuffix(good, "\n")+" \n")
 		srv := testServer(t, runsCfg(t, runs))
 		if r := get(t, srv, "/api/runs/at-cap/threads/11"); r.status != 200 {
 			t.Errorf("at cap: %d %s", r.status, r.body)
@@ -282,7 +282,7 @@ func TestThreadsUnusableTrace(t *testing.T) {
 
 func TestThreadIDAbove2p53(t *testing.T) {
 	runs := t.TempDir()
-	writeSyntheticRun(t,runs, "big", jsonl(t, traceRec(t, uint64(9007199254740993), map[string]any{
+	writeSyntheticRun(t, runs, "big", jsonl(t, traceRec(t, uint64(9007199254740993), map[string]any{
 		"reason_codes": []any{"low_confidence_to_larger"},
 		"tiers":        []any{tierRec("cheap", "keywords", "route"), tierRec("larger", "fake-larger", "route")},
 		"final":        finalRec("route", "normal", 0.875),
@@ -317,7 +317,7 @@ func TestThreadIDAbove2p53(t *testing.T) {
 
 func TestThreadsGuards(t *testing.T) {
 	runs := t.TempDir()
-	writeSyntheticRun(t,runs, "syn", jsonl(t, traceRec(t, 1, nil)))
+	writeSyntheticRun(t, runs, "syn", jsonl(t, traceRec(t, 1, nil)))
 	srv := testServer(t, runsCfg(t, runs))
 	for _, p := range []string{"/api/runs/syn/threads", "/api/runs/syn/threads/1"} {
 		if r := get(t, srv, p); r.status != 200 {
