@@ -116,7 +116,7 @@ func TestClaudeBuilderCanRecoverFromOptionalToolDenial(t *testing.T) {
 		t.Fatal(err)
 	}
 	content, err := execute(context.Background(), bin, selection{Harness: "claude", Model: "fixture"},
-		snapshot{temp: t.TempDir(), checkout: checkout}, "fixture", roles["builder"])
+		snapshot{temp: t.TempDir(), checkout: checkout, job: filepath.Join(checkout, ".factory-job-123")}, "fixture", roles["builder"])
 	if err != nil {
 		t.Fatal(err)
 	}

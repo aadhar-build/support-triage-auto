@@ -9,6 +9,9 @@ Checks, in order: protected paths untouched, every change inside the spec's
 worktree (so a branch can't edit the checks it is judged by).
 Writes round-<n>/checks.md (or final-checks.md) and prints a PASS or FAIL status.
 When retries run out, the status is followed by a recovery question.
+For a review blocked by terminal controls in an old receipt, run
+job re-review <job-id>, then gate <job-id>. The new round rechecks the same
+candidate and keeps the earlier round's receipt intact.
 A surviving .gate-publication.pending means publication was interrupted. Inspect
 the job and receipt before removing it: discard the receipt if the job is still
 in gate, or verify the committed transition and receipt if it has moved on.
@@ -19,6 +22,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import os
+import re
 import subprocess
 import sys
 from contextlib import nullcontext
@@ -30,6 +34,9 @@ import factory as F  # noqa: E402
 from factory_recovery import recovery_transition_output  # noqa: E402
 
 LOG_TAIL = 120
+LOG_BYTES = 32 * 1024
+OMITTED = "[Earlier checks.sh output omitted. The first shown line may be partial.]"
+SGR = re.compile(r"\x1b\[[0-9;:]*m")
 
 
 def resolve_commit(wt: Path, ref: str) -> str:
@@ -56,6 +63,62 @@ def changed_paths(wt: Path, base: str, candidate: str) -> list[str]:
 
 def display_path(path: str) -> str:
     return path if path.isprintable() else repr(path)
+
+
+def display_log_char(char: str) -> str:
+    if "\udc80" <= char <= "\udcff":  # An invalid UTF-8 byte.
+        return f"\\x{ord(char) - 0xdc00:02x}"
+    if char == "\\":
+        return "\\\\"
+    if char == "\t" or char.isprintable():
+        return char
+    if "\x80" <= char <= "\xff":
+        # Distinguish a valid UTF-8 control from a single invalid byte.
+        return f"\\u{ord(char):04x}"
+    return ascii(char)[1:-1]
+
+
+def checks_excerpt(stdout: bytes, stderr: bytes) -> list[str]:
+    # Bound the raw input before decoding, stripping styles or expanding escapes.
+    omitted = len(stdout) + len(stderr) > LOG_BYTES
+    stderr_tail = stderr[-LOG_BYTES:]
+    room = LOG_BYTES - len(stderr_tail)
+    stdout_tail = stdout[-room:] if room else b""
+    tail = []
+    for stream in (stdout_tail, stderr_tail):
+        if stream:
+            # Only LF/CRLF end a line. A bare CR and any fragment at the
+            # boundary between the two streams must remain visible.
+            data = stream.replace(b"\r\n", b"\n").removesuffix(b"\n")
+            tail.extend(data.rsplit(b"\n", LOG_TAIL))
+
+    # Work backwards so the newest diagnostics survive both byte and line
+    # limits. Budget for complete escape tokens, indentation and newlines.
+    omitted |= len(tail) > LOG_TAIL
+    room = LOG_BYTES - len(OMITTED) - 2
+    shown = []
+    for raw in reversed(tail[-LOG_TAIL:]):
+        if room < 5:
+            omitted = True
+            break
+        room -= 5
+        line = []
+        clipped_line = False
+        for char in reversed(SGR.sub("", raw.decode("utf-8", errors="surrogateescape"))):
+            token = display_log_char(char)
+            size = len(token.encode("utf-8"))
+            if size > room:
+                clipped_line = True
+                omitted = True
+                break
+            line.append(token)
+            room -= size
+        # Four spaces keep a child-supplied Markdown fence inside the log.
+        shown.append("    " + "".join(reversed(line)))
+        if clipped_line:
+            break
+    shown.reverse()
+    return [OMITTED, "", *shown] if omitted else shown
 
 
 def main(argv: list[str]) -> int:
@@ -126,10 +189,9 @@ def main(argv: list[str]) -> int:
         checks = root / "factory" / "checks.sh"
         # The checks child retains the lock if this gate process dies first.
         # The lock lasts until every copy of its descriptor is closed.
-        res = subprocess.run(["bash", str(checks)], cwd=str(wt), capture_output=True, text=True,
+        res = subprocess.run(["bash", str(checks)], cwd=str(wt), capture_output=True,
                              pass_fds=(gate_fd,),
                              timeout=cfg.get("checks_timeout_s", 1200))
-        log = (res.stdout + res.stderr).splitlines()
         if res.returncode != 0:
             problems.append(f"checks.sh exited {res.returncode}")
 
@@ -140,7 +202,9 @@ def main(argv: list[str]) -> int:
         lines += [f"- {p}" for p in problems] or ["- Protected paths untouched, scope respected, checks passed."]
         lines += [f"- {len(changed)} file(s) changed", "", "## Changed files", ""]
         lines += [f"- {display_path(c)}" for c in changed] or ["- (none)"]
-        lines += ["", f"## checks.sh output (last {LOG_TAIL} lines)", "", "```"] + log[-LOG_TAIL:] + ["```", ""]
+        lines += ["", f"## checks.sh output (last {LOG_TAIL} lines)", "",
+                  "ANSI styling omitted. Tabs are retained. Other nonprinting characters and literal backslashes are escaped.", ""]
+        lines += checks_excerpt(res.stdout, res.stderr) + [""]
 
         # Reserve the job only for final validation and publication. Keep the
         # job mutex short while Git checks refs and status. A child final gate

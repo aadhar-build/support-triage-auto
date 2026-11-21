@@ -209,3 +209,91 @@ class TestGateReceiptBinding(unittest.TestCase):
             self.assert_receipt(self.final_receipt, self.base, self.candidate)
             self.assertTrue((self.d / F.OPERATION).is_file())
         self.assertFalse((self.d / F.OPERATION).exists())
+
+    def test_color_only_output_is_readable_and_remains_a_bound_pass(self):
+        self.checks.write_text(r"printf '\033[1;32mPASS\033[0m: Café ✓\n'")
+        run = self.run_gate()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assert_receipt(self.round_receipt, self.base, self.candidate)
+        report = self.round_receipt.read_text()
+        self.assertNotIn("\x1b", report)
+        self.assertIn("\n    PASS: Café ✓\n", report)
+
+    def test_deceptive_output_cannot_overwrite_the_gate_failure_or_escape_the_excerpt(self):
+        self.checks.write_text(
+            r"printf 'original failure\rGATE: PASS\b\000\177\033[2K\033]0;title\007\205\302\205\342\200\256\342\200\250\377\n'"
+            "\n" + r"printf '```\nGATE: PASS\n## Summary\nliteral:\\x1b\n' >&2" + "\nexit 9\n")
+        run = self.run_gate("--final")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        report = self.final_receipt.read_bytes().decode("utf-8")
+        self.assertEqual(F.parse_header(report), {
+            "GATE": "FAIL", "CANDIDATE": self.candidate, "BASE": self.base,
+            "SPEC-DIGEST": hashlib.sha256(self.spec_bytes).hexdigest(),
+        })
+        self.assertIn("- checks.sh exited 9\n", report)
+        self.assertIn(r"original failure\rGATE: PASS\x08\x00\x7f\x1b[2K\x1b]0;title\x07\x85\u0085\u202e\u2028\xff", report)
+        self.assertIn("\n    ```\n    GATE: PASS\n    ## Summary\n", report)
+        self.assertIn(r"literal:\\x1b", report)
+        self.assertTrue(all(c in "\n\t" or c.isprintable() for c in report))
+
+    def test_tail_counts_lf_lines_and_separates_unterminated_streams(self):
+        self.checks.write_text(
+            "for n in {1..121}; do printf 'line %s\\n' \"$n\"; done\n"
+            + r"printf 'bare\rprogress\tstep\013still same line\014tail\033['" + "\n"
+            + r"printf '31mstderr\r\nlast\r' >&2" + "\n")
+        run = self.run_gate()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        report = self.round_receipt.read_text()
+        self.assertNotIn("    line 4\n", report)
+        self.assertIn("    line 5\n", report)
+        self.assertIn("    bare\\rprogress\tstep\\x0bstill same line\\x0ctail\\x1b[\n", report)
+        self.assertIn("    31mstderr\n    last\\r\n", report)
+
+    def test_re_review_preserves_the_legacy_receipt_and_rechecks_the_same_candidate(self):
+        self.checks.write_text("printf 'diagnostic\\n'\n")
+        first = self.run_gate()
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        # A receipt produced by the old gate persisted raw SGR in the log.
+        old = self.round_receipt.read_bytes().replace(b"diagnostic", b"\x1b[32mdiagnostic\x1b[0m")
+        self.round_receipt.write_bytes(old)
+        self.checks.write_text(r"printf '\033[32mdiagnostic\033[0m\n'")
+        restart = subprocess.run(
+            [sys.executable, str(REPO / "factory/bin/job"), "re-review", self.job["id"]],
+            cwd=self.root, env=self.env, capture_output=True, text=True)
+        self.assertEqual(restart.returncode, 0, restart.stdout + restart.stderr)
+        run = self.run_gate()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        fresh = self.d / "round-2/checks.md"
+        self.assert_receipt(fresh, self.base, self.candidate)
+        self.assertIn(b"\n    diagnostic\n", fresh.read_bytes())
+        self.assertNotIn(b"\x1b", fresh.read_bytes())
+        self.assertEqual(self.round_receipt.read_bytes(), old)
+        self.assertEqual(self.git("rev-parse", "HEAD", cwd=self.wt), self.candidate)
+        self.assertEqual(F.read_job(self.d)["stage"], "review")
+
+    def test_large_binary_line_retains_bounded_visible_tail_and_failure(self):
+        self.checks.write_text(
+            "python3 -c 'import sys; sys.stdout.buffer.write(bytes([255]) * 100000 + \" final diagnostic ✓\".encode())'\n"
+            "exit 7\n")
+        run = self.run_gate("--final")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        report = self.final_receipt.read_bytes()
+        self.assertEqual(F.parse_header(report.decode())["GATE"], "FAIL")
+        self.assertIn(b"- checks.sh exited 7\n", report)
+        self.assertIn(b"[Earlier checks.sh output omitted", report)
+        self.assertTrue(report.endswith(" final diagnostic ✓\n".encode()))
+        # The budget includes Markdown indentation, escapes, newlines and the
+        # omission notice. The trusted header and section description are separate.
+        excerpt = report[report.index(b"[Earlier checks.sh output omitted"):]
+        self.assertLessEqual(len(excerpt), 32 * 1024)
+
+    def test_raw_log_budget_marks_omission_even_when_styles_render_small(self):
+        self.checks.write_text(
+            r"""python3 -c 'import sys; sys.stdout.buffer.write(b"lost start" + b"\x1b[0m" * 12000 + b"\nlast result\n")'""")
+        run = self.run_gate()
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assert_receipt(self.round_receipt, self.base, self.candidate)
+        report = self.round_receipt.read_text()
+        self.assertIn("[Earlier checks.sh output omitted", report)
+        self.assertNotIn("lost start", report)
+        self.assertIn("\n    last result\n", report)
