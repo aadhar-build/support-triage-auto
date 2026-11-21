@@ -27,12 +27,14 @@ type config struct {
 	BaseBranch       string            `json:"base_branch"`
 	Models           map[string]string `json:"models"`
 	Workers          struct {
-		Roles   map[string]selection `json:"roles"`
-		Timeout int                  `json:"timeout_s"`
+		Roles         map[string]selection `json:"roles"`
+		Timeout       int                  `json:"timeout_s"`
+		BuilderModels map[string][]string  `json:"builder_models"`
 	} `json:"workers"`
 }
 
 type jobState struct {
+	Builder         json.RawMessage   `json:"builder"`
 	Origin          string            `json:"origin,omitempty"`
 	ID              string            `json:"id"`
 	Stage           string            `json:"stage"`
@@ -85,7 +87,28 @@ func readJSON[T any](path string, value *T) error {
 	return json.Unmarshal(data, value)
 }
 
-func (r role) resolve(cfg config, state jobState) (selection, error) {
+func (r role) resolve(cfg config, state jobState, recoverBuild bool) (selection, error) {
+	if r.name == "builder" && len(state.Builder) != 0 {
+		var pin map[string]string
+		if err := json.Unmarshal(state.Builder, &pin); err != nil || len(pin) != 2 {
+			return selection{}, errors.New("invalid pinned job builder")
+		}
+		harness, model := pin["harness"], pin["model"]
+		if (harness != "claude" && harness != "codex") || !modelID.MatchString(model) {
+			return selection{}, errors.New("invalid pinned job builder")
+		}
+		chosen := selection{Harness: harness, Model: model}
+		if recoverBuild {
+			// Recovery verifies the recorded selection and replays existing output.
+			return chosen, nil
+		}
+		for _, allowed := range cfg.Workers.BuilderModels[harness] {
+			if model == allowed {
+				return chosen, nil
+			}
+		}
+		return selection{}, errors.New("pinned job builder is not allowed by workers.builder_models")
+	}
 	legacy := cfg.Models[r.legacyModel]
 	if r.stage == "review" {
 		legacy = state.Reviewers[r.legacyModel]
@@ -173,7 +196,7 @@ func run(root string, args []string, stdout io.Writer) error {
 	if state.ID != args[0] || state.Stage != r.stage {
 		return fmt.Errorf("job %s has stage %q, expected %q for %s", args[0], state.Stage, r.stage, r.name)
 	}
-	chosen, err := r.resolve(cfg, state)
+	chosen, err := r.resolve(cfg, state, recoverBuild)
 	if err != nil {
 		return err
 	}
@@ -272,7 +295,7 @@ func run(root string, args []string, stdout io.Writer) error {
 		return err
 	}
 	if recoverBuild {
-		return recoverPublication(ctx, root, cfg, state, recovery, jobDirectory, pending, artifactPath, auditPath, stdout)
+		return recoverPublication(ctx, root, cfg, state, chosen, recovery, jobDirectory, pending, artifactPath, auditPath, stdout)
 	}
 	brief, err := rolePrompt(root, r.name)
 	if err != nil {

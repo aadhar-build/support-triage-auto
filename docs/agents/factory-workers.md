@@ -23,6 +23,10 @@ Configure `workers.roles` in `factory/config.json`. This example assigns just th
 
 Supported roles are `intake`, `spec-writer`, `builder`, `reviewer-code`, `reviewer-eval`, `reviewer-security` and `approver`. An unassigned role keeps its existing Claude Code model from `models` or the job's routed reviewer models. The reviewer assignment does not change which reviewers the job requires. Every explicit assignment names a harness and model. Leave out `effort` to use that CLI's default.
 
+To select a builder for an individual ready job, use the operator's pickup command with an approved pair from `workers.builder_models`, for example `factory/bin/job pickup <id> --builder codex gpt-6.1-terra` or `factory/bin/job pickup <id> --builder claude opus`. A successful pickup stores the pair in that job and uses the selected CLI's default effort. An unpinned job keeps the existing role default. The launcher checks the allowed pair again on dispatch, and the builder audit records the provider and model used. If pickup sends an outdated specification back for refresh, specify the pair again on the next pickup.
+
+Publication recovery verifies the audit against the recorded pair and reuses the original output, even if the pair has since been removed from the allowlist. To roll back to a worker version that predates job-level pins, pause dispatch and hold all runnable pinned jobs until a worker that respects pins is available. Older workers use the shared role default when they read a pinned job.
+
 Install the native CLI on the worker host and sign in through its own login command. Use `factory/bin/worker --preflight claude` or `factory/bin/worker --preflight codex` to check the local login and CLI version. A Claude worker requires a recognized first-party paid Claude login. A Codex worker requires a reported ChatGPT login. An unknown login, missing CLI, unsupported model, timeout or worker error stops that invocation. The launcher tries only the selected harness. Check the subscription account's own extra-usage settings separately.
 
 ## Run and resume

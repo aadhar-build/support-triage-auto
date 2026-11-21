@@ -22,6 +22,10 @@
   },
   "workers": {
     "timeout_s": 1800,
+    "builder_models": {
+      "claude": ["opus"],
+      "codex": ["gpt-6.1-terra"]
+    },
     "roles": {}
   },
   "routing": {
