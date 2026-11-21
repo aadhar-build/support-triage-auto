@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -57,18 +58,37 @@ var errClaudeReadStream = errors.New("Claude returned an invalid review event st
 var errClaudeEvidenceReads = errors.New("Claude review could not verify complete observable evidence reads; request human review")
 var errClaudePermissionDenials = errors.New("Claude review reported tool permission denials or omitted valid permission denial metadata")
 
+// These codes are launcher constants. Never include provider-supplied text in refusals.
+type claudeEvidenceIssue string
+
+const (
+	noEvidenceIssue            claudeEvidenceIssue = ""
+	invalidExpectedFrame       claudeEvidenceIssue = "invalid_expected_frame"
+	invalidReadInput           claudeEvidenceIssue = "invalid_read_input"
+	unsupportedReadWindow      claudeEvidenceIssue = "unsupported_read_window"
+	supplementalReadUnverified claudeEvidenceIssue = "supplemental_read_unverified"
+	duplicateRead              claudeEvidenceIssue = "duplicate_read"
+	structuredResultMismatch   claudeEvidenceIssue = "structured_result_mismatch"
+	renderedResultMismatch     claudeEvidenceIssue = "rendered_result_mismatch"
+	incompleteMandatoryReads   claudeEvidenceIssue = "incomplete_mandatory_reads"
+)
+
 func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplemental *supplementalReviewReads) ([]byte, error) {
+	mandatoryRequested, delivered, pending := 0, 0, 0
+	refuse := func(reason claudeEvidenceIssue) error {
+		return fmt.Errorf(`%w; diagnostic={"reason":%q,"mandatory_expected":%d,"mandatory_requested":%d,"mandatory_completed":%d,"pending_reads":%d}`,
+			errClaudeEvidenceReads, reason, len(expected), mandatoryRequested, delivered, pending)
+	}
 	for path, raw := range expected {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(raw) == 0 ||
 			!utf8.Valid(raw) || bytes.HasPrefix(raw, []byte("\xef\xbb\xbf")) || hasUnsafeReviewControls(raw) {
-			return nil, errClaudeEvidenceReads
+			return nil, refuse(invalidExpectedFrame)
 		}
 	}
 	var session, latestText, final string
 	initialized := false
 	calls := make(map[string]claudeReadProof, len(expected))
 	requested := make(map[string]bool, len(expected))
-	pending, delivered := 0, 0
 	for line := range bytes.SplitSeq(stream, []byte{'\n'}) {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
@@ -134,9 +154,15 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 					if event.Type != "assistant" || block.Name != "Read" || block.ID == "" || duplicate {
 						return nil, errClaudeReadStream
 					}
-					proof, ok := claudeEvidenceRead(block.Input, expected, supplemental)
-					if !ok || requested[proof.path] {
-						return nil, errClaudeEvidenceReads
+					proof, issue := claudeEvidenceRead(block.Input, expected, supplemental)
+					if issue != noEvidenceIssue {
+						return nil, refuse(issue)
+					}
+					if requested[proof.path] {
+						return nil, refuse(duplicateRead)
+					}
+					if proof.mandatory {
+						mandatoryRequested++
 					}
 					requested[proof.path] = true
 					calls[block.ID] = proof
@@ -147,8 +173,8 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 						(len(block.IsError) != 0 && string(block.IsError) != "false") {
 						return nil, errClaudeReadStream
 					}
-					if !matchesClaudeEvidenceRead(block.Content, event.StructuredResult, proof.path, proof.data) {
-						return nil, errClaudeEvidenceReads
+					if issue := checkClaudeEvidenceResult(block.Content, event.StructuredResult, proof.path, proof.data); issue != noEvidenceIssue {
+						return nil, refuse(issue)
 					}
 					proof.data = nil
 					proof.completed = true
@@ -170,7 +196,7 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 			switch strings.TrimSuffix(line, "\r") {
 			case "VERDICT: PASS", "APPROVE":
 				if delivered == 0 || delivered != len(expected) {
-					return nil, errClaudeEvidenceReads
+					return nil, refuse(incompleteMandatoryReads)
 				}
 			case "VERDICT: CHANGES", "ESCALATE":
 			default:
@@ -202,7 +228,7 @@ func validClaudeThinkingTokens(line []byte) bool {
 		json.Unmarshal(fields["estimated_tokens_delta"], &delta) == nil && delta != nil
 }
 
-func claudeEvidenceRead(data json.RawMessage, expected map[string][]byte, supplemental *supplementalReviewReads) (claudeReadProof, bool) {
+func claudeEvidenceRead(data json.RawMessage, expected map[string][]byte, supplemental *supplementalReviewReads) (claudeReadProof, claudeEvidenceIssue) {
 	var input struct {
 		Path   string `json:"file_path"`
 		Offset *int   `json:"offset"`
@@ -210,25 +236,31 @@ func claudeEvidenceRead(data json.RawMessage, expected map[string][]byte, supple
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&input) != nil || (input.Offset != nil && *input.Offset != 1) {
-		return claudeReadProof{}, false
+	if decoder.Decode(&input) != nil {
+		return claudeReadProof{}, invalidReadInput
+	}
+	if input.Offset != nil && *input.Offset != 1 {
+		return claudeReadProof{}, unsupportedReadWindow
 	}
 	content, mandatory := expected[input.Path]
 	if !mandatory {
 		var ok bool
 		content, ok = supplemental.resolve(input.Path)
 		if !ok {
-			return claudeReadProof{}, false
+			return claudeReadProof{}, supplementalReadUnverified
 		}
 	}
 	limit := 2000 // Claude 2.1.325's default Read line limit.
 	if input.Limit != nil {
 		limit = *input.Limit
 	}
-	return claudeReadProof{path: input.Path, data: content, mandatory: mandatory}, limit > bytes.Count(content, []byte{'\n'})
+	if limit <= bytes.Count(content, []byte{'\n'}) {
+		return claudeReadProof{}, unsupportedReadWindow
+	}
+	return claudeReadProof{path: input.Path, data: content, mandatory: mandatory}, noEvidenceIssue
 }
 
-func matchesClaudeEvidenceRead(rendered string, metadata json.RawMessage, path string, raw []byte) bool {
+func checkClaudeEvidenceResult(rendered string, metadata json.RawMessage, path string, raw []byte) claudeEvidenceIssue {
 	lines := strings.Split(string(raw), "\n")
 	if len(metadata) != 0 {
 		var result struct {
@@ -245,7 +277,7 @@ func matchesClaudeEvidenceRead(rendered string, metadata json.RawMessage, path s
 		if json.Unmarshal(metadata, &result) != nil || result.Type != "text" || result.File.Path != path ||
 			result.File.Content != string(raw) || result.File.Start != 1 || result.File.Count != len(lines) ||
 			result.File.Total != len(lines) || result.File.Truncated {
-			return false
+			return structuredResultMismatch
 		}
 	}
 	// The native renderer preserves final LF as an empty numbered line. It uses
@@ -264,10 +296,10 @@ func matchesClaudeEvidenceRead(rendered string, metadata json.RawMessage, path s
 			display.WriteString(line)
 		}
 		if rendered == display.String() {
-			return true
+			return noEvidenceIssue
 		}
 	}
-	return false
+	return renderedResultMismatch
 }
 
 // encoding/json accepts repeated keys by default. Evidence must have one

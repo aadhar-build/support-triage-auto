@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,7 +38,7 @@ func TestValidateClaudeReadEventsIgnoresNativeThinkingTelemetry(t *testing.T) {
 	}
 
 	withoutRead := strings.Join([]string{claudeReadInit, claudeThinkingTokens, claudeReadVerdict, claudeReadFinal}, "\n")
-	if got, err := validateClaudeReadEvents([]byte(withoutRead), expected, nil); got != nil || err != errClaudeEvidenceReads {
+	if got, err := validateClaudeReadEvents([]byte(withoutRead), expected, nil); got != nil || !errors.Is(err, errClaudeEvidenceReads) {
 		t.Fatalf("wanted an evidence refusal, got artifact %q and error %v", got, err)
 	}
 	withoutVerdict := strings.Join([]string{claudeReadInit, claudeReadCall, claudeReadReceipt, claudeThinkingTokens, claudeReadFinal}, "\n")
