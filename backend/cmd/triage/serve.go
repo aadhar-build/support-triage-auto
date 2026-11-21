@@ -85,6 +85,9 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    64 << 10,
+
+		// Let OPTIONS * reach the handler, which refuses it.
+		DisableGeneralOptionsHandler: true,
 	}
 	fmt.Fprintf(stdout, "admin console on http://%s:%d/ (Ctrl-C to stop)\n", serveHost, addr.Port)
 	served := make(chan error, 1)
