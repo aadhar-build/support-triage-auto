@@ -170,6 +170,32 @@ class TestClarifyCommands(unittest.TestCase):
         job = F.read_job(self.d)
         self.assertEqual((job["stage"], job["round"]), ("spec", 0))
 
+    def test_pickup_pins_an_allowlisted_builder_with_the_build_transition(self):
+        (self.d / "spec.md").write_text(CLEAN_SPEC)
+        self.run_cmd("clarify")
+        self.cfg["workers"]["builder_models"] = {"codex": ["gpt-test"]}
+        cmd = self.job.COMMANDS["pickup"][0]
+        self.assertIn("build (round 1)", cmd(self.root, self.cfg, ["007-t", "--builder", "codex", "gpt-test"]))
+        job = F.read_job(self.d)
+        self.assertEqual((job["stage"], job["round"]), ("build", 1))
+        self.assertEqual(job["builder"], {"harness": "codex", "model": "gpt-test"})
+        self.assertEqual(self.cfg["workers"]["roles"], {})
+
+    def test_pickup_rejects_unlisted_builder_and_does_not_pin_when_spec_is_stale(self):
+        (self.d / "spec.md").write_text(CLEAN_SPEC)
+        self.run_cmd("clarify")
+        self.cfg["workers"]["builder_models"] = {"claude": ["opus"], "codex": ["gpt-test"]}
+        cmd = self.job.COMMANDS["pickup"][0]
+        for options in (["--builder", "codex", "opus"], ["--builder", "codex"], ["codex", "gpt-test"]):
+            with self.subTest(options=options):
+                before = (self.d / "job.json").read_bytes()
+                with self.assertRaises(F.FactoryError):
+                    cmd(self.root, self.cfg, ["007-t", *options])
+                self.assertEqual((self.d / "job.json").read_bytes(), before)
+        self.base_sha = "bbb"
+        self.assertIn("spec (refresh", cmd(self.root, self.cfg, ["007-t", "--builder", "claude", "opus"]))
+        self.assertNotIn("builder", F.read_job(self.d))
+
     def test_answers_wait_while_the_label_is_on(self):
         job = F.read_job(self.d)
         job["stage"] = "needs-input"

@@ -133,7 +133,7 @@ func readPendingPublication(jobDir, pending string, state jobState, currentState
 	return p, nil
 }
 
-func recoverPublication(ctx context.Context, root string, cfg config, state jobState, p publication, dir *os.File, pending, artifactPath, auditPath string, stdout io.Writer) error {
+func recoverPublication(ctx context.Context, root string, cfg config, state jobState, chosen selection, p publication, dir *os.File, pending, artifactPath, auditPath string, stdout io.Writer) error {
 	worktree, err := containedDir(root, state.Worktree)
 	if err != nil {
 		return err
@@ -152,6 +152,7 @@ func recoverPublication(ctx context.Context, root string, cfg config, state jobS
 		return err
 	}
 	var audit struct {
+		selection
 		Role      string `json:"role"`
 		Candidate string `json:"candidate_sha"`
 		Base      string `json:"base_sha"`
@@ -159,6 +160,9 @@ func recoverPublication(ctx context.Context, root string, cfg config, state jobS
 	}
 	if json.Unmarshal(p.Audit, &audit) != nil || audit.Role != "builder" || audit.Candidate != p.Candidate || audit.Base != p.Base || audit.Input != p.Input {
 		return errors.New("pending builder audit does not match the candidate, base and input")
+	}
+	if len(state.Builder) != 0 && audit.selection != chosen {
+		return errors.New("pending builder audit does not match the pinned job builder")
 	}
 	if err := s.cleanWorktree(ctx); err != nil {
 		return err

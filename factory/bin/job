@@ -12,7 +12,8 @@
   job pr <id>                 push the branch; on the first round open a PR: problem, fix, proof, "Closes #n"
   job lane <clarify|build>    jobs that lane can work on now (not waiting on a human)
   job clarify <id>            clarify exit: open product questions -> needs-input; none -> ready
-  job pickup <id>             build entry: ready -> build, or back to spec if the base moved
+  job pickup <id> [--builder <harness> <model>]
+                              enter build and optionally pin an allowed builder
   job answers <id>            needs-input -> spec once the owner answered and removed the label
   job tally <id>              read this round's reviews: approve | build | recovery
   job decide <id>             act on decision.md: merging | needs-human
@@ -338,6 +339,20 @@ def cmd_pickup(root: Path, cfg: dict, args: list[str]) -> str:
     d, job = _load(root, args[0])
     if job["stage"] != "ready":
         raise F.FactoryError(f"job {job['id']} is at {job['stage']}, not ready")
+    builder = None
+    if len(args) > 1:
+        if len(args) != 4 or args[1] != "--builder":
+            raise F.FactoryError("use: job pickup <id> [--builder <claude|codex> <model>]")
+        harness, model = args[2:]
+        workers = cfg.get("workers") or {}
+        allowed = workers.get("builder_models") if isinstance(workers, dict) else None
+        models = allowed.get(harness) if isinstance(allowed, dict) else None
+        if (harness not in {"claude", "codex"} or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.:@+\-]*", model)
+                or not isinstance(models, list) or model not in models):
+            raise F.FactoryError("job builder is not allowed by workers.builder_models")
+        builder = {"harness": harness, "model": model}
+        if "builder" in job and job["builder"] != builder:
+            raise F.FactoryError("the job already has a different pinned builder")
     F.fetch_base(root, cfg["base_branch"])
     now = F.run(["git", "rev-parse", f"origin/{cfg['base_branch']}"], cwd=root).strip()
     if job.get("spec_base") and job["spec_base"] != now:
@@ -345,6 +360,8 @@ def cmd_pickup(root: Path, cfg: dict, args: list[str]) -> str:
         F.write_job(d, job)
         return f"{job['id']} -> spec (refresh against {cfg['base_branch']}, then job clarify)"
     F.enter_build(job, d, "picked up by the build lane")
+    if builder is not None:
+        job["builder"] = builder
     F.write_job(d, job)
     return f"{job['id']} -> build (round {job['round']})"
 
