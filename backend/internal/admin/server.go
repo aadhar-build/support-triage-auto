@@ -32,6 +32,7 @@ const (
 	msgMethod    = "method not allowed: this console is read-only"
 	msgNotFound  = "not found"
 	msgInternal  = "internal error"
+	msgBadTarget = "bad request"
 )
 
 var assetRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
@@ -83,6 +84,10 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	var res response
 	switch {
+	// Not origin-form (absolute, authority or *): r.Host may come from the
+	// request line, so refuse before trusting it.
+	case !strings.HasPrefix(r.RequestURI, "/"):
+		res = text(http.StatusBadRequest, msgBadTarget)
 	case !hostOK(r.Host):
 		res = text(http.StatusForbidden, msgForbidden)
 	case r.Method != http.MethodGet:

@@ -28,12 +28,15 @@ type resp struct {
 }
 
 // testServer starts NewHandler(cfg) on an httptest server closed by t.Cleanup.
+// Like `triage serve`, it lets OPTIONS * reach the handler.
 func testServer(t *testing.T, cfg Config) *httptest.Server {
 	t.Helper()
 	if cfg.Now == nil {
 		cfg.Now = func() time.Time { return overviewNow }
 	}
-	srv := httptest.NewServer(NewHandler(cfg))
+	srv := httptest.NewUnstartedServer(NewHandler(cfg))
+	srv.Config.DisableGeneralOptionsHandler = true
+	srv.Start()
 	t.Cleanup(srv.Close)
 	return srv
 }
@@ -117,6 +120,38 @@ func TestMethods(t *testing.T) {
 				t.Errorf("%s %s foreign host: %d", m, p, r.status)
 			}
 		}
+	}
+}
+
+func TestRequestTargetForm(t *testing.T) {
+	srv := testServer(t, runsCfg(t, t.TempDir()))
+	allowed := hostOf(srv)
+	refused := []struct {
+		method, target string
+		host           *string
+		proto          string
+	}{
+		{"GET", "http://localhost/api/runs", allowed, "HTTP/1.1"},
+		{"GET", "http://evil.example/", allowed, "HTTP/1.1"},
+		{"GET", "http://localhost/api/runs", str("evil.example"), "HTTP/1.1"},
+		{"GET", "http://localhost/api/runs", nil, "HTTP/1.0"},
+		{"CONNECT", "localhost:80", str("localhost:80"), "HTTP/1.1"},
+		{"OPTIONS", "*", allowed, "HTTP/1.1"},
+	}
+	for _, c := range refused {
+		r := raw(t, srv, c.method, c.target, c.host, c.proto)
+		if r.status != 400 || r.body != "bad request\n" || r.header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			t.Errorf("%s %s %s: %d %q %q", c.method, c.target, c.proto, r.status, r.body, r.header.Get("Content-Type"))
+		}
+	}
+	if r := raw(t, srv, "GET", "/api/runs", allowed, "HTTP/1.1"); r.status != 200 {
+		t.Errorf("origin-form control: %d %q", r.status, r.body)
+	}
+	if r := raw(t, srv, "GET", "/api/runs", str("evil.example"), "HTTP/1.1"); r.status != 403 || r.body != "forbidden: Host must be 127.0.0.1 or localhost\n" {
+		t.Errorf("origin-form foreign host: %d %q", r.status, r.body)
+	}
+	if r := raw(t, srv, "POST", "/", allowed, "HTTP/1.1"); r.status != 405 {
+		t.Errorf("origin-form POST: %d %q", r.status, r.body)
 	}
 }
 

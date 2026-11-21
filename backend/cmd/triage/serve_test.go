@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -129,6 +130,72 @@ func TestServeStartsAndStops(t *testing.T) {
 	if c, err := net.DialTimeout("tcp", "127.0.0.1:"+port, time.Second); err == nil {
 		c.Close()
 		t.Error("port still accepts connections")
+	}
+}
+
+// rawServe sends one request line exactly as given and returns status and body.
+func rawServe(t *testing.T, addr, method, target string) (int, string) {
+	t.Helper()
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := fmt.Fprintf(conn, "%s %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", method, target, addr); err != nil {
+		t.Fatal(err)
+	}
+	r, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: method})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	b, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r.StatusCode, string(b)
+}
+
+func TestServeRefusesNonOriginTargets(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	var out, errb syncBuffer
+	done := make(chan int, 1)
+	go func() {
+		done <- runServe(ctx, []string{"--runs", t.TempDir(), "--port", "0", "--web", t.TempDir()}, &out, &errb)
+	}()
+
+	line := regexp.MustCompile(`^admin console on http://127\.0\.0\.1:(\d+)/ \(Ctrl-C to stop\)\n`)
+	var port string
+	deadline := time.Now().Add(5 * time.Second)
+	for port == "" {
+		if m := line.FindStringSubmatch(out.String()); m != nil {
+			port = m[1]
+		} else if time.Now().After(deadline) {
+			cancel()
+			t.Fatalf("no startup line; stdout %q stderr %q", out.String(), errb.String())
+		} else {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	addr := "127.0.0.1:" + port
+	for _, c := range []struct{ method, target string }{{"OPTIONS", "*"}, {"GET", "http://localhost/api/runs"}} {
+		if status, body := rawServe(t, addr, c.method, c.target); status != 400 || body != "bad request\n" {
+			t.Errorf("%s %s: %d %q", c.method, c.target, status, body)
+		}
+	}
+	if status, body := rawServe(t, addr, "GET", "/api/runs"); status != 200 {
+		t.Errorf("GET /api/runs: %d %q", status, body)
+	}
+
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Errorf("exit %d, stderr %q", code, errb.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runServe did not return within 5 s")
 	}
 }
 
