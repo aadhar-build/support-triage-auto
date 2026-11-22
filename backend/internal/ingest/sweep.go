@@ -12,3 +12,6 @@ type sweepConfig struct {
 	afterLeaseCreate func()
 	afterLock        func()
 }
+
+// leaseHooks is empty in production and lets tests observe lease setup gaps.
+var leaseHooks sweepConfig

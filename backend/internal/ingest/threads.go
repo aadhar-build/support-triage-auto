@@ -92,7 +92,7 @@ func BuildThreads(path string, opts Options, emit func(Thread) error) (ThreadSta
 	if err != nil {
 		return stats, err
 	}
-	lease := acquireLease(dir, sweepConfig{})
+	lease := acquireLease(dir, leaseHooks)
 	if lease != nil {
 		defer lease.Close()
 	}
