@@ -21,7 +21,7 @@ func TestStatic(t *testing.T) {
 	writeFile(t, cfg.Web, "assets/app-abc.css", "body{}\n")
 	srv := testServer(t, cfg)
 
-	for _, p := range []string{"/", "/runs", "/runs/x%20y"} {
+	for _, p := range []string{"/", "/runs", "/runs/x%20y", "/runs/x%20y/threads", "/runs/x%20y/threads/12"} {
 		r := get(t, srv, p)
 		if r.status != 200 || r.body != index || r.header.Get("Content-Type") != "text/html; charset=utf-8" {
 			t.Errorf("%s: %d %q %q", p, r.status, r.body, r.header.Get("Content-Type"))

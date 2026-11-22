@@ -75,14 +75,22 @@ const (
 
 func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplemental *supplementalReviewReads) ([]byte, error) {
 	mandatoryRequested, delivered, pending := 0, 0, 0
-	refuse := func(reason claudeEvidenceIssue) error {
-		return fmt.Errorf(`%w; diagnostic={"reason":%q,"mandatory_expected":%d,"mandatory_requested":%d,"mandatory_completed":%d,"pending_reads":%d}`,
-			errClaudeEvidenceReads, reason, len(expected), mandatoryRequested, delivered, pending)
+	refuse := func(reason claudeEvidenceIssue, read *claudeReadProof) error {
+		detail := fmt.Sprintf(`"reason":%q,"mandatory_expected":%d,"mandatory_requested":%d,"mandatory_completed":%d,"pending_reads":%d`,
+			reason, len(expected), mandatoryRequested, delivered, pending)
+		if read != nil {
+			scope := "supplemental"
+			if read.mandatory {
+				scope = "mandatory"
+			}
+			detail += fmt.Sprintf(`,"read_scope":%q`, scope)
+		}
+		return fmt.Errorf(`%w; diagnostic={%s}`, errClaudeEvidenceReads, detail)
 	}
 	for path, raw := range expected {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(raw) == 0 ||
 			!utf8.Valid(raw) || bytes.HasPrefix(raw, []byte("\xef\xbb\xbf")) || hasUnsafeReviewControls(raw) {
-			return nil, refuse(invalidExpectedFrame)
+			return nil, refuse(invalidExpectedFrame, nil)
 		}
 	}
 	var session, latestText, final string
@@ -155,11 +163,14 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 						return nil, errClaudeReadStream
 					}
 					proof, issue := claudeEvidenceRead(block.Input, expected, supplemental)
+					if issue == unsupportedReadWindow {
+						return nil, refuse(issue, &proof)
+					}
 					if issue != noEvidenceIssue {
-						return nil, refuse(issue)
+						return nil, refuse(issue, nil)
 					}
 					if requested[proof.path] {
-						return nil, refuse(duplicateRead)
+						return nil, refuse(duplicateRead, &proof)
 					}
 					if proof.mandatory {
 						mandatoryRequested++
@@ -174,7 +185,7 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 						return nil, errClaudeReadStream
 					}
 					if issue := checkClaudeEvidenceResult(block.Content, event.StructuredResult, proof.path, proof.data); issue != noEvidenceIssue {
-						return nil, refuse(issue)
+						return nil, refuse(issue, nil)
 					}
 					proof.data = nil
 					proof.completed = true
@@ -196,7 +207,7 @@ func validateClaudeReadEvents(stream []byte, expected map[string][]byte, supplem
 			switch strings.TrimSuffix(line, "\r") {
 			case "VERDICT: PASS", "APPROVE":
 				if delivered == 0 || delivered != len(expected) {
-					return nil, refuse(incompleteMandatoryReads)
+					return nil, refuse(incompleteMandatoryReads, nil)
 				}
 			case "VERDICT: CHANGES", "ESCALATE":
 			default:
@@ -239,10 +250,11 @@ func claudeEvidenceRead(data json.RawMessage, expected map[string][]byte, supple
 	if decoder.Decode(&input) != nil {
 		return claudeReadProof{}, invalidReadInput
 	}
-	if input.Offset != nil && *input.Offset != 1 {
-		return claudeReadProof{}, unsupportedReadWindow
-	}
 	content, mandatory := expected[input.Path]
+	proof := claudeReadProof{path: input.Path, mandatory: mandatory}
+	if input.Offset != nil && *input.Offset != 1 {
+		return proof, unsupportedReadWindow
+	}
 	if !mandatory {
 		var ok bool
 		content, ok = supplemental.resolve(input.Path)
@@ -255,9 +267,10 @@ func claudeEvidenceRead(data json.RawMessage, expected map[string][]byte, supple
 		limit = *input.Limit
 	}
 	if limit <= bytes.Count(content, []byte{'\n'}) {
-		return claudeReadProof{}, unsupportedReadWindow
+		return proof, unsupportedReadWindow
 	}
-	return claudeReadProof{path: input.Path, data: content, mandatory: mandatory}, noEvidenceIssue
+	proof.data = content
+	return proof, noEvidenceIssue
 }
 
 func checkClaudeEvidenceResult(rendered string, metadata json.RawMessage, path string, raw []byte) claudeEvidenceIssue {

@@ -149,10 +149,24 @@ func (h handler) route(path string) (response, error) {
 			return response{}, errNotFound
 		}
 		return h.apiMetrics(seg)
+	case strings.HasPrefix(path, "/api/runs/"):
+		run, id, ok := threadsPath(strings.TrimPrefix(path, "/api/runs/"))
+		switch {
+		case !ok:
+			return response{}, errNotFound
+		case id == "":
+			return h.apiThreads(run)
+		}
+		return h.apiThread(run, id)
 	case path == "/" || path == "/runs":
 		return h.index()
 	case strings.HasPrefix(path, "/runs/") && oneSegment(strings.TrimPrefix(path, "/runs/")):
 		return h.index()
+	case strings.HasPrefix(path, "/runs/"):
+		if _, _, ok := threadsPath(strings.TrimPrefix(path, "/runs/")); ok {
+			return h.index()
+		}
+		return response{}, errNotFound
 	case strings.HasPrefix(path, "/assets/"):
 		return h.asset(strings.TrimPrefix(path, "/assets/"))
 	}
