@@ -377,3 +377,19 @@ func TestSweepMountRefusalPreservesContents(t *testing.T) {
 	testExists(t, filepath.Join(dir, "valuable"))
 	testExists(t, filepath.Join(dir, "nested"))
 }
+
+func TestOpenat2SyscallNumber(t *testing.T) {
+	for _, tc := range []struct {
+		arch string
+		want uintptr
+	}{
+		{"386", 437}, {"amd64", 437}, {"arm", 437}, {"arm64", 437},
+		{"loong64", 437}, {"ppc64", 437}, {"ppc64le", 437}, {"riscv64", 437}, {"s390x", 437},
+		{"mips", 4437}, {"mipsle", 4437}, {"mips64", 5437}, {"mips64le", 5437},
+		{"unknown", 0},
+	} {
+		if got := openat2SyscallNumber(tc.arch); got != tc.want {
+			t.Errorf("%s: got %d, want %d", tc.arch, got, tc.want)
+		}
+	}
+}

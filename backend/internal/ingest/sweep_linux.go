@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -50,15 +51,32 @@ func unlinkAt(fd int, name string, flags int) error {
 	return nil
 }
 
+func openat2SyscallNumber(arch string) uintptr {
+	switch arch {
+	case "386", "amd64", "arm", "arm64", "loong64", "ppc64", "ppc64le", "riscv64", "s390x":
+		return 437
+	case "mips", "mipsle":
+		return 4437
+	case "mips64", "mips64le":
+		return 5437
+	default:
+		return 0
+	}
+}
+
 // openNoMount uses openat2's NO_XDEV restriction, including bind mounts.
 // Unsupported kernels fail closed. The hook permits testing refusal without mounts.
 var openNoMount = func(fd int, name string, flags int) (int, error) {
+	nr := openat2SyscallNumber(runtime.GOARCH)
+	if nr == 0 {
+		return -1, syscall.ENOSYS
+	}
 	p, err := syscall.BytePtrFromString(name)
 	if err != nil {
 		return -1, err
 	}
 	how := struct{ Flags, Mode, Resolve uint64 }{uint64(flags), 0, 0x01}
-	n, _, e := syscall.Syscall6(437, uintptr(fd), uintptr(unsafe.Pointer(p)), uintptr(unsafe.Pointer(&how)), unsafe.Sizeof(how), 0, 0)
+	n, _, e := syscall.Syscall6(nr, uintptr(fd), uintptr(unsafe.Pointer(p)), uintptr(unsafe.Pointer(&how)), unsafe.Sizeof(how), 0, 0)
 	if e != 0 {
 		return -1, e
 	}
@@ -117,7 +135,7 @@ func openStat(fd int, name string) (int, syscall.Stat_t, error) {
 }
 func same(a, b syscall.Stat_t) bool { return a.Dev == b.Dev && a.Ino == b.Ino }
 func eligible(st syscall.Stat_t, now time.Time) bool {
-	return st.Mode&syscall.S_IFMT == syscall.S_IFDIR && st.Uid == uint32(os.Geteuid()) && st.Mode&0077 == 0 && now.Sub(time.Unix(st.Mtim.Sec, st.Mtim.Nsec)) > 24*time.Hour
+	return st.Mode&syscall.S_IFMT == syscall.S_IFDIR && st.Uid == uint32(os.Geteuid()) && st.Mode&0077 == 0 && now.Sub(time.Unix(int64(st.Mtim.Sec), int64(st.Mtim.Nsec))) > 24*time.Hour
 }
 func digits(s string, max int) bool {
 	if len(s) == 0 || (max > 0 && len(s) > max) {
