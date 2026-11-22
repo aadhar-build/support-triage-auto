@@ -1,0 +1,7 @@
+{
+  "cheap_confident": "Rules tier was confident",
+  "low_confidence_to_larger": "Low confidence sent this case to the model",
+  "high_risk_to_larger": "High risk sent this case to the model",
+  "escalate_always": "Matched an always-escalate topic",
+  "repeat_contact": "Repeat contacts met the escalation rule"
+}

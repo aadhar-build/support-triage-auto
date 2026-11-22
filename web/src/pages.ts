@@ -2,6 +2,7 @@
 // value goes through escapeHtml; the text copies src/triage/admin.py.
 import { escapeHtml as e } from "./escape";
 import { pyStr, rate, usd, type Proportion } from "./format";
+import reasonCopy from "./reason-copy.json";
 
 const PER_RUN_CAP = "Per-run cap: $2.50 (#10)";
 const PLACEHOLDER_NOTE = "placeholder prices, not real spend; API-equivalent dollars";
@@ -108,7 +109,7 @@ export function renderRuns(data: { runs: RunRow[] }): string {
     }
     const cost = r.cost?.estimated_usd ?? null;
     const costText = cost === null ? "no cost recorded" : `${usd(cost)} estimated`;
-    const name = r.has_metrics === true
+    const name = r.has_metrics === true || r.kind === "synthetic"
       ? `<a href="${e("/runs/" + encodeURIComponent(r.name))}">${e(r.name)}</a>`
       : e(r.name);
     const has = r.has_metrics === true ? "yes" : `no (${NO_METRICS})`;
@@ -118,17 +119,101 @@ export function renderRuns(data: { runs: RunRow[] }): string {
   return page("Runs", table(["Run", "Kind", "created_at", "Estimated cost", "Has metrics"], rows));
 }
 
-export function renderRunMetrics(data: RunMetricsData): string {
+function runHref(name: string, ...rest: string[]): string {
+  return e(["/runs", encodeURIComponent(name), ...rest.map(encodeURIComponent)].join("/"));
+}
+
+export function renderRunMetrics(data: RunMetricsData, threadsAvailable = false): string {
   const m = data.metrics;
+  const threads = threadsAvailable ? `<p><a href="${runHref(data.name, "threads")}">Threads</a></p>` : "";
   if (m === null) {
-    return page("Runs", `<p>${e(data.name)}: metrics not available (${e(NO_METRICS)}).</p>`);
+    return page("Runs", `<p>${e(data.name)}: metrics not available (${e(NO_METRICS)}).</p>${threads}`);
   }
   const rows = HEADLINES.map(([block, key, label]) => ({ label, ...(m[block]?.[key] ?? {}) }));
-  return page("Runs", `<section><h2>${e(data.name)}</h2>${rateRows(rows)}</section>`);
+  return page("Runs", `<section><h2>${e(data.name)}</h2>${rateRows(rows)}</section>${threads}`);
 }
 
 export function renderNotFound(): string {
   return page("Runs", "<p>Run not found.</p>");
+}
+
+export interface ThreadRow {
+  thread_id: string;
+  action: string;
+  reason_codes: string[];
+}
+
+export interface ThreadsData {
+  name: string;
+  status: string;
+  threads: ThreadRow[] | null;
+  reason?: string;
+}
+
+export interface ThreadData {
+  name: string;
+  thread_id: string;
+  reason_codes: string[];
+  topic_id: string[];
+  final: { intent: string; urgency: string; action: string; confidence: number };
+  decided_by: { source: string; model_id: string | null } | null;
+}
+
+const COPY: Record<string, string> = reasonCopy;
+const SOURCES: Record<string, string> = {
+  cheap: "Rules tier",
+  larger: "Model tier",
+  agent: "Reply agent",
+  escalate_always: "Always-escalate policy",
+  repeat_contact: "Repeat-contact policy",
+};
+const TIERS = ["cheap", "larger", "agent"];
+const UNKNOWN_SOURCE = "Decided by: could not be determined from the trace.";
+
+function reasonText(code: string): string {
+  return Object.hasOwn(COPY, code) ? (COPY[code] ?? code) : code;
+}
+
+function reasons(codes: string[]): string {
+  return codes.map(reasonText).join("; ");
+}
+
+export function renderThreads(data: ThreadsData): string {
+  const head = `<h2>${e(data.name)}</h2>`;
+  if (data.threads === null) {
+    return page("Threads", `<section>${head}<p>Threads not available (no usable trace file).</p></section>`);
+  }
+  if (data.threads.length === 0) return page("Threads", `<section>${head}<p>No threads in this trace.</p></section>`);
+  const rows = data.threads.map((t) =>
+    `<tr><td><a href="${runHref(data.name, "threads", t.thread_id)}">${e(t.thread_id)}</a></td>` +
+    `<td>${e(t.action)}</td><td>${e(reasons(t.reason_codes))}</td></tr>`
+  );
+  return page("Threads", `<section>${head}${table(["Thread", "Final action", "Reasons"], rows)}</section>`);
+}
+
+function decidedBy(d: ThreadData["decided_by"]): string {
+  if (d === null || !Object.hasOwn(SOURCES, d.source)) return UNKNOWN_SOURCE;
+  const model = TIERS.includes(d.source) && typeof d.model_id === "string" ? ` (model ${d.model_id})` : "";
+  return `Decided by: ${SOURCES[d.source]}${model}`;
+}
+
+export function renderThread(data: ThreadData): string {
+  const f = data.final;
+  const heading = f.action === "escalate" ? "Why it escalated" : "Routing reasons";
+  const items = data.reason_codes.map((code) => {
+    const topics = code === "escalate_always" && data.topic_id.length > 0 ? `: ${data.topic_id.join(", ")}` : "";
+    return `<li>${e(reasonText(code) + topics)}</li>`;
+  });
+  const card = `<section class="handoff"><h2>${e(heading)}</h2><ul>${items.join("")}</ul>` +
+    `<p>${e(decidedBy(data.decided_by))}</p></section>`;
+  const labels = `<section><h2>Final labels</h2><ul><li>intent: ${e(f.intent)}</li><li>urgency: ${e(f.urgency)}</li>` +
+    `<li>action: ${e(f.action)}</li><li>confidence: ${e(String(f.confidence))}</li></ul></section>`;
+  const back = `<p><a href="${runHref(data.name, "threads")}">All threads in ${e(data.name)}</a></p>`;
+  return page(`Thread ${data.thread_id}`, card + labels + back);
+}
+
+export function renderThreadNotFound(): string {
+  return page("Threads", "<p>Thread not found.</p>");
 }
 
 export function renderError(): string {
