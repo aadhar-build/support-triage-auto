@@ -48,6 +48,10 @@ type ThreadStats struct {
 type Options struct {
 	// TempDir holds the private index dir; empty means os.TempDir().
 	TempDir string
+	// SweepLegacy asserts that the base was exclusively used by the ingester
+	// when legacy directories were created and no old ingester can use it now.
+	// The default false keeps all legacy directories.
+	SweepLegacy bool
 }
 
 // Memory: the build holds, per kept tweet, one int32 status slot in RAM; the
@@ -83,9 +87,14 @@ func BuildThreads(path string, opts Options, emit func(Thread) error) (ThreadSta
 	if base == "" {
 		base = os.TempDir()
 	}
-	dir, err := os.MkdirTemp(base, "ingest-")
+	sweepTemp(base, sweepConfig{legacy: opts.SweepLegacy})
+	dir, err := os.MkdirTemp(base, scratchPrefix)
 	if err != nil {
 		return stats, err
+	}
+	lease := acquireLease(dir, sweepConfig{})
+	if lease != nil {
+		defer lease.Close()
 	}
 	defer os.RemoveAll(dir)
 
