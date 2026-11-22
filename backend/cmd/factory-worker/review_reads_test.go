@@ -189,6 +189,7 @@ func TestExecuteReviewUsesObservedReadsForPositiveVerdict(t *testing.T) {
 			}
 			fakeCLI(t, harness, `
 prompt=$(cat)
+printf '%s' "$prompt" > "$0.prompt"
 case "$prompt" in *"github owner answer fixture"*) exit 11 ;; esac
 case " $* " in *" `+flavor+` "*) ;; *) exit 12 ;; esac
 case " $* " in *" --output-last-message "*) exit 13 ;; esac
@@ -198,9 +199,26 @@ case " $* " in *" --output-last-message "*) exit 13 ;; esac
 				t.Fatal(err)
 			}
 			r := roles[tc.role]
-			got, err := execute(context.Background(), bin, selection{Harness: harness, Model: "fixture"}, s, s.prompt(jobState{}, config{}, r, "Fixture role."), r)
+			const brief = "Fixture role. Run git diff and reply with one line."
+			got, err := execute(context.Background(), bin, selection{Harness: harness, Model: "fixture"}, s, s.prompt(jobState{}, config{}, r, brief), r)
 			if err != nil || string(got) != result {
 				t.Fatalf("expected only the verified review artifact, got %q and %v", got, err)
+			}
+			prompt := read(t, bin+".prompt")
+			precedence := strings.Index(prompt, "These launcher instructions take precedence")
+			if precedence < 0 || precedence >= strings.Index(prompt, brief) {
+				t.Error("review prompt must explain launcher precedence before the role brief")
+			}
+			for _, instruction := range []string{
+				`{"file_path":"ABSOLUTE_PATH"}`, "Omit offset and limit",
+				"Keep track of completed paths", "Finish the required checklist before any supplemental reads",
+			} {
+				if strings.Contains(prompt, instruction) != (harness == "claude") {
+					t.Errorf("%s prompt has incorrect guidance for %q", harness, instruction)
+				}
+			}
+			if harness == "claude" && !strings.Contains(prompt, fmt.Sprintf("Required evidence checklist (%d paths)", len(s.reviewReads))) {
+				t.Error("Claude prompt must give the total number of required reads")
 			}
 		})
 	}
