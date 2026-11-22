@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -104,7 +105,7 @@ func TestSweepConcurrentReplacement(t *testing.T) {
 	if err := os.Chtimes(dir, old, old); err != nil {
 		t.Fatal(err)
 	}
-	sweepTemp(base, sweepConfig{now: func() time.Time { return now }, beforeMove: func() {
+	sweepTemp(base, sweepConfig{now: func() time.Time { return now }, beforeMove: func() bool {
 		if err := os.Rename(dir, original); err != nil {
 			t.Fatal(err)
 		}
@@ -114,6 +115,7 @@ func TestSweepConcurrentReplacement(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "valuable"), []byte("keep"), 0600); err != nil {
 			t.Fatal(err)
 		}
+		return false
 	}})
 	if _, err := os.Stat(filepath.Join(original, ".lease")); err != nil {
 		t.Fatal(err)
@@ -298,9 +300,13 @@ func TestSweepLegacyAmbiguousKept(t *testing.T) {
 func TestSweepCancellationBeforeMove(t *testing.T) {
 	b := t.TempDir()
 	dir := testOrphan(t, b, scratchPrefix+"cancel", testMarker(leaseMarker))
-	saved := filepath.Join(b, "saved")
-	sweepTemp(b, sweepConfig{beforeMove: func() { must(t, os.Rename(dir, saved)) }})
-	testExists(t, filepath.Join(saved, ".lease"))
+	sweepTemp(b, sweepConfig{beforeMove: func() bool { return true }})
+	testExists(t, filepath.Join(dir, ".lease"))
+	es, err := os.ReadDir(b)
+	must(t, err)
+	if len(es) != 1 {
+		t.Fatalf("unexpected staging entries: %v", es)
+	}
 }
 
 func TestSweepBaseRootGuard(t *testing.T) {
@@ -315,7 +321,7 @@ func TestSweepBaseRootGuard(t *testing.T) {
 	must(t, os.Mkdir(original, 0700))
 	testOrphan(t, original, scratchPrefix+"candidate", testMarker(leaseMarker))
 	moved := filepath.Join(b, "moved")
-	sweepTemp(original, sweepConfig{beforeMove: func() { must(t, os.Rename(original, moved)); must(t, os.Symlink(outside, original)) }})
+	sweepTemp(original, sweepConfig{beforeMove: func() bool { must(t, os.Rename(original, moved)); must(t, os.Symlink(outside, original)); return false }})
 	testExists(t, d)
 }
 func TestSweepFailuresDoNotFailIngestion(t *testing.T) {
@@ -350,4 +356,24 @@ func TestBuildThreadsKeepsUnrelatedEntries(t *testing.T) {
 	if string(data) != "keep" {
 		t.Fatal("content changed")
 	}
+}
+
+func TestSweepMountRefusalPreservesContents(t *testing.T) {
+	b := t.TempDir()
+	dir := testOrphan(t, b, scratchPrefix+"mount", testMarker(leaseMarker))
+	must(t, os.WriteFile(filepath.Join(dir, "valuable"), []byte("keep"), 0600))
+	must(t, os.Mkdir(filepath.Join(dir, "nested"), 0700))
+	old := time.Now().Add(-25 * time.Hour)
+	must(t, os.Chtimes(dir, old, old))
+	original := openNoMount
+	defer func() { openNoMount = original }()
+	openNoMount = func(fd int, name string, flags int) (int, error) {
+		if name == "nested" {
+			return -1, syscall.EXDEV
+		}
+		return original(fd, name, flags)
+	}
+	sweepTemp(b, sweepConfig{})
+	testExists(t, filepath.Join(dir, "valuable"))
+	testExists(t, filepath.Join(dir, "nested"))
 }

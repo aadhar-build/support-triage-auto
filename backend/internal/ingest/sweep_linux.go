@@ -49,6 +49,60 @@ func unlinkAt(fd int, name string, flags int) error {
 	}
 	return nil
 }
+
+// openNoMount uses openat2's NO_XDEV restriction, including bind mounts.
+// Unsupported kernels fail closed. The hook permits testing refusal without mounts.
+var openNoMount = func(fd int, name string, flags int) (int, error) {
+	p, err := syscall.BytePtrFromString(name)
+	if err != nil {
+		return -1, err
+	}
+	how := struct{ Flags, Mode, Resolve uint64 }{uint64(flags), 0, 0x01}
+	n, _, e := syscall.Syscall6(437, uintptr(fd), uintptr(unsafe.Pointer(p)), uintptr(unsafe.Pointer(&how)), unsafe.Sizeof(how), 0, 0)
+	if e != 0 {
+		return -1, e
+	}
+	return int(n), nil
+}
+
+// checkTree verifies every descendant before any deletion.
+func checkTree(fd int) error {
+	es, err := entries(fd)
+	if err != nil {
+		return err
+	}
+	for _, e := range es {
+		n, err := openNoMount(fd, e.Name(), oPath|syscall.O_NOFOLLOW|syscall.O_CLOEXEC)
+		if err != nil {
+			return err
+		}
+		var st syscall.Stat_t
+		err = syscall.Fstat(n, &st)
+		syscall.Close(n)
+		if err != nil {
+			return err
+		}
+		if st.Mode&syscall.S_IFMT == syscall.S_IFDIR {
+			d, err := openNoMount(fd, e.Name(), syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC)
+			if err != nil {
+				return err
+			}
+			var ds syscall.Stat_t
+			err = syscall.Fstat(d, &ds)
+			if err == nil && same(st, ds) {
+				err = checkTree(d)
+			} else if err == nil {
+				err = syscall.EINVAL
+			}
+			syscall.Close(d)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func openStat(fd int, name string) (int, syscall.Stat_t, error) {
 	var st syscall.Stat_t
 	n, err := syscall.Openat(fd, name, oPath|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
@@ -151,7 +205,7 @@ func sweepCandidate(base int, name string, isNew bool, now time.Time, cfg sweepC
 	if !eligible(st, now) {
 		return
 	}
-	d, err := syscall.Openat(base, name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	d, err := openNoMount(base, name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC)
 	if err != nil {
 		return
 	}
@@ -178,8 +232,11 @@ func sweepCandidate(base int, name string, isNew bool, now time.Time, cfg sweepC
 	} else if !legacyContents(d) {
 		return
 	}
-	if cfg.beforeMove != nil {
-		cfg.beforeMove()
+	if checkTree(d) != nil {
+		return
+	}
+	if cfg.beforeMove != nil && cfg.beforeMove() {
+		return
 	}
 	var stage string
 	for i := 0; i < 10; i++ {
@@ -222,7 +279,7 @@ func sweepCandidate(base int, name string, isNew bool, now time.Time, cfg sweepC
 	if !same(st, vs) || !eligible(vs, now) {
 		return
 	}
-	if removeContents(d) != nil {
+	if checkTree(d) != nil || removeContents(d) != nil {
 		return
 	}
 	if unlinkAt(s, "victim", atRemovedir) != nil {
@@ -236,13 +293,18 @@ func removeContents(fd int) error {
 		return err
 	}
 	for _, e := range es {
-		n, st, err := openStat(fd, e.Name())
+		n, err := openNoMount(fd, e.Name(), oPath|syscall.O_NOFOLLOW|syscall.O_CLOEXEC)
 		if err != nil {
 			return err
 		}
+		var st syscall.Stat_t
+		err = syscall.Fstat(n, &st)
 		syscall.Close(n)
+		if err != nil {
+			return err
+		}
 		if st.Mode&syscall.S_IFMT == syscall.S_IFDIR {
-			d, err := syscall.Openat(fd, e.Name(), syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+			d, err := openNoMount(fd, e.Name(), syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC)
 			if err != nil {
 				return err
 			}

@@ -8,7 +8,7 @@ const leaseMarker = "support-triage-ingest lease v1\n"
 type sweepConfig struct {
 	now              func() time.Time
 	legacy           bool
-	beforeMove       func()
+	beforeMove       func() bool
 	afterLeaseCreate func()
 	afterLock        func()
 }
