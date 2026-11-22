@@ -6,11 +6,9 @@ import (
 	"io"
 	"math"
 	"net/url"
-	"os"
 	"slices"
 	"strconv"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 
 	"github.com/aadhar-build/support-triage-auto/backend/internal/report"
@@ -56,16 +54,10 @@ func parseThreadID(s string) (uint64, bool) {
 // folder or the file, refuses anything but a regular file, and reads at most
 // traceMaxBytes from that same handle.
 func readTraceBytes(dir string) ([]byte, bool) {
-	dfd, err := syscall.Open(dir, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	f, err := openTraceFile(dir)
 	if err != nil {
 		return nil, false
 	}
-	defer syscall.Close(dfd)
-	fd, err := syscall.Openat(dfd, traceFile, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, false
-	}
-	f := os.NewFile(uintptr(fd), traceFile)
 	defer f.Close()
 	st, err := f.Stat()
 	if err != nil || !st.Mode().IsRegular() {
