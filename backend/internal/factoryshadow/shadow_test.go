@@ -79,7 +79,7 @@ func TestValidNoActionProducesSanitizedReport(t *testing.T) {
 				Phase: factoryproposer.PhaseModel, Failure: factoryproposer.FailureNetwork, Rejection: privateText},
 			{Provider: privateText, Model: privateText, Disposition: factoryproposer.Disposition(privateText),
 				Phase: factoryproposer.Phase(privateText), Failure: factoryproposer.Failure(privateText)},
-			{Provider: "codex", Disposition: factoryproposer.Accepted, Phase: factoryproposer.PhaseDecision},
+			{Provider: "codex", Model: "opus", Disposition: factoryproposer.Accepted, Phase: factoryproposer.PhaseDecision},
 			{Provider: "codex", Disposition: factoryproposer.Accepted},
 		}, nil
 	})
@@ -110,6 +110,14 @@ func TestValidNoActionProducesSanitizedReport(t *testing.T) {
 	if encoded.Attempts[0]["phase"] != "model" || encoded.Attempts[0]["failure"] != "network" ||
 		encoded.Attempts[1]["phase"] != "unknown" || encoded.Attempts[1]["failure"] != "unknown" || encoded.Attempts[2]["phase"] != "decision" {
 		t.Fatalf("unexpected encoded attempts %+v", encoded.Attempts)
+	}
+	for _, attempt := range encoded.Attempts {
+		if attempt["model"] != "unknown" || attempt["cost_estimate"] != "unknown" {
+			t.Fatalf("unverified model or cost in attempt: %+v", attempt)
+		}
+		if _, present := attempt["duration_ms"]; present {
+			t.Fatalf("unmeasured attempt reports a duration: %+v", attempt)
+		}
 	}
 	if _, present := encoded.Attempts[2]["failure"]; present {
 		t.Fatalf("accepted attempt reports a failure: %+v", encoded.Attempts[2])
