@@ -489,6 +489,10 @@ The independent factory gate runs the full repository checks and must pass befor
 	}
 	inputs := ""
 	body := brief + "\n\n" + transport
+	if r.stage == "intake" {
+		body = "The role brief's directions to write intake.md and reply with only the DECISION line do not apply. " +
+			transport + " Begin with the four header lines in the role brief, starting with DECISION. Then include the applicable Markdown sections.\n\n" + brief
+	}
 	if s.reviewDir != "" {
 		inputs = fmt.Sprintf("Review diff: %s\nReview commits: %s\n",
 			filepath.Join(s.reviewDir, "candidate.diff"), filepath.Join(s.reviewDir, "commits.txt"))

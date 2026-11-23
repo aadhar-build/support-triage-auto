@@ -5,6 +5,7 @@ import (
 	"context"
 	"debug/buildinfo"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/version"
 	"os"
@@ -159,6 +160,8 @@ func codexBuilderGoRoot(s snapshot) (string, error) {
 	return goRoot, nil
 }
 
+var errClaudeIncompleteResult = errors.New("Claude did not report a successful completed result")
+
 func execute(ctx context.Context, bin string, chosen selection, s snapshot, prompt string, r role) ([]byte, error) {
 	reviewing := r.stage == "review" || r.stage == "approve"
 	tmp := filepath.Join(s.temp, "scratch")
@@ -256,7 +259,7 @@ func execute(ctx context.Context, bin string, chosen selection, s snapshot, prom
 	}
 	if decodeErr != nil || result.Type != "result" ||
 		result.Subtype != "success" || result.IsError == nil || *result.IsError {
-		return nil, fmt.Errorf("Claude did not report a successful completed result")
+		return nil, errClaudeIncompleteResult
 	}
 	return []byte(result.Result), nil
 }

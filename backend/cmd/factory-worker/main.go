@@ -346,9 +346,18 @@ func run(root string, args []string, stdout io.Writer) error {
 	prompt := s.prompt(state, cfg, r, brief)
 	content, err := execute(ctx, identity.binary, chosen, s, prompt, r)
 	if err != nil {
+		if r.stage == "intake" {
+			return recordIntakeFailure(ctx, jobDirectory, stateBefore, auditPath, chosen, s.head, intakeProviderFailure(err), 0, err)
+		}
 		return err
 	}
 	if err := validateArtifact(r, content); err != nil {
+		if r.stage == "intake" {
+			var reason intakeFailureReason
+			if errors.As(err, &reason) {
+				return recordIntakeFailure(ctx, jobDirectory, stateBefore, auditPath, chosen, s.head, reason, len(content), err)
+			}
+		}
 		return err
 	}
 	if err := s.verifySource(ctx); err != nil {
@@ -602,6 +611,9 @@ func rolePrompt(root, roleName string) (string, error) {
 const maxArtifact = 128 * 1024
 
 func validateArtifact(r role, raw []byte) error {
+	if r.stage == "intake" {
+		return validateIntakeArtifact(raw)
+	}
 	if len(raw) == 0 || len(raw) > maxArtifact || bytes.IndexByte(raw, 0) >= 0 {
 		return fmt.Errorf("%s returned a missing, invalid or oversized artifact", r.name)
 	}
@@ -609,9 +621,6 @@ func validateArtifact(r role, raw []byte) error {
 	line, _, _ := strings.Cut(s, "\n")
 	valid := false
 	switch r.stage {
-	case "intake":
-		labels := regexp.MustCompile(`^DECISION: (ACCEPT|NEEDS-INFO|REJECT)\nRISK: (low|medium|high)\nSURFACES: (?:none|(?:security|eval|ui)(?:, (?:security|eval|ui))*)\nRESCOPED: (yes|no)\n`)
-		valid = labels.MatchString(s) && hasSection(s, "Summary")
 	case "spec":
 		valid = hasSection(s, "Product questions") && hasSection(s, "Files") && hasSection(s, "Acceptance criteria")
 	case "build":
