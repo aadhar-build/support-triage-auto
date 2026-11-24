@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aadhar-build/support-triage-auto/backend/internal/factorycontroller"
 	"github.com/aadhar-build/support-triage-auto/backend/internal/factoryproposer"
@@ -27,6 +28,7 @@ func TestMain(m *testing.M) {
 			if slices.Contains(os.Args, "auth") {
 				fmt.Println(`{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"pro"}`)
 			} else {
+				time.Sleep(25 * time.Millisecond)
 				fmt.Println(`{"type":"result","subtype":"success","is_error":false,"num_turns":1,"permission_denials":[],"result":"{\"action\":\"no-action\"}"}`)
 			}
 			os.Exit(0)
@@ -34,6 +36,7 @@ func TestMain(m *testing.M) {
 			fmt.Println("Logged in using ChatGPT")
 			os.Exit(0)
 		case "-a":
+			time.Sleep(25 * time.Millisecond)
 			fmt.Println(`{"type":"thread.started","thread_id":"test-thread"}`)
 			fmt.Println(`{"type":"turn.started"}`)
 			fmt.Println(`{"type":"item.completed","item":{"id":"test-item","type":"agent_message","text":"{\"action\":\"no-action\"}"}}`)
@@ -101,6 +104,7 @@ func TestCommandReportsObservationErrorBeforeModelConfiguration(t *testing.T) {
 	var output, diagnostics bytes.Buffer
 	status := run(context.Background(), []string{"-checkout", checkout, "-allow-model"}, &output, &diagnostics, factoryshadow.Runner{
 		Observe: func(context.Context, string) (factorystate.Observation, error) {
+			time.Sleep(10 * time.Millisecond)
 			return factorystate.Observation{}, errors.New("PRIVATE-OBSERVATION-TEXT")
 		},
 	})
@@ -110,6 +114,12 @@ func TestCommandReportsObservationErrorBeforeModelConfiguration(t *testing.T) {
 	}
 	if status != 1 || diagnostics.Len() != 0 || result.Status != "observation-failed" || strings.Contains(output.String(), "PRIVATE-OBSERVATION-TEXT") {
 		t.Fatalf("exit = %d, report = %s, diagnostics = %s", status, &output, &diagnostics)
+	}
+	var telemetry struct {
+		ElapsedMS int64 `json:"elapsed_ms"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &telemetry); err != nil || telemetry.ElapsedMS < 10 {
+		t.Fatalf("observation failure lacked elapsed time: %s (%v)", &output, err)
 	}
 }
 
@@ -159,8 +169,8 @@ func TestCommandKeepsOtherProviderAvailableWhenOneBinaryIsMissing(t *testing.T) 
 			args := []string{"-checkout", checkout, "-allow-model",
 				"-" + test.chosen + "-bin", executable,
 				"-" + test.unavailable + "-bin", filepath.Join(t.TempDir(), "missing"),
-				"-claude-model", "claude-test", "-claude-home", claudeHome,
-				"-codex-model", "codex-test", "-codex-home", codexHome,
+				"-claude-model", "opus", "-claude-home", claudeHome,
+				"-codex-model", "gpt-6.1-terra", "-codex-home", codexHome,
 			}
 			var output, diagnostics bytes.Buffer
 			status := run(context.Background(), args, &output, &diagnostics, factoryshadow.Runner{
@@ -179,8 +189,36 @@ func TestCommandKeepsOtherProviderAvailableWhenOneBinaryIsMissing(t *testing.T) 
 			if accepted.Provider != test.chosen || accepted.Disposition != "accepted" || accepted.Phase != "decision" || accepted.Failure != "" {
 				t.Fatalf("wrong provider accepted: %+v", result.Attempts)
 			}
-			if test.unavailable == "claude" && (len(result.Attempts) != 2 || result.Attempts[0] != (factoryshadow.ProviderAttempt{Provider: "claude", Disposition: "unavailable", Phase: "setup"})) {
-				t.Fatalf("missing primary outcome not reported: %+v", result.Attempts)
+			if test.unavailable == "claude" {
+				if len(result.Attempts) != 2 || result.Attempts[0].Provider != "claude" || result.Attempts[0].Disposition != "unavailable" || result.Attempts[0].Phase != "setup" {
+					t.Fatalf("missing primary outcome not reported: %+v", result.Attempts)
+				}
+			}
+			var telemetry struct {
+				ElapsedMS int64  `json:"elapsed_ms"`
+				Cost      string `json:"cost_estimate"`
+				Attempts  []struct {
+					Model      string `json:"model"`
+					DurationMS *int64 `json:"duration_ms"`
+					Cost       string `json:"cost_estimate"`
+				} `json:"attempts"`
+			}
+			if err := json.Unmarshal(output.Bytes(), &telemetry); err != nil || len(telemetry.Attempts) != len(result.Attempts) || telemetry.Cost != "unknown" {
+				t.Fatalf("unexpected telemetry: %s (%v)", &output, err)
+			}
+			var totalMS int64
+			for index, entry := range telemetry.Attempts {
+				wantModel := "opus"
+				if result.Attempts[index].Provider == "codex" {
+					wantModel = "gpt-6.1-terra"
+				}
+				if entry.Model != wantModel || entry.DurationMS == nil || *entry.DurationMS < 0 || entry.Cost != "unknown" {
+					t.Fatalf("unexpected attempt telemetry: %s", &output)
+				}
+				totalMS += *entry.DurationMS
+			}
+			if *telemetry.Attempts[len(telemetry.Attempts)-1].DurationMS < 25 || telemetry.ElapsedMS < totalMS {
+				t.Fatalf("elapsed time doesn't cover each attempt: %s", &output)
 			}
 		})
 	}

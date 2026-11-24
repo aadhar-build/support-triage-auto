@@ -81,12 +81,13 @@ const (
 // Attempt describes a provider outcome without including prompts, output or credentials.
 // The ordered attempts also show when and why scheduling reached the fallback provider.
 type Attempt struct {
-	Provider    string      `json:"provider"`
-	Model       string      `json:"model"`
-	Disposition Disposition `json:"disposition"`
-	Phase       Phase       `json:"phase"`
-	Failure     Failure     `json:"failure,omitempty"`
-	Rejection   string      `json:"rejection,omitempty"`
+	Provider    string        `json:"provider"`
+	Model       string        `json:"model"`
+	Duration    time.Duration `json:"-"`
+	Disposition Disposition   `json:"disposition"`
+	Phase       Phase         `json:"phase"`
+	Failure     Failure       `json:"failure,omitempty"`
+	Rejection   string        `json:"rejection,omitempty"`
 }
 
 type Proposer struct {
@@ -171,7 +172,9 @@ func (p *Proposer) ProposeWithReport(ctx context.Context, snapshot factorycontro
 		if err := ctx.Err(); err != nil {
 			return factorycontroller.Proposal{}, attempts, err
 		}
+		started := time.Now()
 		proposal, attempt := p.attempt(ctx, provider, prompt, rejection, snapshot)
+		attempt.Duration = time.Since(started)
 		attempts = append(attempts, attempt)
 		if err := ctx.Err(); err != nil {
 			return factorycontroller.Proposal{}, attempts, err

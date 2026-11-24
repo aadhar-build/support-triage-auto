@@ -7,6 +7,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/aadhar-build/support-triage-auto/backend/internal/factorycontroller"
 	"github.com/aadhar-build/support-triage-auto/backend/internal/factoryproposer"
@@ -18,6 +19,7 @@ const (
 	StatusAccepted = "accepted"
 	maxJobs        = 256
 	maxAttempts    = 3
+	unknown        = "unknown"
 )
 
 type Proposer interface {
@@ -35,6 +37,7 @@ type Runner struct {
 // job IDs, revisions, paths, prompts, model text and provider diagnostics.
 type Report struct {
 	Status      string            `json:"status"`
+	ElapsedMS   int64             `json:"elapsed_ms"`
 	Observation *Inventory        `json:"observation,omitempty"`
 	Attempts    []ProviderAttempt `json:"attempts,omitempty"`
 	Action      string            `json:"action,omitempty"`
@@ -56,15 +59,20 @@ type Inventory struct {
 
 type ProviderAttempt struct {
 	Provider    string `json:"provider"`
+	Model       string `json:"model"`
+	DurationMS  *int64 `json:"duration_ms,omitempty"`
+	Cost        string `json:"cost_estimate"`
 	Disposition string `json:"disposition"`
 	Phase       string `json:"phase,omitempty"`
 	Failure     string `json:"failure,omitempty"`
 }
 
-func (r Runner) Run(ctx context.Context, checkout string) Report {
-	report := Report{
+func (r Runner) Run(ctx context.Context, checkout string) (report Report) {
+	started := time.Now()
+	defer func() { report.ElapsedMS = time.Since(started).Milliseconds() }()
+	report = Report{
 		Status: "observation-failed",
-		Cost:   "unknown",
+		Cost:   unknown,
 		Limitations: []string{
 			"point-in-time-local-observation", "remote-base-unverified", "capacity-leases-unverified",
 			"owner-authorization-unverified", "spec-binding-unverified",
@@ -196,10 +204,14 @@ func summarize(observed factorystate.Observation) *Inventory {
 func summarizeAttempts(attempts []factoryproposer.Attempt) []ProviderAttempt {
 	var result []ProviderAttempt
 	for _, attempt := range attempts[:min(len(attempts), maxAttempts)] {
-		summary := ProviderAttempt{Provider: "unknown", Disposition: "unknown"}
+		summary := ProviderAttempt{Provider: unknown, Model: reportModel(attempt.Provider, attempt.Model), Cost: unknown, Disposition: unknown}
 		switch attempt.Provider {
 		case "claude", "codex":
 			summary.Provider = attempt.Provider
+		}
+		if attempt.Duration > 0 {
+			elapsedMS := attempt.Duration.Milliseconds()
+			summary.DurationMS = &elapsedMS
 		}
 		switch attempt.Disposition {
 		case factoryproposer.Accepted, factoryproposer.Unavailable, factoryproposer.AuthFailed, factoryproposer.UnsafeProfile,
@@ -225,6 +237,23 @@ func summarizeAttempts(attempts []factoryproposer.Attempt) []ProviderAttempt {
 		result = append(result, summary)
 	}
 	return result
+}
+
+// Report only public model names known to this provider. A generic syntax
+// check would also accept private aliases, deployment IDs and credentials.
+func reportModel(provider, model string) string {
+	switch provider {
+	case "claude":
+		switch model {
+		case "opus", "sonnet", "haiku":
+			return model
+		}
+	case "codex":
+		if model == "gpt-6.1-terra" {
+			return model
+		}
+	}
+	return unknown
 }
 
 func rejection(err error) string {
